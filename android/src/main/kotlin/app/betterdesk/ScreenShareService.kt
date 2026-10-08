@@ -19,6 +19,9 @@ import kotlin.math.roundToInt
 object CaptureBridge {
     @Volatile var active = false
     @Volatile var fullDisplay = true
+    @Volatile var responsiveAt = 0L
+    @Volatile var useAvc = false
+    @Volatile var requestKeyFrame: (() -> Unit)? = null
     @Volatile var onFrame: ((Packet.Frame) -> Unit)? = null
     var onReady: ((Boolean) -> Unit)? = null
     var onStopped: (() -> Unit)? = null
@@ -28,6 +31,7 @@ class ScreenShareService : Service() {
     private var projection: MediaProjection? = null
     private var display: VirtualDisplay? = null
     private var reader: ImageReader? = null
+    private var encoder: SurfaceEncoder? = null
     private val worker = HandlerThread("BetterDesk capture")
     private var handler: Handler? = null
     private var sequence = 0L
@@ -37,6 +41,11 @@ class ScreenShareService : Service() {
     private var reusablePadded: Bitmap? = null
     private var reusableFrame: Bitmap? = null
     private val encoded = ByteArrayOutputStream(256 * 1024)
+    private var sampledFrames = 0L
+    private var copyNanos = 0L
+    private var encodeNanos = 0L
+    private var sourceSampleAt = 0L
+    private var sourceFrames = 0L
 
     override fun onBind(intent: Intent?) = null
 
@@ -67,6 +76,16 @@ class ScreenShareService : Service() {
             val dimensions = displayDimensions()
             resize(dimensions.first, dimensions.second)
             CaptureBridge.active = true
+            // MediaProjection now owns foreground lifetime. Avoid a second,
+            // obsolete "Connection is available" notification while sharing.
+            stopService(Intent(this, ConnectionService::class.java))
+            handler!!.post(object : Runnable {
+                override fun run() {
+                    if (!CaptureBridge.active) return
+                    CaptureBridge.responsiveAt = System.nanoTime()
+                    handler?.postDelayed(this, 500)
+                }
+            })
             CaptureBridge.onReady?.invoke(true)
         } catch (_: Exception) { CaptureBridge.onReady?.invoke(false); stopSelf() }
         return START_NOT_STICKY
@@ -81,13 +100,52 @@ class ScreenShareService : Service() {
         val h = (originalHeight * scale).roundToInt().coerceAtLeast(1)
         if (w == width && h == height) return
         width = w; height = h
-        val nextReader = ImageReader.newInstance(w, h, PixelFormat.RGBA_8888, 2)
+        if (CaptureBridge.useAvc) {
+            val next = runCatching {
+                SurfaceEncoder(w - w % 2, h - h % 2, handler!!,
+                    onFrame = { frame ->
+                        if (CaptureBridge.active) {
+                            val now = System.nanoTime()
+                            if (sourceSampleAt == 0L) sourceSampleAt = now
+                            sourceFrames++
+                            if (now - sourceSampleAt >= 10_000_000_000) {
+                                if (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0)
+                                    android.util.Log.d("BetterDeskPerf", "AVC source fps=${sourceFrames * 1e9 / (now - sourceSampleAt)}")
+                                sourceSampleAt = now; sourceFrames = 0
+                            }
+                            CaptureBridge.onFrame?.invoke(frame.copy(id = ++sequence))
+                        }
+                    },
+                    onError = { Handler(Looper.getMainLooper()).post { stopSelf() } })
+            }.onFailure {
+                if (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0)
+                    android.util.Log.d("BetterDeskPerf", "AVC fallback: ${it.javaClass.simpleName}: ${it.message}")
+            }.getOrNull()
+            if (next != null) {
+                if (display == null) {
+                    display = projection!!.createVirtualDisplay("BetterDesk", next.width, next.height, resources.displayMetrics.densityDpi,
+                        DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, next.surface, null, handler)
+                } else {
+                    display!!.resize(next.width, next.height, resources.displayMetrics.densityDpi)
+                    display!!.surface = next.surface
+                }
+                val previous = encoder; encoder = next
+                CaptureBridge.requestKeyFrame = { handler?.post { next.requestKeyFrame() } }
+                handler!!.post { previous?.close() }
+                reader?.close(); reader = null
+                return
+            }
+            // A device without a compatible surface encoder retains the JPEG path.
+            CaptureBridge.useAvc = false
+        }
+        val nextReader = ImageReader.newInstance(w, h, PixelFormat.RGBA_8888, 3)
         nextReader.setOnImageAvailableListener({ source ->
             val image = runCatching { source.acquireLatestImage() }.getOrNull() ?: return@setOnImageAvailableListener
             try {
                 val now = SystemClock.elapsedRealtime()
-                if (!CaptureBridge.active || now - lastFrame < 30) return@setOnImageAvailableListener
+                if (!CaptureBridge.active || now - lastFrame < 7) return@setOnImageAvailableListener
                 lastFrame = now
+                val started = System.nanoTime()
                 val plane = image.planes[0]
                 val paddedWidth = plane.rowStride / plane.pixelStride
                 if (reusablePadded?.width != paddedWidth || reusablePadded?.height != image.height) {
@@ -96,14 +154,24 @@ class ScreenShareService : Service() {
                 }
                 val padded = reusablePadded!!
                 padded.copyPixelsFromBuffer(plane.buffer)
-                if (reusableFrame?.width != image.width || reusableFrame?.height != image.height) {
-                    reusableFrame?.recycle()
-                    reusableFrame = Bitmap.createBitmap(image.width, image.height, Bitmap.Config.ARGB_8888)
+                // Release the compositor buffer before CPU encoding. Only the latest
+                // image is acquired, so the extra producer slot cannot queue stale video.
+                val imageWidth = image.width
+                val imageHeight = image.height
+                image.close()
+                val bitmap = if (paddedWidth == imageWidth) padded else {
+                    if (reusableFrame?.width != imageWidth || reusableFrame?.height != imageHeight) {
+                        reusableFrame?.recycle()
+                        reusableFrame = Bitmap.createBitmap(imageWidth, imageHeight, Bitmap.Config.ARGB_8888)
+                    }
+                    reusableFrame!!.also { android.graphics.Canvas(it).drawBitmap(padded, 0f, 0f, null) }
                 }
-                val bitmap = reusableFrame!!
-                android.graphics.Canvas(bitmap).drawBitmap(padded, 0f, 0f, null)
+                val copied = System.nanoTime()
                 encoded.reset()
                 bitmap.compress(Bitmap.CompressFormat.JPEG, 65, encoded)
+                copyNanos += copied - started
+                encodeNanos += System.nanoTime() - copied
+                sampledFrames++
                 CaptureBridge.onFrame?.invoke(Packet.Frame(++sequence, bitmap.width, bitmap.height, encoded.toByteArray()))
             } catch (_: Exception) { Handler(Looper.getMainLooper()).post { stopSelf() } }
             finally { image.close() }
@@ -115,6 +183,8 @@ class ScreenShareService : Service() {
             display!!.surface = nextReader.surface
         }
         val old = reader; reader = nextReader; old?.close()
+        val oldEncoder = encoder; encoder = null
+        handler?.post { oldEncoder?.close() }
     }
 
     private fun displayDimensions(): Pair<Int, Int> {
@@ -130,10 +200,18 @@ class ScreenShareService : Service() {
     override fun onDestroy() {
         val wasActive = CaptureBridge.active
         CaptureBridge.active = false
+        CaptureBridge.requestKeyFrame = null
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        getSystemService(NotificationManager::class.java).cancel(1)
         display?.release(); display = null
         reader?.close(); reader = null
         projection?.stop(); projection = null
-        handler?.post { reusablePadded?.recycle(); reusableFrame?.recycle(); reusablePadded = null; reusableFrame = null }
+        handler?.post { encoder?.close(); encoder = null; reusablePadded?.recycle(); reusableFrame?.recycle(); reusablePadded = null; reusableFrame = null }
+        handler?.post {
+            if (sampledFrames > 0 && applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) {
+                android.util.Log.d("BetterDeskPerf", "Capture frames=$sampledFrames copyMs=${copyNanos / sampledFrames / 1e6} encodeMs=${encodeNanos / sampledFrames / 1e6}")
+            }
+        }
         worker.quitSafely()
         if (wasActive) CaptureBridge.onStopped?.invoke()
         super.onDestroy()

@@ -20,6 +20,9 @@ import kotlin.coroutines.resume
 
 class AndroidPlatform(private val context: Context) : RemotePlatform {
     override val isAndroid = true
+    override fun selectOutgoingCodec(codec: String) { CaptureBridge.useAvc = codec == "avc" }
+    override fun requestKeyFrame() { CaptureBridge.requestKeyFrame?.invoke() }
+    override fun captureResponsive() = CaptureBridge.active && System.nanoTime() - CaptureBridge.responsiveAt < 2_000_000_000
     override val defaultName = Build.MODEL.take(40)
     override val mayRestrictSettings = Build.VERSION.SDK_INT >= 33
     override fun openAppSettings() {
@@ -69,8 +72,14 @@ class AndroidPlatform(private val context: Context) : RemotePlatform {
     }
 
     override fun stopSharing() {
+        if (CaptureBridge.active && context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) {
+            Runtime.session?.performance?.snapshot()?.let {
+                android.util.Log.d("BetterDeskPerf", "Source drops queue=${it.queueDrops} window=${it.windowDrops} recovery=${it.recoveryDrops}")
+            }
+        }
         CaptureBridge.active = false
         CaptureBridge.onFrame = null; CaptureBridge.onReady = null; CaptureBridge.onStopped = null
+        CaptureBridge.requestKeyFrame = null
         pending?.cancel(); pending = null
         context.stopService(Intent(context, ScreenShareService::class.java))
     }

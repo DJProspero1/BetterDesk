@@ -14,6 +14,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
@@ -210,7 +211,10 @@ fun BetterDeskApp(session: HelpSession) {
                 val ratio = image.width.toFloat() / image.height
                 val width = minOf(maxWidth, maxHeight * ratio)
                 val height = width / ratio
-                Image(image, t("Shared screen", "Ecrã partilhado"), Modifier.size(width, height)
+                Image(image, t("Shared screen", "Ecrã partilhado"), Modifier.size(width, height).drawWithContent {
+                    drawContent()
+                    session.performance.presented(state.frame)
+                }
                     .pointerInput(session) {
                         detectTapGestures(onTap = { session.input("tap", (it.x / size.width).coerceIn(0f, 1f), (it.y / size.height).coerceIn(0f, 1f)) }, onLongPress = { session.input("right", (it.x / size.width).coerceIn(0f, 1f), (it.y / size.height).coerceIn(0f, 1f)) })
                     }.pointerInput(session) {

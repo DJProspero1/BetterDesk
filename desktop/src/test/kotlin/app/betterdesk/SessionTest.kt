@@ -28,6 +28,8 @@ class SessionTest {
         override val defaultName = "Test helper"
         var starts = 0; var inputs = 0
         var keptAlive = false
+        @Volatile var responsive = true
+        override fun captureResponsive() = responsive
         override fun keepConnectionAlive(active: Boolean) { keptAlive = active }
         var frame: ((Packet.Frame) -> Unit)? = null
         override fun controlAvailable() = true
@@ -76,6 +78,27 @@ class SessionTest {
         recipient.acceptInvitation(invite.link()); recipient.allowHelp()
         until { recipient.state.value.stage == Stage.ERROR }
         assertEquals(0, rp.starts)
+    }
+
+    @Test fun `unchanged healthy capture accepts input but a stalled capture does not`() = runBlocking(dispatcher) {
+        val viewer = session(Platform())
+        val sourcePlatform = Platform()
+        val source = session(sourcePlatform)
+        viewer.createInvitation("Viewer")
+        until { viewer.state.value.stage == Stage.WAITING }
+        source.acceptInvitation(viewer.state.value.invitation!!.link()); source.allowHelp()
+        until { source.state.value.stage == Stage.SHARING }
+        sourcePlatform.frame?.invoke(Packet.Frame(1, 2, 2, byteArrayOf(1)))
+        until { viewer.state.value.stage == Stage.VIEWING }
+        delay(3200) // No duplicate frames needed to keep an unchanged screen usable.
+        assertEquals(1, viewer.state.value.frame)
+        viewer.input("tap", .5f, .5f)
+        until { sourcePlatform.inputs == 1 }
+        sourcePlatform.responsive = false
+        delay(3200)
+        viewer.input("tap", .5f, .5f)
+        delay(150)
+        assertEquals(1, sourcePlatform.inputs)
     }
 
     @Test fun `entering a device code discovers it and still waits for local approval`() = runBlocking(dispatcher) {

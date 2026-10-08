@@ -1,36 +1,78 @@
 # Local verification, 8 October 2026
 
+## Version 0.3
+
+All tests, benchmarks, compilation and packaging run on the local Windows PC.
+No cloud build or development server is used. Outputs remain development builds for
+reachable local networks, with the same shared Windows/Android interface.
+
 ## Automated checks
 
-The 0.2 local suite contains 19 checks. Two additional checks are opt-in: native Windows capture measurement and real Android emulator integration. Both the Windows distributable and Android debug APK are built locally. The single portable Windows executable was launched successfully from its embedded, automatically extracted runtime and closed after the smoke check.
+All 24 ordinary JVM checks passed; three opt-in checks were skipped by the normal
+build and the two motion/integration benchmarks were run separately. The suite covers
+authenticated pairing, certificate pinning, malformed
+and oversized packets, consent before capture, disconnect/cancellation, bounded input
+and frame queues, stale-frame input rejection, and shared UI rendering at desktop and
+phone sizes. New checks cover native AVC decoding and pixel correctness, its LGPL
+library variant, predictive-frame recovery after drops, asynchronous acknowledgement
+waiting, and unchanged versus stalled capture heartbeats.
 
-The JVM suite covers invitation parsing/expiry, invalid destinations, duplicate fields, input bounds, actual TLS message/frame transfer, certificate mismatch rejection, oversized frames, approval-before-capture, input revocation after Stop, cancellation, and the same UI at desktop and phone sizes. Added coverage checks J-PAKE correct/wrong codes, single-use/canceled codes, bounded frames in flight, the full discovered-code -> approval -> frame -> disconnect path, and disconnect during continuous capture. Uncaught session exceptions now fail the lifecycle tests.
+Capture benchmarks are opt-in and skipped in ordinary builds. Reports and UI images
+are generated under ignored desktop/build directories. The motion-fixture Android
+module is a separate test app and is never packaged into BetterDesk.
 
-UI tests render the actual shared Compose components, rather than separate mockup images. Screenshots are generated under ignored `desktop/build/screenshots/`.
+## Measured streaming
 
-## Android emulator
+Both measurements used continuous motion for 30 seconds after warmup. Drawn FPS counts
+distinct decoded frame IDs submitted to Compose drawing, not repeated UI repaints.
+This does not measure physical display scanout or input-to-photon latency.
 
-The debug APK was installed and launched on the already-running Android emulator. The shared code screen and permission guidance were inspected. Leaving to the home screen and returning preserved the same code. A connected-device foreground service remained active while the activity was in the background.
+| Path | Received FPS | Drawn FPS | P95 draw gap | Encoded payload |
+| --- | ---: | ---: | ---: | ---: |
+| Windows capture to Windows viewer, pinned TLS loopback | 62.57 | 62.57 | 21 ms | 37.96 Mbps |
+| Android emulator to Windows viewer, pinned TLS | 59.94 | 59.87 | 24 ms | 1.65 Mbps |
 
-The opt-in integration test creates a viewer on the Windows host, passes an internal invitation to Android, and waits for local approval plus Android's genuine MediaProjection dialog. The device shares its full screen in view-only mode. The test opens Android Settings, performs repeated scroll gestures, returns to BetterDesk, and checks the stream remains connected. It also checks that remote disconnect releases MediaProjection and preserves the Android process. This final check was added after testing exposed an uncaught coroutine failure on peer disconnect; socket reader/writer children now run within a caught structured scope.
+Windows: RTX 4070, 2560 x 1440 display at 144 Hz, Desktop Duplication resized to
+1440 x 810, JPEG. Android: API 36 emulator, 1080 x 2400 at 60 Hz, software AVC encoder
+at 432 x 960, native Windows AVC decode averaging 0.87 ms. Hardware Android encoders
+retain a 1280-pixel long edge. The lower software resolution favors motion over detail.
 
-The opt-in test is `AndroidDeviceTest`; it runs only with `BETTERDESK_ANDROID_TEST=1`. It requires an installed debug APK, the configured emulator (default `emulator-5554`), and interaction with the consent prompts. It binds to host loopback and uses the emulator's `10.0.2.2` host alias. It never captures the PC screen. It must not be enabled accidentally during ordinary builds.
+The earlier Windows path measured about 24 FPS; Android JPEG measured about 30 FPS
+under continuous motion. Intermediate AVC runs drew 40-57 FPS before real-time codec
+scheduling. The final Android result is approximately nominal 60 Hz, but is still below
+a literal 60 drawn-FPS minimum. Physical phones and real Wi-Fi have not been measured.
+See PERFORMANCE.md for pipeline details and local reproduction commands.
 
-## Performance measurements
+## Android lifecycle and notification
 
-- Previous source imposed a 180 ms delay between captures, limiting streaming to approximately five FPS before processing costs.
-- New capture pacing targets 30 FPS. Native Windows capture measured 24.0 FPS overall and after warmup in a 12-second sample on this PC. The benchmark stores only timing and encoded-byte counts, not images.
-- The final Android emulator -> Windows scrolling sample reached 20.6 received FPS with native Skia decoding. This includes gaps between adb-driven scroll gestures, not just active animation. Results are recorded in ignored `desktop/build/reports/android-motion.txt`. The Android process survived remote disconnect and a native readback confirmed MediaProjection was stopped and no foreground sharing/connection services remained.
-- Two encoded frames at most can be in flight. Slow viewers cause old captures to be dropped instead of an ever-growing video queue.
+The updated APK was installed over the previous version on the already-running local
+emulator. Genuine connection approval, Android notification permission and MediaProjection
+consent were used. The integration test switched to a separate animated app, streamed
+its screen, and returned to BetterDesk without losing the connection.
 
-These are sample throughput measurements, not input-to-display latency measurements or a 30 FPS guarantee. Smooth production remote control remains unresolved; hardware video, native capture and physical-device/network measurements are still required.
+Native readbacks verified the screen-sharing notification exists during capture and the
+obsolete availability notification is absent. Both remote disconnect and the actual
+notification Disconnect action stopped MediaProjection, removed all BetterDesk
+notifications, and left the same Android process alive. Android can still hide app
+notifications if the user denies notification permission or disables its channel.
 
-## Not yet verified
+## Packaging verification
 
-- Full remote control in both directions on physical Windows/Android devices.
-- Multiple Android manufacturers, old Android versions, work profiles and policy-managed devices.
-- Windows UAC/elevated targets, monitor changes, mixed DPI and corporate firewall configurations.
-- Signed installers, consumer distribution, Internet traversal and relays.
-- Long sessions, network roaming and performance under sustained load.
+The local build produces a single portable Windows EXE and Android debug APK. The
+Windows launcher embeds its runtime and expands it automatically into a private local
+cache; the user does not install Java or unpack a ZIP. Both devices should be updated.
+Native AVC decoding also passed against the packaged application JARs and a copy of
+the bundled runtime, using the launcher's configured Skiko library path.
+The portable 0.3.0 EXE opened the BetterDesk window from its embedded runtime cache
+and closed normally after the smoke check. Final native Android readback showed no
+active MediaProjection or leftover BetterDesk notification.
 
-Successful compilation and the emulator test do not establish production readiness. The delivered builds remain local-network development artifacts.
+## Still unverified
+
+- Sustained 60+ FPS and full remote control in both directions on physical devices.
+- End-to-end input latency, thermal throttling, real Wi-Fi loss and long sessions.
+- Different Android vendors, older versions, work profiles and policy-managed devices.
+- Windows UAC/elevated targets, monitor changes, mixed DPI and corporate firewalls.
+- Internet traversal, adaptive bitrate and Windows hardware video encoding.
+
+Successful local tests do not establish production readiness or universal 60 FPS.

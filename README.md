@@ -13,10 +13,10 @@ This is an **early local-network implementation**, not a production remote-suppo
 - LAN discovery plus password-authenticated pairing replaces copy/pasted invitation links.
 - Shared desktop/mobile UI with English and European Portuguese copy.
 - Direct TLS connection with certificate pinning, a random 256-bit invitation secret, five-minute invitation expiry, one recipient, and no persistent identity or permanent access.
-- JPEG screen streaming targeting 30 FPS, with a two-frame acknowledgement window to bound buffering; remote tap/click, drag/swipe, scroll, text entry and basic navigation. Achieved rates depend on device and network.
+- Native Windows Desktop Duplication capture, with a compatible GDI fallback. The Windows path exceeded 60 distinct frames per second in a local motion benchmark; Android remains below target in the emulator. Streaming has a four-frame acknowledgement window to bound buffering. See [performance measurements](docs/PERFORMANCE.md) for scope and limits.
 - Android uses genuine MediaProjection approval and an optional accessibility service.
 - Screen sharing stays view-only when control is unavailable.
-- Android's pending and active connections have a foreground notification so switching apps does not end them. Control-permission screens explain the steps, including restricted-settings recovery.
+- Android asks for notification permission and shows a sharing notification with **Disconnect**. It disappears when sharing ends; the availability notification is removed when capture takes over. Switching apps preserves the session. Control-permission screens explain the steps, including restricted-settings recovery.
 - Stop closes the transport and capture. Reusing a closed invitation does not reopen access.
 
 ## Build locally on Windows
@@ -31,8 +31,8 @@ Create ignored `local.properties` with `sdk.dir=C:/path/to/Android/Sdk`.
 
 Outputs:
 
-- **Windows: `dist/BetterDesk-Windows-0.2.0.exe`**. Double-click. No installer, ZIP extraction or separate Java installation.
-- **Android: `dist/BetterDesk-Android-0.2.0-debug.apk`**. Install as an update over the previous APK; the same local debug signing key is used.
+- **Windows: `dist/BetterDesk-Windows-0.3.0.exe`**. Double-click. No installer, ZIP extraction or separate Java installation.
+- **Android: `dist/BetterDesk-Android-0.3.0-debug.apk`**. Install as an update over the previous APK; the same local debug signing key is used.
 - Local checks: `desktop/build/reports/tests/test/index.html`.
 - Rendered UI checks: `desktop/build/screenshots/`.
 
@@ -59,7 +59,7 @@ Treat codes as temporary secrets. A displayed device name is a label, not a veri
 - Automatic reconnect is not implemented. On network interruption, sharing stops and a new code is required. Switching apps alone should not close the session; force stop and manufacturer-specific battery restrictions may still terminate it.
 - Android screen lock/revoked capture ends sharing. Protected content may be blank. Android control refuses BetterDesk, Settings, permission-controller and system-UI screens, and locked devices.
 - Windows captures the primary display. It does not bypass UAC or secure desktop. Remote input into BetterDesk's own windows is blocked.
-- Hardware video codecs, adaptive bitrate, multi-monitor selection and precise mobile trackpad/zoom controls remain future work. The current faster JPEG path is an interim improvement, not a claim of AnyDesk-level latency or bandwidth efficiency.
+- Windows hardware video encoding, adaptive bitrate, multi-monitor selection and precise mobile trackpad/zoom controls remain future work. Android can encode AVC directly from capture; Windows uses native decoding. This is not yet a claim of AnyDesk-level latency or bandwidth efficiency.
 - Direct touch/drag controls are present; touchscreen Windows desktop precision still needs usability work.
 - Android text uses the focused editable accessibility node; custom keyboards, games, password fields or apps without accessibility support may not work.
 - Capture and stop behavior needs physical-device testing across Android vendors. Desktop JVM packaging favors shared code and reliable local builds over a small download; optimize package size after proving the workflow.

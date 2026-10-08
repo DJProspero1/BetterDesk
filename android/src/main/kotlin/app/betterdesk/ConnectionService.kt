@@ -36,6 +36,8 @@ class ConnectionService : Service() {
     }
     override fun onDestroy() {
         active = false
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        getSystemService(NotificationManager::class.java).cancel(2)
         wakeLock?.let { if (it.isHeld) it.release() }; wakeLock = null
         super.onDestroy()
     }

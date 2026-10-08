@@ -3,8 +3,10 @@ package app.betterdesk.core
 import androidx.compose.ui.graphics.ImageBitmap
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import java.net.InetSocketAddress
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.net.ssl.SSLServerSocket
@@ -27,6 +29,7 @@ class HelpSession(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val mutable = MutableStateFlow(HelpState())
     val state = mutable.asStateFlow()
+    val performance = FramePerformance()
     private var work: Job? = null
     @Volatile private var server: SSLServerSocket? = null
     @Volatile private var socket: SSLSocket? = null
@@ -35,8 +38,9 @@ class HelpSession(
     @Volatile private var generation = 0L
     @Volatile private var sentFrame = 0L
     @Volatile private var sentAt = 0L
+    @Volatile private var capturedFrame = 0L
     private var permissionPending = false
-    private val frameWindow = FrameWindow()
+    private val frameWindow = FrameWindow(4)
     private var pairingHost: PairingHost? = null
     private var pairingJob: Job? = null
     private var approvalExpiry: Job? = null
@@ -139,7 +143,7 @@ class HelpSession(
                 server?.close(); server = null
                 if (current != generation) { connection.close(); return@launch }
                 wire = connection
-                connection.send(Message("accepted", text = safeName))
+                connection.send(Message("accepted", text = safeName, videoCodec = platform.preferredIncomingCodec))
                 mutable.value = HelpState(Stage.CONNECTING, invitation = invitation)
                 pump(connection, helper = true, current = current)
             } catch (e: CancellationException) { throw e }
@@ -226,7 +230,9 @@ class HelpSession(
                                 candidate.startHandshake()
                                 connected = Wire(candidate)
                                 connected.send(Message("hello", secret = invitation.secret))
-                                check((connected.read() as? Packet.Control)?.message?.type == "accepted")
+                                val accepted = (connected.read() as? Packet.Control)?.message
+                                check(accepted?.type == "accepted")
+                                platform.selectOutgoingCodec(accepted!!.videoCodec)
                                 candidate.soTimeout = 15_000
                                 break
                             } catch (_: Exception) { candidate.close(); connected = null }
@@ -237,9 +243,12 @@ class HelpSession(
                     wire = connection
                     // One reader and heartbeat remain alive throughout the OS permission prompt.
                     val reader = async { pump(connection, helper = false, current = current) }
-                    val frames = Channel<Packet.Frame>(Channel.CONFLATED)
+                    val recovery = VideoRecovery(platform::requestKeyFrame)
+                    val frames = Channel<Packet.Frame>(4, BufferOverflow.DROP_OLDEST) { performance.dropped("queue"); recovery.discard(it) }
                     val allowed = platform.startSharing(
-                        onFrame = { if (authorized.get() && current == generation) frames.trySend(it) },
+                        // Retain the first capture even if it arrives before startSharing returns.
+                        // Transmission still starts only after successful local approval below.
+                        onFrame = { if (current == generation) { capturedFrame = it.id; frames.trySend(it) } },
                         onStopped = { scope.launch { if (current == generation) stop() } }
                     )
                     if (!allowed || current != generation) {
@@ -252,7 +261,8 @@ class HelpSession(
                     val writer = launch(Dispatchers.IO) {
                         for (frame in frames) {
                             if (!authorized.get() || generation != current) break
-                            if (!frameWindow.offer(frame.id)) continue
+                            if (!recovery.accepts(frame)) { performance.dropped("recovery"); recovery.discard(frame); continue }
+                            if (!frameWindow.awaitOffer(frame.id)) { performance.dropped("window"); recovery.discard(frame); continue }
                             sentFrame = frame.id; sentAt = System.nanoTime()
                             connection.sendFrame(frame)
                         }
@@ -269,7 +279,12 @@ class HelpSession(
 
     private suspend fun pump(connection: Wire, helper: Boolean, current: Long) = coroutineScope {
         val heartbeat = launch(Dispatchers.IO) {
-            while (isActive) { delay(3000); connection.send(Message("ping")) }
+            while (isActive) {
+                delay(750)
+                val healthy = !helper && authorized.get() && platform.captureResponsive() && capturedFrame <= sentFrame
+                if (healthy) sentAt = System.nanoTime()
+                connection.send(Message("ping", frame = if (healthy) sentFrame else 0))
+            }
         }
         try {
             withContext(Dispatchers.IO) {
@@ -281,14 +296,22 @@ class HelpSession(
                         is Packet.Frame -> {
                             check(helper && ready && packet.id > lastReceivedFrame)
                             lastReceivedFrame = packet.id
+                            val decodeStarted = System.nanoTime()
                             val image = platform.decode(packet) ?: error("Invalid image")
-                            withContext(Dispatchers.Main) {
-                                if (current == generation) mutable.value = mutable.value.copy(stage = Stage.VIEWING, image = image, frame = packet.id, frameAt = System.nanoTime())
+                            performance.received(packet.jpeg.size, System.nanoTime() - decodeStarted)
+                            // StateFlow is thread safe. Waiting for the UI dispatcher here
+                            // delays acknowledgements and serializes networking with painting.
+                            mutable.update { state ->
+                                if (current == generation) state.copy(stage = Stage.VIEWING, image = image, frame = packet.id, frameAt = System.nanoTime()) else state
                             }
                             connection.send(Message("frameAck", frame = packet.id))
                         }
                         is Packet.Control -> when (packet.message.type) {
-                            "ping" -> Unit
+                            "ping" -> if (helper && packet.message.frame > 0 && packet.message.frame == lastReceivedFrame) {
+                                withContext(Dispatchers.Main) {
+                                    if (current == generation) mutable.value = mutable.value.copy(frameAt = System.nanoTime())
+                                }
+                            }
                             "frameAck" -> { check(!helper); frameWindow.acknowledge(packet.message.frame) }
                             "ready" -> {
                                 check(helper && !ready); ready = true
@@ -336,7 +359,7 @@ class HelpSession(
         platform.stopSharing()
         runCatching { socket?.close() }; runCatching { server?.close() }; runCatching { wire?.close() }
         socket = null; server = null; wire = null
-        work?.cancel(); work = null; sentFrame = 0; sentAt = 0; frameWindow.clear()
+        work?.cancel(); work = null; sentFrame = 0; sentAt = 0; capturedFrame = 0; frameWindow.clear(); performance.reset()
     }
     fun dispose() { stopTransport(); inputQueue.close(); scope.cancel() }
 }

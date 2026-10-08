@@ -1,0 +1,8 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+    <application android:label="BetterDesk motion fixture" android:theme="@android:style/Theme.Material.Light.NoActionBar" android:hardwareAccelerated="true" android:allowBackup="false">
+        <activity android:name=".MotionActivity" android:exported="true" />
+        <service android:name=".CodecBenchmarkService" android:exported="false" android:foregroundServiceType="mediaProjection" />
+    </application>
+</manifest>

@@ -12,12 +12,12 @@ import java.net.Socket
 data class Message(
     val type: String, val text: String = "", val secret: String = "", val action: String = "",
     val x: Float = 0f, val y: Float = 0f, val endX: Float = 0f, val endY: Float = 0f,
-    val frame: Long = 0, val control: Boolean = false
+    val frame: Long = 0, val control: Boolean = false, val videoCodec: String = "jpeg"
 )
 
 sealed interface Packet {
     data class Control(val message: Message) : Packet
-    data class Frame(val id: Long, val width: Int, val height: Int, val jpeg: ByteArray) : Packet
+    data class Frame(val id: Long, val width: Int, val height: Int, val jpeg: ByteArray, val codec: String = "jpeg", val keyFrame: Boolean = true) : Packet
 }
 
 class Wire(private val socket: Socket) : Closeable {
@@ -34,8 +34,11 @@ class Wire(private val socket: Socket) : Closeable {
 
     fun sendFrame(frame: Packet.Frame) = synchronized(lock) {
         require(frame.jpeg.size in 1..MAX_FRAME && frame.width in 1..MAX_DIMENSION && frame.height in 1..MAX_DIMENSION)
-        output.writeByte(2); output.writeInt(frame.jpeg.size); output.writeLong(frame.id)
-        output.writeInt(frame.width); output.writeInt(frame.height); output.write(frame.jpeg); output.flush()
+        require(frame.codec in setOf("jpeg", "avc-intra", "avc"))
+        output.writeByte(when(frame.codec) { "avc" -> 4; "avc-intra" -> 3; else -> 2 }); output.writeInt(frame.jpeg.size); output.writeLong(frame.id)
+        output.writeInt(frame.width); output.writeInt(frame.height)
+        if (frame.codec == "avc") output.writeBoolean(frame.keyFrame)
+        output.write(frame.jpeg); output.flush()
     }
 
     fun read(): Packet {
@@ -47,11 +50,12 @@ class Wire(private val socket: Socket) : Closeable {
                 val bytes = ByteArray(size).also(input::readFully)
                 Packet.Control(json.decodeFromString<Message>(bytes.toString(Charsets.UTF_8)))
             }
-            2 -> {
+            2, 3, 4 -> {
                 require(size in 1..MAX_FRAME) { "Invalid frame size" }
                 val id = input.readLong(); val width = input.readInt(); val height = input.readInt()
                 require(id > 0 && width in 1..MAX_DIMENSION && height in 1..MAX_DIMENSION && width.toLong() * height <= 4_194_304)
-                Packet.Frame(id, width, height, ByteArray(size).also(input::readFully))
+                val key = if (type == 4) input.readBoolean() else true
+                Packet.Frame(id, width, height, ByteArray(size).also(input::readFully), when(type) { 4 -> "avc"; 3 -> "avc-intra"; else -> "jpeg" }, key)
             }
             else -> error("Unknown packet")
         }

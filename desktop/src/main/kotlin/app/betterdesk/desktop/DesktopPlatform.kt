@@ -2,8 +2,6 @@ package app.betterdesk.desktop
 
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
-import androidx.compose.ui.graphics.asSkiaBitmap
-import org.jetbrains.skia.EncodedImageFormat
 import org.jetbrains.skia.Image as SkiaImage
 import app.betterdesk.core.*
 import com.sun.jna.platform.win32.*
@@ -11,19 +9,25 @@ import com.sun.jna.ptr.IntByReference
 import java.awt.*
 import java.awt.event.InputEvent
 import java.awt.event.KeyEvent
-import java.awt.image.BufferedImage
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 class DesktopPlatform : RemotePlatform {
     override val isAndroid = false
+    override val preferredIncomingCodec = "avc"
+    private val decodeLock = Any()
+    private var avcDecoder: AvcDecoder? = null
     override val defaultName = System.getProperty("user.name", "Helper")
     private val active = AtomicBoolean(false)
     private var capture: java.util.concurrent.ScheduledExecutorService? = null
     private var robot: Robot? = null
     private var bounds = Rectangle()
     private var sequence = 0L
+    @Volatile var captureBackend: String = "Not started"
+        private set
+    @Volatile private var capturePollAt = 0L
+    override fun captureResponsive() = active.get() && System.nanoTime() - capturePollAt < 2_000_000_000
     override fun controlAvailable() = System.getProperty("os.name").startsWith("Windows")
     override fun openControlSettings() = Unit
 
@@ -35,28 +39,23 @@ class DesktopPlatform : RemotePlatform {
             robot = Robot(display)
             active.set(true); sequence = 0
             capture = Executors.newSingleThreadScheduledExecutor { Thread(it, "BetterDesk screen").apply { isDaemon = true } }.also { executor ->
-                var scaled: BufferedImage? = null
+                val running = AtomicBoolean(true)
+                val scale = minOf(1.0, 1440.0 / maxOf(bounds.width, bounds.height))
+                var native: NativeCapture? = null
                 executor.scheduleAtFixedRate({
-                    if (!active.get()) return@scheduleAtFixedRate
+                    if (!running.get()) return@scheduleAtFixedRate
                     try {
-                        val raw = robot!!.createScreenCapture(bounds)
-                        val scale = minOf(1.0, 1440.0 / maxOf(raw.width, raw.height))
-                        val target = scaled ?: BufferedImage((raw.width * scale).toInt().coerceAtLeast(1), (raw.height * scale).toInt().coerceAtLeast(1), BufferedImage.TYPE_INT_RGB).also { scaled = it }
-                        target.createGraphics().apply {
-                            setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR)
-                            drawImage(raw, 0, 0, target.width, target.height, null); dispose()
-                        }
-                        raw.flush()
-                        val bytes = target.toComposeImageBitmap().asSkiaBitmap().use { bitmap ->
-                            SkiaImage.makeFromBitmap(bitmap).use { image ->
-                                image.encodeToData(EncodedImageFormat.JPEG, 65)!!.use { it.bytes }
-                            }
-                        }
-                        if (active.get()) onFrame(Packet.Frame(++sequence, target.width, target.height, bytes))
-                    } catch (_: Exception) { if (active.getAndSet(false)) onStopped() }
-                }, 0, 33, TimeUnit.MILLISECONDS)
+                        val target = native ?: runCatching<NativeCapture> { DxgiCapture(bounds, (bounds.width * scale).toInt(), (bounds.height * scale).toInt()) }
+                            .getOrElse { GdiCapture(bounds, (bounds.width * scale).toInt(), (bounds.height * scale).toInt()) }
+                            .also { native = it; captureBackend = it.javaClass.simpleName }
+                        val bytes = target.jpeg()
+                        capturePollAt = System.nanoTime()
+                        if (bytes == null) return@scheduleAtFixedRate
+                        if (running.get()) onFrame(Packet.Frame(++sequence, target.width, target.height, bytes))
+                    } catch (_: Exception) { if (running.getAndSet(false)) { active.set(false); onStopped() } }
+                }, 0, 8_333_333, TimeUnit.NANOSECONDS)
                 // Dispose native codec resources on the capture thread after its last task.
-                captureCleanup = { executor.execute { scaled?.flush() } }
+                captureCleanup = { running.set(false); executor.execute { native?.close() } }
             }
             true
         } catch (_: Exception) { stopSharing(); false }
@@ -66,6 +65,7 @@ class DesktopPlatform : RemotePlatform {
         active.set(false); runCatching { captureCleanup?.invoke() }; captureCleanup = null
         capture?.shutdown(); capture = null
         runCatching { robot?.mouseRelease(InputEvent.BUTTON1_DOWN_MASK or InputEvent.BUTTON3_DOWN_MASK) }
+        synchronized(decodeLock) { avcDecoder?.close(); avcDecoder = null }
     }
 
     private var captureCleanup: (() -> Unit)? = null
@@ -124,7 +124,9 @@ class DesktopPlatform : RemotePlatform {
     }
 
     override fun decode(frame: Packet.Frame): ImageBitmap? = runCatching {
-        SkiaImage.makeFromEncoded(frame.jpeg).use { image ->
+        if (frame.codec.startsWith("avc")) synchronized(decodeLock) {
+            (avcDecoder ?: AvcDecoder().also { avcDecoder = it }).decode(frame)
+        } else SkiaImage.makeFromEncoded(frame.jpeg).use { image ->
             check(image.width == frame.width && image.height == frame.height)
             image.toComposeImageBitmap()
         }

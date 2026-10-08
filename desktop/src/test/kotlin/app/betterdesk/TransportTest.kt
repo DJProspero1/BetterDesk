@@ -25,6 +25,13 @@ class TransportTest {
                     val message = (wire.read() as Packet.Control).message
                     val frame = wire.read() as Packet.Frame
                     assertContentEquals(byteArrayOf(1, 2, 3), frame.jpeg)
+                    assertEquals("jpeg", frame.codec)
+                    val video = wire.read() as Packet.Frame
+                    assertEquals("avc-intra", video.codec)
+                    assertContentEquals(byteArrayOf(0, 0, 1, 5), video.jpeg)
+                    val predictive = wire.read() as Packet.Frame
+                    assertEquals("avc", predictive.codec)
+                    assertFalse(predictive.keyFrame)
                     wire.send(Message("accepted"))
                     message.text
                 }
@@ -34,6 +41,8 @@ class TransportTest {
                 val wire = Wire(socket)
                 wire.send(Message("hello", text = "Olá"))
                 wire.sendFrame(Packet.Frame(1, 2, 2, byteArrayOf(1, 2, 3)))
+                wire.sendFrame(Packet.Frame(2, 2, 2, byteArrayOf(0, 0, 1, 5), "avc-intra"))
+                wire.sendFrame(Packet.Frame(3, 2, 2, byteArrayOf(0, 0, 1, 1), "avc", false))
                 assertEquals("accepted", (wire.read() as Packet.Control).message.type)
             }
             assertEquals("Olá", receiver.get(6, TimeUnit.SECONDS))
