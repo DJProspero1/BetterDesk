@@ -14,7 +14,8 @@ enum class Stage { HOME, INVITATION, PREPARING, WAITING, CONNECTING, CONTROL_PER
 data class HelpState(
     val stage: Stage = Stage.HOME, val invitation: Invitation? = null,
     val image: ImageBitmap? = null, val frame: Long = 0, val remoteControl: Boolean = false,
-    val error: String = "", val peer: String = "", val frameAt: Long = 0
+    val error: String = "", val peer: String = "", val frameAt: Long = 0,
+    val deviceCode: String = "", val codeExpires: Long = 0, val permissionReturned: Boolean = false
 )
 
 /** One attended session. A transport handshake never authorizes capture or input. */
@@ -35,6 +36,11 @@ class HelpSession(
     @Volatile private var sentFrame = 0L
     @Volatile private var sentAt = 0L
     private var permissionPending = false
+    private val frameWindow = FrameWindow()
+    private var pairingHost: PairingHost? = null
+    private var pairingJob: Job? = null
+    private var approvalExpiry: Job? = null
+    @Volatile private var pairingSocket: java.net.Socket? = null
     private val inputQueue = Channel<Pair<Long, Message>>(32)
 
     init {
@@ -45,22 +51,64 @@ class HelpSession(
         }
     }
 
+    fun prepareDeviceCode() {
+        if (mutable.value.stage != Stage.HOME || pairingHost != null || pairingJob?.isActive == true) return
+        val current = generation
+        pairingJob = scope.launch {
+            try {
+                platform.keepConnectionAlive(true)
+                val host = withContext(Dispatchers.IO) {
+                    PairingHost(onInvitation = { invitation ->
+                        scope.launch { if (generation == current && mutable.value.stage == Stage.HOME) acceptInvitation(invitation.link()) }
+                    }, onClosed = {
+                        scope.launch {
+                            if (generation == current && mutable.value.stage == Stage.HOME) {
+                                pairingHost = null
+                                mutable.value = mutable.value.copy(deviceCode = "", codeExpires = 0)
+                                // Expired/attempt-limited codes are never silently kept usable.
+                                platform.keepConnectionAlive(false)
+                            }
+                        }
+                    }).also { try { it.start() } catch (e: Exception) { it.close(); throw e } }
+                }
+                if (current != generation) { host.close(); return@launch }
+                pairingHost = host
+                mutable.value = mutable.value.copy(deviceCode = host.code, codeExpires = host.expires)
+            } catch (e: CancellationException) { throw e }
+            catch (_: Exception) { if (current == generation) finishError("discovery") }
+        }
+    }
+
+    fun connectCode(value: String) {
+        if (mutable.value.stage != Stage.HOME) return
+        val code = Pairing.normalize(value)
+        if (!Pairing.valid(code) || code == mutable.value.deviceCode) return
+        createInvitation(platform.defaultName, code)
+    }
+
     fun acceptInvitation(value: String) {
         if (mutable.value.stage !in setOf(Stage.HOME, Stage.ENDED, Stage.ERROR, Stage.INVITATION)) return
         val parsed = runCatching { Invitation.parse(value) }.getOrElse {
             mutable.value = HelpState(Stage.ERROR, error = "invitation"); return
         }
-        stopTransport()
+        stopTransport(preserveConnection = true)
+        platform.keepConnectionAlive(true)
         mutable.value = HelpState(Stage.INVITATION, invitation = parsed, peer = parsed.name)
+        val current = generation
+        approvalExpiry = scope.launch {
+            delay((parsed.expires - System.currentTimeMillis()).coerceAtLeast(0))
+            if (current == generation && mutable.value.stage in setOf(Stage.INVITATION, Stage.CONTROL_PERMISSION)) finishError("expired")
+        }
     }
 
-    fun createInvitation(name: String) {
-        stopTransport()
+    fun createInvitation(name: String, deviceCode: String? = null) {
+        stopTransport(preserveConnection = true)
         val current = generation
         val safeName = name.trim().take(40).filter { !Character.isISOControl(it) && Character.getType(it) != Character.FORMAT.toInt() }.ifBlank { "Helper" }
         mutable.value = HelpState(Stage.PREPARING)
         work = scope.launch {
             try {
+                platform.keepConnectionAlive(true)
                 val identity = withContext(Dispatchers.IO) { TlsIdentity.create() }
                 val hosts = withContext(Dispatchers.IO) { localAddresses() }
                 check(hosts.isNotEmpty()) { "network" }
@@ -74,6 +122,19 @@ class HelpSession(
                 server = listener
                 val invitation = Invitation(hosts, listener.localPort, identity.fingerprint, Invitation.secret(), safeName, System.currentTimeMillis() + 5 * 60_000)
                 mutable.value = HelpState(Stage.WAITING, invitation = invitation)
+                if (deviceCode != null) {
+                    val paired = withContext(Dispatchers.IO) {
+                        val endpoints = Pairing.discover()
+                        var success = false
+                        for (endpoint in endpoints) {
+                            ensureActive()
+                            if (runCatching { Pairing.send(endpoint, deviceCode, invitation) { pairingSocket = it } }.isSuccess) { success = true; break }
+                        }
+                        pairingSocket = null
+                        success
+                    }
+                    if (!paired) { if (current == generation) finishError("code"); return@launch }
+                }
                 val connection = withContext(Dispatchers.IO) { accept(listener, invitation, current) }
                 server?.close(); server = null
                 if (current != generation) { connection.close(); return@launch }
@@ -118,7 +179,15 @@ class HelpSession(
         platform.openControlSettings()
     }
 
+    fun openRestrictedSettings() {
+        if (mutable.value.stage != Stage.CONTROL_PERMISSION) return
+        platform.openAppSettings()
+    }
+
     fun refreshPermissions() {
+        if (permissionPending && mutable.value.stage == Stage.CONTROL_PERMISSION && !platform.controlAvailable()) {
+            mutable.value = mutable.value.copy(permissionReturned = true)
+        }
         if (permissionPending && mutable.value.stage == Stage.CONTROL_PERMISSION && platform.controlAvailable()) {
             permissionPending = false; connectRecipient()
         }
@@ -139,55 +208,62 @@ class HelpSession(
         mutable.value = mutable.value.copy(stage = Stage.CONNECTING)
         work = scope.launch {
             try {
-                check(invitation.expires > System.currentTimeMillis())
-                val connection = withContext(Dispatchers.IO) {
-                    val context = TlsIdentity.client(invitation.fingerprint)
-                    var connected: Wire? = null
-                    for (host in invitation.hosts) {
-                        ensureActive()
-                        val candidate = context.socketFactory.createSocket() as SSLSocket
-                        socket = candidate
-                        try {
-                            candidate.enabledProtocols = candidate.supportedProtocols.filter { it == "TLSv1.3" || it == "TLSv1.2" }.toTypedArray()
-                            candidate.soTimeout = 5000; candidate.tcpNoDelay = true
-                            candidate.connect(InetSocketAddress(host, invitation.port), 1500)
-                            candidate.startHandshake()
-                            connected = Wire(candidate)
-                            connected.send(Message("hello", secret = invitation.secret))
-                            check((connected.read() as? Packet.Control)?.message?.type == "accepted")
-                            candidate.soTimeout = 15_000
-                            break
-                        } catch (_: Exception) { candidate.close(); connected = null }
+                // Child socket failures must reach this catch, not cancel the root launch
+                // with an uncaught exception on Android's main thread.
+                coroutineScope {
+                    check(invitation.expires > System.currentTimeMillis())
+                    val connection = withContext(Dispatchers.IO) {
+                        val context = TlsIdentity.client(invitation.fingerprint)
+                        var connected: Wire? = null
+                        for (host in invitation.hosts) {
+                            ensureActive()
+                            val candidate = context.socketFactory.createSocket() as SSLSocket
+                            socket = candidate
+                            try {
+                                candidate.enabledProtocols = candidate.supportedProtocols.filter { it == "TLSv1.3" || it == "TLSv1.2" }.toTypedArray()
+                                candidate.soTimeout = 5000; candidate.tcpNoDelay = true
+                                candidate.connect(InetSocketAddress(host, invitation.port), 1500)
+                                candidate.startHandshake()
+                                connected = Wire(candidate)
+                                connected.send(Message("hello", secret = invitation.secret))
+                                check((connected.read() as? Packet.Control)?.message?.type == "accepted")
+                                candidate.soTimeout = 15_000
+                                break
+                            } catch (_: Exception) { candidate.close(); connected = null }
+                        }
+                        connected ?: error("Connection failed")
                     }
-                    connected ?: error("Connection failed")
-                }
-                if (current != generation) { connection.close(); return@launch }
-                wire = connection
-                // One reader and heartbeat remain alive throughout the OS permission prompt.
-                val reader = async { pump(connection, helper = false, current = current) }
-                val frames = Channel<Packet.Frame>(Channel.CONFLATED)
-                val allowed = platform.startSharing(
-                    onFrame = { if (authorized.get() && current == generation) frames.trySend(it) },
-                    onStopped = { scope.launch { if (current == generation) stop() } }
-                )
-                if (!allowed || current != generation) {
-                    frames.close(); reader.cancel(); stop(); return@launch
-                }
-                authorized.set(true)
-                val control = !viewOnly && platform.controlAvailable()
-                mutable.value = mutable.value.copy(stage = Stage.SHARING, remoteControl = control)
-                withContext(Dispatchers.IO) { connection.send(Message("ready", control = control)) }
-                val writer = launch(Dispatchers.IO) {
-                    for (frame in frames) {
-                        if (!authorized.get() || generation != current) break
-                        connection.sendFrame(frame); sentFrame = frame.id; sentAt = System.nanoTime()
+                    if (current != generation) { connection.close(); return@coroutineScope }
+                    wire = connection
+                    // One reader and heartbeat remain alive throughout the OS permission prompt.
+                    val reader = async { pump(connection, helper = false, current = current) }
+                    val frames = Channel<Packet.Frame>(Channel.CONFLATED)
+                    val allowed = platform.startSharing(
+                        onFrame = { if (authorized.get() && current == generation) frames.trySend(it) },
+                        onStopped = { scope.launch { if (current == generation) stop() } }
+                    )
+                    if (!allowed || current != generation) {
+                        frames.close(); reader.cancel(); stop(); return@coroutineScope
                     }
+                    authorized.set(true)
+                    val control = !viewOnly && platform.controlAvailable()
+                    mutable.value = mutable.value.copy(stage = Stage.SHARING, remoteControl = control)
+                    withContext(Dispatchers.IO) { connection.send(Message("ready", control = control)) }
+                    val writer = launch(Dispatchers.IO) {
+                        for (frame in frames) {
+                            if (!authorized.get() || generation != current) break
+                            if (!frameWindow.offer(frame.id)) continue
+                            sentFrame = frame.id; sentAt = System.nanoTime()
+                            connection.sendFrame(frame)
+                        }
+                    }
+                    try { reader.await() }
+                    finally { writer.cancel(); frames.close() }
                 }
-                try { reader.await() }
-                finally { writer.cancel(); frames.close() }
             } catch (e: CancellationException) { throw e }
             catch (_: java.io.EOFException) { if (generation == current) stop() }
             catch (_: Exception) { if (generation == current) finishError("connection") }
+            finally { if (generation == current) stop() }
         }
     }
 
@@ -209,9 +285,11 @@ class HelpSession(
                             withContext(Dispatchers.Main) {
                                 if (current == generation) mutable.value = mutable.value.copy(stage = Stage.VIEWING, image = image, frame = packet.id, frameAt = System.nanoTime())
                             }
+                            connection.send(Message("frameAck", frame = packet.id))
                         }
                         is Packet.Control -> when (packet.message.type) {
                             "ping" -> Unit
+                            "frameAck" -> { check(!helper); frameWindow.acknowledge(packet.message.frame) }
                             "ready" -> {
                                 check(helper && !ready); ready = true
                                 withContext(Dispatchers.Main) { mutable.value = mutable.value.copy(remoteControl = packet.message.control) }
@@ -225,7 +303,7 @@ class HelpSession(
                                 val now = System.nanoTime()
                                 check(!helper)
                                 if (authorized.get() && mutable.value.remoteControl && platform.controlAvailable() && message.isValidInput()
-                                    && message.frame <= sentFrame && message.frame >= sentFrame - 8 && now - sentAt < 2_000_000_000 && now - lastInput > 20_000_000) {
+                                    && message.frame <= sentFrame && message.frame >= sentFrame - 60 && now - sentAt < 2_000_000_000 && now - lastInput > 20_000_000) {
                                     lastInput = now
                                     withContext(Dispatchers.Main) { if (authorized.get() && current == generation) platform.applyInput(message) }
                                 }
@@ -248,12 +326,17 @@ class HelpSession(
     fun stop() { stopTransport(); mutable.value = HelpState(Stage.ENDED) }
     fun home() { stopTransport(); mutable.value = HelpState() }
     private fun finishError(key: String) { stopTransport(); mutable.value = HelpState(Stage.ERROR, error = key) }
-    private fun stopTransport() {
+    private fun stopTransport(preserveConnection: Boolean = false) {
         authorized.set(false); generation++; permissionPending = false
+        pairingHost?.close(); pairingHost = null
+        pairingJob?.cancel(); pairingJob = null
+        approvalExpiry?.cancel(); approvalExpiry = null
+        runCatching { pairingSocket?.close() }; pairingSocket = null
+        if (!preserveConnection) platform.keepConnectionAlive(false)
         platform.stopSharing()
         runCatching { socket?.close() }; runCatching { server?.close() }; runCatching { wire?.close() }
         socket = null; server = null; wire = null
-        work?.cancel(); work = null; sentFrame = 0; sentAt = 0
+        work?.cancel(); work = null; sentFrame = 0; sentAt = 0; frameWindow.clear()
     }
     fun dispose() { stopTransport(); inputQueue.close(); scope.cancel() }
 }

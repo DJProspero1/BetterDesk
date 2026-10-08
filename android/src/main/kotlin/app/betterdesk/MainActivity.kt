@@ -43,9 +43,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         Runtime.platform?.detach(this)
-        if (isFinishing) {
-            Runtime.session?.dispose(); Runtime.session = null; Runtime.platform = null
-        }
+        // Switching apps or pressing Back must not revoke a pending/active connection.
+        // Explicit Stop, expiry and removal from Recents own connection teardown.
         super.onDestroy()
     }
 }

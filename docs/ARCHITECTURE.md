@@ -8,18 +8,20 @@ The initial implementation is deliberately independent of RustDesk. Reusing Rust
 
 ## Connection direction
 
-The **helper** creates an ephemeral TLS listener and invitation. The recipient connects, verifies the pinned certificate, presents the invitation secret, and approves local capture. Screen frames flow from recipient to helper; validated input goes in the reverse direction. Either Windows or Android can take either role.
+The connecting device creates an ephemeral TLS listener internally. LAN discovery finds candidate code endpoints; a J-PAKE exchange authenticates the entered code and transfers a pinned TLS invitation in an authenticated encrypted envelope. The requested device approves locally, then connects to the pinned listener. Screen frames flow toward the connecting device and input returns. Both platforms use the same user flow; transport roles are not UI roles.
 
-No background daemon listens at app startup. Listening begins only when the helper explicitly creates an invitation. Build/test fixtures use temporary loopback listeners and close them.
+Opening BetterDesk starts a five-minute code endpoint and UDP discovery responder on port 39471. Only one copy per machine can bind that discovery port. No service runs at boot. Stop/expiry closes listeners. Build/test fixtures use temporary loopback listeners and close them.
 
 ## Threading and lifecycle
 
-The UI/session state uses the main dispatcher. Blocking sockets use IO threads. One reader owns each socket; writes are serialized. Heartbeats keep the connection alive during platform permission prompts. Screen frames have a conflated queue. Input has a bounded queue and generation checks. Every stopped session increments the generation to invalidate queued work.
+The UI/session state uses the main dispatcher. Blocking sockets use IO threads. One reader owns each socket; writes are serialized. Heartbeats keep the connection alive during platform permission prompts. Screen frames have a conflated queue and a two-frame acknowledgement window. Capture targets 30 FPS with reused encoding buffers. Input has a bounded queue and generation checks. Every stopped session increments the generation to invalidate queued work.
 
 ## Platform differences
 
-- Windows: Java AWT primary-display capture/robot mouse input, JNA Unicode keyboard input, bundled JVM launcher.
-- Android: foreground MediaProjection service, system consent, accessibility gestures and editable-node text operations. A service notification has a Stop action. An app-only capture cannot authorize full-screen coordinate input.
+- Windows: Java AWT primary-display capture/robot mouse input, JNA Unicode keyboard input, bundled JVM. A single .NET Framework EXE embeds the application, expands it once per build into a content-hashed LocalAppData cache, then opens it. No admin rights or installer. Subsequent runs reuse that cache.
+- Android: separate connected-device foreground service owns availability while switching apps, with a partial wake lock released on Stop/expiry. Activity recreation does not stop a connection. Removal from Recents does. MediaProjection has its own foreground service and genuine system consent. Accessibility handles gestures/text; app-only capture cannot authorize full-screen coordinate input.
+
+Platform references: [Android foreground service types](https://developer.android.com/develop/background-work/services/fgs/service-types), [Android restricted settings](https://support.google.com/android/answer/12623953). OS-specific labels can vary by manufacturer.
 
 ## Next milestones
 

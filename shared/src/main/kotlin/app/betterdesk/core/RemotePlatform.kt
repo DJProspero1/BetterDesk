@@ -7,6 +7,9 @@ interface RemotePlatform {
     val defaultName: String
     fun controlAvailable(): Boolean
     fun openControlSettings()
+    fun openAppSettings() = Unit
+    val mayRestrictSettings: Boolean get() = false
+    fun keepConnectionAlive(active: Boolean) = Unit
     suspend fun startSharing(onFrame: (Packet.Frame) -> Unit, onStopped: () -> Unit): Boolean
     fun stopSharing()
     fun applyInput(input: Message)

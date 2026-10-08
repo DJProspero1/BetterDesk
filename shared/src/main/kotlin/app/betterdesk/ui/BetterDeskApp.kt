@@ -21,6 +21,7 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -49,17 +50,12 @@ fun BetterDeskApp(session: HelpSession) {
     var portuguese by remember { mutableStateOf(Locale.getDefault().language == "pt") }
     fun t(en: String, pt: String) = if (portuguese) pt else en
     val clipboard = LocalClipboardManager.current
-    var invitationText by remember { mutableStateOf("") }
-    var enterLink by remember { mutableStateOf(false) }
-    var helperSetup by remember { mutableStateOf(false) }
-    var helperName by remember { mutableStateOf(session.platform.defaultName) }
+    var deviceCode by remember { mutableStateOf("") }
+    var restricted by remember(state.stage) { mutableStateOf(false) }
+    var appSettingsOpened by remember(state.stage) { mutableStateOf(false) }
     var copied by remember(state.stage) { mutableStateOf(false) }
-    var remaining by remember { mutableStateOf(300L) }
     LaunchedEffect(state.stage) {
-        while (state.stage == Stage.WAITING) {
-            remaining = ((state.invitation!!.expires - System.currentTimeMillis()) / 1000).coerceAtLeast(0)
-            delay(1000)
-        }
+        if (state.stage == Stage.HOME) session.prepareDeviceCode()
     }
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(Modifier.fillMaxSize().safeDrawingPadding()) {
@@ -76,72 +72,94 @@ fun BetterDeskApp(session: HelpSession) {
                 Box(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 32.dp), contentAlignment = Alignment.Center) {
                     Column(Modifier.widthIn(max = 440.dp).fillMaxWidth(), horizontalAlignment = Alignment.Start) {
                         when (state.stage) {
-                            Stage.HOME -> if (helperSetup) {
-                                Heading(t("Help someone", "Ajudar alguém"), t("Create an invitation and send it to them.", "Crie um convite e envie-o à pessoa."))
-                                OutlinedTextField(helperName, { helperName = it.take(40) }, Modifier.fillMaxWidth(), label = { Text(t("Your name", "O seu nome")) }, singleLine = true)
-                                Spacer(Modifier.height(20.dp))
-                                Primary(t("Create invitation", "Criar convite"), helperName.isNotBlank()) { session.createInvitation(helperName) }
-                                TextButton(onClick = { helperSetup = false }) { Text(t("Back", "Voltar")) }
-                            } else {
-                                Heading(t("Let's get you help.", "Vamos ajudar."), t("Open the invitation sent by the person helping you.", "Abra o convite que a pessoa que o vai ajudar lhe enviou."))
-                                Primary(t("Paste invitation", "Colar convite")) {
-                                    val value = clipboard.getText()?.text.orEmpty().trim()
-                                    if (value.startsWith("betterdesk://")) session.acceptInvitation(value)
-                                    else { enterLink = true; invitationText = "" }
+                            Stage.HOME -> {
+                                Text(t("This device", "Este dispositivo"), fontSize = 17.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(session.platform.defaultName, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Spacer(Modifier.height(12.dp))
+                                if (state.deviceCode.isNotEmpty()) {
+                                    Text(state.deviceCode.chunked(4).joinToString(" "), fontSize = 38.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 2.sp)
+                                    TextButton(onClick = { clipboard.setText(AnnotatedString(state.deviceCode)); copied = true }) {
+                                        Text(if (copied) t("Code copied", "Código copiado") else t("Copy code", "Copiar código"))
+                                    }
+                                    Text(t("Share this code to allow a connection.", "Partilhe este código para permitir uma ligação."), fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                } else {
+                                    TextButton(onClick = { session.prepareDeviceCode() }) { Text(t("Get a code", "Obter código")) }
                                 }
-                                if (enterLink) {
-                                    Spacer(Modifier.height(16.dp))
-                                    OutlinedTextField(invitationText, { invitationText = it.take(2048) }, Modifier.fillMaxWidth(), label = { Text(t("Invitation link", "Ligação do convite")) }, maxLines = 3)
-                                    TextButton(onClick = { session.acceptInvitation(invitationText) }, enabled = invitationText.isNotBlank()) { Text(t("Open invitation", "Abrir convite")) }
-                                }
+                                Spacer(Modifier.height(40.dp))
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                                 Spacer(Modifier.height(32.dp))
-                                TextButton(onClick = { helperSetup = true }) { Text(t("I'm here to help someone", "Quero ajudar alguém")) }
+                                Text(t("Connect to a device", "Ligar a um dispositivo"), fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
+                                Spacer(Modifier.height(16.dp))
+                                OutlinedTextField(deviceCode, { deviceCode = Pairing.normalize(it).filter { c -> c in '0'..'9' }.take(8) }, Modifier.fillMaxWidth(),
+                                    label = { Text(t("Device code", "Código do dispositivo")) }, singleLine = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                                Spacer(Modifier.height(16.dp))
+                                Primary(t("Connect", "Ligar"), Pairing.valid(deviceCode) && deviceCode != state.deviceCode) { session.connectCode(deviceCode) }
                             }
                             Stage.INVITATION -> {
-                                Heading(t("${state.peer} is ready to help.", "${state.peer} vai ajudar."), t("Allow this person to see your screen and control your device. Only continue if you know who sent this invitation.", "Permita que esta pessoa veja o ecrã e controle o dispositivo. Continue apenas se conhece quem enviou o convite."))
-                                Primary(t("Allow help", "Permitir ajuda")) { session.allowHelp() }
+                                Heading(t("Allow ${state.peer} to connect?", "Permitir a ligação de ${state.peer}?"), t("They will see your screen and can control this device. Allow only a connection you expect.", "A pessoa poderá ver o ecrã e controlar este dispositivo. Permita apenas uma ligação que espera."))
+                                Primary(t("Allow connection", "Permitir ligação")) { session.allowHelp() }
                                 TextButton(onClick = { session.home() }) { Text(t("Decline", "Recusar")) }
                             }
                             Stage.PREPARING -> {
-                                Heading(t("Preparing your invitation…", "A preparar o convite…"), t("This takes a moment.", "Só um momento."))
+                                Heading(t("Connecting…", "A ligar…"), t("Finding the other device.", "A procurar o outro dispositivo."))
                                 LinearProgressIndicator(Modifier.fillMaxWidth())
                                 TextButton(onClick = { session.home() }) { Text(t("Cancel", "Cancelar")) }
                             }
                             Stage.WAITING -> {
-                                Heading(t("Your invitation is ready.", "O convite está pronto."), t("Send it to the person who needs help. Keep this window open.", "Envie-o à pessoa que precisa de ajuda. Mantenha esta janela aberta."))
-                                Primary(if (copied) t("Copy invitation again", "Copiar convite novamente") else t("Copy invitation", "Copiar convite")) {
-                                    clipboard.setText(AnnotatedString(state.invitation!!.link())); copied = true
-                                }
-                                Spacer(Modifier.height(16.dp))
-                                Text(if (copied) t("Copied. Paste it into your conversation.", "Copiado. Cole-o na conversa com a pessoa.") else t("They will approve before sharing starts.", "A pessoa vai autorizar antes de partilhar o ecrã."), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Spacer(Modifier.height(12.dp))
-                                Text(t("Expires in ${remaining / 60}:${(remaining % 60).toString().padStart(2, '0')}", "Expira em ${remaining / 60}:${(remaining % 60).toString().padStart(2, '0')}"), fontSize = 14.sp)
-                                TextButton(onClick = { session.home() }) { Text(t("Cancel invitation", "Cancelar convite")) }
+                                Heading(t("Waiting for the other device…", "A aguardar o outro dispositivo…"), t("The connection starts when it is approved there. You can switch apps while you wait.", "A ligação começa quando for autorizada no outro dispositivo. Pode mudar de aplicação enquanto espera."))
+                                LinearProgressIndicator(Modifier.fillMaxWidth())
+                                TextButton(onClick = { session.home() }) { Text(t("Cancel", "Cancelar")) }
                             }
                             Stage.CONNECTING -> {
-                                Heading(t("Getting connected…", "A estabelecer ligação…"), t("Follow any screen-sharing prompt on the device receiving help.", "No dispositivo que recebe ajuda, confirme o pedido de partilha do ecrã."))
+                                Heading(t("Getting connected…", "A estabelecer ligação…"), t("Confirm the screen-sharing prompt when it appears.", "Confirme o pedido de partilha de ecrã quando aparecer."))
                                 LinearProgressIndicator(Modifier.fillMaxWidth())
                                 TextButton(onClick = { session.stop() }) { Text(t("Cancel", "Cancelar")) }
                             }
                             Stage.CONTROL_PERMISSION -> {
-                                Heading(t("Let them tap and type.", "Permita tocar e escrever."), t("In Android Accessibility settings, select BetterDesk and turn it on. It lets your approved helper interact with your screen during this session. Come back here when ready.", "Nas definições de Acessibilidade do Android, escolha BetterDesk e ative a opção. Permite à pessoa autorizada interagir com o ecrã durante esta ajuda. Depois volte aqui."))
-                                Primary(t("Open accessibility settings", "Abrir acessibilidade")) { session.enableControl() }
+                                if (restricted) {
+                                    Heading(t("Unblock the setting", "Desbloquear a definição"), t("Android may block control for apps installed from an APK. Only continue if you trust BetterDesk.", "O Android pode bloquear o controlo em aplicações instaladas por APK. Continue apenas se confia no BetterDesk."))
+                                    PermissionStep("1", t("Open app info below.", "Abra as informações da aplicação abaixo."))
+                                    PermissionStep("2", t("Tap ⋮, then Allow restricted settings.", "Toque em ⋮ e em Permitir definições restritas."))
+                                    PermissionStep("3", t("Return here. Then enable control.", "Volte aqui. Depois ative o controlo."))
+                                    Spacer(Modifier.height(20.dp))
+                                    Primary(t("Open app info", "Abrir informações da aplicação")) { appSettingsOpened = true; session.openRestrictedSettings() }
+                                    if (appSettingsOpened) TextButton(onClick = { restricted = false; session.enableControl() }) { Text(t("Continue to control settings", "Continuar para as definições de controlo")) }
+                                    TextButton(onClick = { restricted = false }) { Text(t("I don't see that option", "Não vejo essa opção")) }
+                                } else {
+                                    Heading(t("Enable control", "Ativar controlo"), t("This lets the connected person tap and type. Android needs you to approve it once.", "Permite à pessoa ligada tocar e escrever. O Android precisa que autorize esta opção uma vez."))
+                                    PermissionStep("1", t("Select BetterDesk in Accessibility.", "Escolha BetterDesk em Acessibilidade."))
+                                    PermissionStep("2", t("Turn on Use BetterDesk and confirm.", "Ative Utilizar BetterDesk e confirme."))
+                                    PermissionStep("3", t("Return here to continue.", "Volte aqui para continuar."))
+                                    if (state.permissionReturned) {
+                                        Spacer(Modifier.height(12.dp))
+                                        Text(t("Control is still off.", "O controlo continua desativado."), color = MaterialTheme.colorScheme.error)
+                                    }
+                                    Spacer(Modifier.height(20.dp))
+                                    Primary(t("Open control settings", "Abrir definições de controlo")) { session.enableControl() }
+                                    if (session.platform.mayRestrictSettings) TextButton(onClick = { restricted = true }) { Text(t("Android blocked this?", "O Android bloqueou esta opção?")) }
+                                }
                                 TextButton(onClick = { session.shareWithoutControl() }) { Text(t("Share my screen only", "Partilhar apenas o ecrã")) }
                                 TextButton(onClick = { session.home() }) { Text(t("Cancel", "Cancelar")) }
                             }
                             Stage.SHARING -> {
-                                Heading(t("${state.peer} is helping you.", "${state.peer} está a ajudar."), if (state.remoteControl) t("Your screen is shared. They can tap and type. Stay with your device.", "O ecrã está partilhado. A pessoa pode tocar e escrever. Fique junto do dispositivo.") else t("Your screen is shared. Only you can tap and type.", "O ecrã está partilhado. Só o utilizador pode tocar e escrever."))
-                                Primary(t("Stop help", "Terminar ajuda")) { session.stop() }
+                                Heading(t("Connected to ${state.peer}", "Ligado a ${state.peer}"), if (state.remoteControl) t("Your screen is shared. They can tap and type. Stay with your device.", "O ecrã está partilhado. A pessoa pode tocar e escrever. Fique junto do dispositivo.") else t("Your screen is shared. Only you can tap and type.", "O ecrã está partilhado. Só o utilizador pode tocar e escrever."))
+                                Primary(t("Disconnect", "Desligar")) { session.stop() }
                                 Spacer(Modifier.height(16.dp))
                                 Text(t("You can continue using your device.", "Pode continuar a utilizar o dispositivo."), color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             Stage.ENDED -> {
-                                Heading(t("Help ended.", "A ajuda terminou."), t("Your screen is no longer shared. This connection is closed.", "O ecrã já não está partilhado. A ligação foi encerrada."))
-                                Primary(t("Done", "Concluir")) { helperSetup = false; enterLink = false; session.home() }
+                                Heading(t("Disconnected", "Ligação terminada"), t("Your screen is no longer shared. This connection is closed.", "O ecrã já não está partilhado. A ligação foi encerrada."))
+                                Primary(t("Done", "Concluir")) { deviceCode = ""; session.home() }
                             }
                             Stage.ERROR -> {
-                                Heading(if (state.error == "invitation") t("Let's try a new invitation.", "Vamos usar um novo convite.") else t("We couldn't stay connected.", "Não foi possível manter a ligação."), if (state.error == "invitation") t("This invitation is invalid or has expired. Ask for a new one.", "Este convite não é válido ou expirou. Peça um novo convite.") else t("Sharing has stopped. Make sure both devices are on the same network, then create a new invitation.", "A partilha foi interrompida. Confirme que os dispositivos estão na mesma rede e crie um novo convite."))
-                                Primary(t("Start again", "Tentar novamente")) { helperSetup = false; enterLink = false; session.home() }
+                                val explanation = when (state.error) {
+                                    "code" -> t("Check the code and keep BetterDesk open on the other device. Both devices need the same Wi-Fi or local network.", "Confirme o código e mantenha o BetterDesk aberto no outro dispositivo. Ambos precisam da mesma rede Wi-Fi ou local.")
+                                    "discovery" -> t("Another copy of BetterDesk may be open. Close it and try again.", "Pode estar aberta outra cópia do BetterDesk. Feche-a e tente novamente.")
+                                    else -> t("Sharing has stopped. Check that both devices are on the same network, then reconnect with a new code.", "A partilha parou. Confirme que os dispositivos estão na mesma rede e volte a ligar com um novo código.")
+                                }
+                                Heading(t("Couldn't connect", "Não foi possível ligar"), explanation)
+                                Primary(t("Try again", "Tentar novamente")) { session.home() }
                             }
                             Stage.VIEWING -> Unit
                         }
@@ -150,6 +168,13 @@ fun BetterDeskApp(session: HelpSession) {
                 Text(t("Early version · Both devices must be on the same network", "Versão inicial · Os dispositivos devem estar na mesma rede"), Modifier.fillMaxWidth().padding(24.dp), textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
             }
         }
+    }
+}
+
+@Composable private fun PermissionStep(number: String, instruction: String) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+        Text(number, Modifier.width(28.dp), fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+        Text(instruction, Modifier.weight(1f), fontSize = 16.sp, lineHeight = 23.sp)
     }
 }
 
@@ -178,7 +203,7 @@ fun BetterDeskApp(session: HelpSession) {
     Column(modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(if (!fresh) t("Waiting for the screen…", "A aguardar o ecrã…") else if (state.remoteControl) t("You can control this screen", "Pode controlar este ecrã") else t("Viewing only", "Apenas visualização"), Modifier.weight(1f), fontSize = 14.sp)
-            TextButton(onClick = { session.stop() }) { Text(t("End help", "Terminar ajuda")) }
+            TextButton(onClick = { session.stop() }) { Text(t("Disconnect", "Desligar")) }
         }
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().background(Color(0xFF111814)).padding(8.dp), contentAlignment = Alignment.Center) {
             state.image?.let { image ->

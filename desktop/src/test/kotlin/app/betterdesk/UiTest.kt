@@ -20,8 +20,8 @@ import java.util.Locale
 
 class UiTest {
     @get:Rule val compose = createComposeRule()
-    private class Platform : RemotePlatform {
-        override val isAndroid = false
+    private class Platform(override val isAndroid: Boolean = false) : RemotePlatform {
+        override val mayRestrictSettings get() = isAndroid
         override val defaultName = "Luís"
         override fun controlAvailable() = false
         override fun openControlSettings() = Unit
@@ -40,7 +40,7 @@ class UiTest {
     private fun renderAndInspect(width: Int, height: Int, name: String) {
         val oldLocale = Locale.getDefault()
         Locale.setDefault(Locale.ENGLISH)
-        val session = HelpSession(Platform())
+        val session = HelpSession(Platform(width < 500))
         try {
             compose.setContent {
                 Box(Modifier.requiredSize(width.dp, height.dp).testTag("screen")) {
@@ -48,16 +48,21 @@ class UiTest {
                 }
             }
             compose.waitForIdle()
-            compose.onNodeWithText("Paste invitation").assertIsDisplayed()
+            compose.onNodeWithText("Connect").assertIsDisplayed()
+            compose.onNodeWithText("Device code").assertIsDisplayed()
             snapshot(name + "-home")
-            compose.onNodeWithText("I'm here to help someone").performClick()
-            compose.onNodeWithText("Create invitation").assertIsDisplayed()
-            snapshot(name + "-helper")
             compose.runOnIdle { session.acceptInvitation(Invitation(listOf("127.0.0.1"), 33333, "ab".repeat(32), Invitation.secret(), "Luís", System.currentTimeMillis() + 60_000).link()) }
-            compose.onNodeWithText("Allow help").assertIsDisplayed()
+            compose.onNodeWithText("Allow connection").assertIsDisplayed()
             compose.onNodeWithText("Decline").assertIsDisplayed()
             snapshot(name + "-consent")
-            compose.onNodeWithText("Decline").performClick()
+            if (width < 500) {
+                compose.onNodeWithText("Allow connection").performClick()
+                compose.onNodeWithText("Open control settings").assertIsDisplayed()
+                snapshot(name + "-permissions")
+                compose.onNodeWithText("Android blocked this?").performClick()
+                compose.onNodeWithText("Open app info").assertIsDisplayed()
+                snapshot(name + "-restricted-settings")
+            } else compose.onNodeWithText("Decline").performClick()
         } finally { session.dispose(); Locale.setDefault(oldLocale) }
     }
     private fun snapshot(name: String) {

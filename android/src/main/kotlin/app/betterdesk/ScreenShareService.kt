@@ -34,6 +34,9 @@ class ScreenShareService : Service() {
     private var lastFrame = 0L
     private var width = 0
     private var height = 0
+    private var reusablePadded: Bitmap? = null
+    private var reusableFrame: Bitmap? = null
+    private val encoded = ByteArrayOutputStream(256 * 1024)
 
     override fun onBind(intent: Intent?) = null
 
@@ -48,7 +51,7 @@ class ScreenShareService : Service() {
             .setSmallIcon(app.betterdesk.R.drawable.ic_betterdesk).setContentTitle("BetterDesk")
             .setContentText(if (resources.configuration.locales[0].language == "pt") "O ecrã está a ser partilhado" else "Your screen is being shared")
             .setContentIntent(open).setOngoing(true)
-            .addAction(0, if (resources.configuration.locales[0].language == "pt") "Terminar ajuda" else "Stop help", stop).build()
+            .addAction(0, if (resources.configuration.locales[0].language == "pt") "Desligar" else "Disconnect", stop).build()
         if (Build.VERSION.SDK_INT >= 29) startForeground(1, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION) else startForeground(1, notification)
         try {
             @Suppress("DEPRECATION") val data = intent.getParcelableExtra<Intent>("projection") ?: error("Missing consent")
@@ -83,18 +86,25 @@ class ScreenShareService : Service() {
             val image = runCatching { source.acquireLatestImage() }.getOrNull() ?: return@setOnImageAvailableListener
             try {
                 val now = SystemClock.elapsedRealtime()
-                if (!CaptureBridge.active || now - lastFrame < 180) return@setOnImageAvailableListener
+                if (!CaptureBridge.active || now - lastFrame < 30) return@setOnImageAvailableListener
                 lastFrame = now
                 val plane = image.planes[0]
                 val paddedWidth = plane.rowStride / plane.pixelStride
-                val padded = Bitmap.createBitmap(paddedWidth, image.height, Bitmap.Config.ARGB_8888)
+                if (reusablePadded?.width != paddedWidth || reusablePadded?.height != image.height) {
+                    reusablePadded?.recycle()
+                    reusablePadded = Bitmap.createBitmap(paddedWidth, image.height, Bitmap.Config.ARGB_8888)
+                }
+                val padded = reusablePadded!!
                 padded.copyPixelsFromBuffer(plane.buffer)
-                val bitmap = Bitmap.createBitmap(padded, 0, 0, image.width, image.height)
-                val bytes = ByteArrayOutputStream()
-                bitmap.compress(Bitmap.CompressFormat.JPEG, 65, bytes)
-                CaptureBridge.onFrame?.invoke(Packet.Frame(++sequence, bitmap.width, bitmap.height, bytes.toByteArray()))
-                if (bitmap !== padded) bitmap.recycle()
-                padded.recycle()
+                if (reusableFrame?.width != image.width || reusableFrame?.height != image.height) {
+                    reusableFrame?.recycle()
+                    reusableFrame = Bitmap.createBitmap(image.width, image.height, Bitmap.Config.ARGB_8888)
+                }
+                val bitmap = reusableFrame!!
+                android.graphics.Canvas(bitmap).drawBitmap(padded, 0f, 0f, null)
+                encoded.reset()
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 65, encoded)
+                CaptureBridge.onFrame?.invoke(Packet.Frame(++sequence, bitmap.width, bitmap.height, encoded.toByteArray()))
             } catch (_: Exception) { Handler(Looper.getMainLooper()).post { stopSelf() } }
             finally { image.close() }
         }, handler)
@@ -123,6 +133,7 @@ class ScreenShareService : Service() {
         display?.release(); display = null
         reader?.close(); reader = null
         projection?.stop(); projection = null
+        handler?.post { reusablePadded?.recycle(); reusableFrame?.recycle(); reusablePadded = null; reusableFrame = null }
         worker.quitSafely()
         if (wasActive) CaptureBridge.onStopped?.invoke()
         super.onDestroy()

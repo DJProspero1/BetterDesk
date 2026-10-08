@@ -21,6 +21,16 @@ import kotlin.coroutines.resume
 class AndroidPlatform(private val context: Context) : RemotePlatform {
     override val isAndroid = true
     override val defaultName = Build.MODEL.take(40)
+    override val mayRestrictSettings = Build.VERSION.SDK_INT >= 33
+    override fun openAppSettings() {
+        activity.get()?.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:${context.packageName}")))
+    }
+    override fun keepConnectionAlive(active: Boolean) {
+        val intent = Intent(context, ConnectionService::class.java)
+        if (active) {
+            if (!ConnectionService.active) ContextCompat.startForegroundService(context, intent)
+        } else context.stopService(intent)
+    }
     private var activity = WeakReference<Activity>(null)
     private var launch: ((Intent) -> Unit)? = null
     private var pending: CancellableContinuation<Boolean>? = null

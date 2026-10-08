@@ -2,6 +2,9 @@ package app.betterdesk.desktop
 
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
+import androidx.compose.ui.graphics.asSkiaBitmap
+import org.jetbrains.skia.EncodedImageFormat
+import org.jetbrains.skia.Image as SkiaImage
 import app.betterdesk.core.*
 import com.sun.jna.platform.win32.*
 import com.sun.jna.ptr.IntByReference
@@ -9,14 +12,9 @@ import java.awt.*
 import java.awt.event.InputEvent
 import java.awt.event.KeyEvent
 import java.awt.image.BufferedImage
-import java.io.ByteArrayInputStream
-import java.io.ByteArrayOutputStream
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
-import javax.imageio.IIOImage
-import javax.imageio.ImageIO
-import javax.imageio.ImageWriteParam
 
 class DesktopPlatform : RemotePlatform {
     override val isAndroid = false
@@ -37,38 +35,40 @@ class DesktopPlatform : RemotePlatform {
             robot = Robot(display)
             active.set(true); sequence = 0
             capture = Executors.newSingleThreadScheduledExecutor { Thread(it, "BetterDesk screen").apply { isDaemon = true } }.also { executor ->
-                executor.scheduleWithFixedDelay({
-                    if (!active.get()) return@scheduleWithFixedDelay
+                var scaled: BufferedImage? = null
+                executor.scheduleAtFixedRate({
+                    if (!active.get()) return@scheduleAtFixedRate
                     try {
                         val raw = robot!!.createScreenCapture(bounds)
                         val scale = minOf(1.0, 1440.0 / maxOf(raw.width, raw.height))
-                        val scaled = BufferedImage((raw.width * scale).toInt().coerceAtLeast(1), (raw.height * scale).toInt().coerceAtLeast(1), BufferedImage.TYPE_INT_RGB)
-                        scaled.createGraphics().apply {
+                        val target = scaled ?: BufferedImage((raw.width * scale).toInt().coerceAtLeast(1), (raw.height * scale).toInt().coerceAtLeast(1), BufferedImage.TYPE_INT_RGB).also { scaled = it }
+                        target.createGraphics().apply {
                             setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR)
-                            drawImage(raw, 0, 0, scaled.width, scaled.height, null); dispose()
+                            drawImage(raw, 0, 0, target.width, target.height, null); dispose()
                         }
                         raw.flush()
-                        val bytes = ByteArrayOutputStream()
-                        val writer = ImageIO.getImageWritersByFormatName("jpeg").next()
-                        ImageIO.createImageOutputStream(bytes).use { output ->
-                            writer.output = output
-                            val param = writer.defaultWriteParam.apply { compressionMode = ImageWriteParam.MODE_EXPLICIT; compressionQuality = .65f }
-                            writer.write(null, IIOImage(scaled, null, null), param)
+                        val bytes = target.toComposeImageBitmap().asSkiaBitmap().use { bitmap ->
+                            SkiaImage.makeFromBitmap(bitmap).use { image ->
+                                image.encodeToData(EncodedImageFormat.JPEG, 65)!!.use { it.bytes }
+                            }
                         }
-                        writer.dispose()
-                        if (active.get()) onFrame(Packet.Frame(++sequence, scaled.width, scaled.height, bytes.toByteArray()))
-                        scaled.flush()
+                        if (active.get()) onFrame(Packet.Frame(++sequence, target.width, target.height, bytes))
                     } catch (_: Exception) { if (active.getAndSet(false)) onStopped() }
-                }, 0, 180, TimeUnit.MILLISECONDS)
+                }, 0, 33, TimeUnit.MILLISECONDS)
+                // Dispose native codec resources on the capture thread after its last task.
+                captureCleanup = { executor.execute { scaled?.flush() } }
             }
             true
         } catch (_: Exception) { stopSharing(); false }
     }
 
     override fun stopSharing() {
-        active.set(false); capture?.shutdownNow(); capture = null
+        active.set(false); runCatching { captureCleanup?.invoke() }; captureCleanup = null
+        capture?.shutdown(); capture = null
         runCatching { robot?.mouseRelease(InputEvent.BUTTON1_DOWN_MASK or InputEvent.BUTTON3_DOWN_MASK) }
     }
+
+    private var captureCleanup: (() -> Unit)? = null
 
     private fun isOurForeground(): Boolean {
         val pid = IntByReference()
@@ -124,15 +124,9 @@ class DesktopPlatform : RemotePlatform {
     }
 
     override fun decode(frame: Packet.Frame): ImageBitmap? = runCatching {
-        ImageIO.createImageInputStream(ByteArrayInputStream(frame.jpeg)).use { stream ->
-            val readers = ImageIO.getImageReaders(stream)
-            check(readers.hasNext())
-            val reader = readers.next()
-            try {
-                reader.input = stream
-                check(reader.getWidth(0) == frame.width && reader.getHeight(0) == frame.height)
-                reader.read(0).toComposeImageBitmap()
-            } finally { reader.dispose() }
+        SkiaImage.makeFromEncoded(frame.jpeg).use { image ->
+            check(image.width == frame.width && image.height == frame.height)
+            image.toComposeImageBitmap()
         }
     }.getOrNull()
 }

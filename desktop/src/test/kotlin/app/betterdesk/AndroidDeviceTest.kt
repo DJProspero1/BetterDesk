@@ -38,7 +38,41 @@ class AndroidDeviceTest {
                 File("build/screenshots").mkdirs()
                 File("build/screenshots/android-capture-received.png").writeBytes(Image.makeFromBitmap(image.asSkiaBitmap()).encodeToData(EncodedImageFormat.PNG)!!.bytes)
                 assertFalse(session.state.value.remoteControl, "Choose screen sharing only for this test")
+                fun adbText(vararg args: String): String {
+                    val child = ProcessBuilder(listOf(adb.path, "-s", device) + args).redirectErrorStream(true).start()
+                    val output = child.inputStream.bufferedReader().readText()
+                    child.waitFor()
+                    return output.trim()
+                }
+                val processId = withContext(Dispatchers.IO) { adbText("shell", "pidof", "app.betterdesk") }
+                assertTrue(processId.isNotBlank())
+                val times = java.util.concurrent.CopyOnWriteArrayList<Long>()
+                val monitor = launch {
+                    var previous = 0L
+                    session.state.collect { state -> if (state.frame > previous) { previous = state.frame; times.add(System.nanoTime()) } }
+                }
+                withContext(Dispatchers.IO) {
+                    fun adbCommand(vararg args: String) {
+                        val child = ProcessBuilder(listOf(adb.path, "-s", device) + args).redirectErrorStream(true).start()
+                        child.inputStream.readBytes(); check(child.waitFor() == 0)
+                    }
+                    adbCommand("shell", "am", "start", "-a", "android.settings.SETTINGS")
+                    repeat(12) { index ->
+                        if (index % 2 == 0) adbCommand("shell", "input", "swipe", "500", "1800", "500", "500", "500")
+                        else adbCommand("shell", "input", "swipe", "500", "500", "500", "1800", "500")
+                    }
+                    adbCommand("shell", "am", "start", "-n", "app.betterdesk/.MainActivity")
+                }
+                monitor.cancelAndJoin()
+                assertEquals(Stage.VIEWING, session.state.value.stage, "Switching apps must preserve the connection")
+                assertTrue(times.size > 10, "Receive moving screen frames in the background")
+                val fps = (times.size - 1) * 1e9 / (times.last() - times.first())
+                File("build/reports/android-motion.txt").writeText("Android emulator -> Windows, settings scroll sample: %.1f received FPS (%d frames). Includes adb command gaps. Background switching preserved the session.\n".format(fps, times.size))
                 withContext(Dispatchers.Main) { session.stop() }
+                withTimeout(8000) {
+                    while (withContext(Dispatchers.IO) { adbText("shell", "dumpsys", "media_projection").contains("TYPE_SCREEN_CAPTURE") }) delay(150)
+                }
+                assertEquals(processId, withContext(Dispatchers.IO) { adbText("shell", "pidof", "app.betterdesk") }, "Remote disconnect must not crash/restart Android")
             } finally { withContext(Dispatchers.Main) { session.dispose() } }
         }
     }

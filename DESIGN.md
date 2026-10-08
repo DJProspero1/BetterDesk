@@ -4,7 +4,7 @@
 
 An accountant in a lit office needs help with a computer or phone and is worried about pressing the wrong button. Receiving help occupies the same narrow, quiet column on both devices; a wide desktop does not introduce a dashboard. The app follows the system light/dark preference.
 
-Open invitation -> identify helper -> Allow help -> required platform permission -> active help -> Stop help -> Help ended.
+This device's code + Enter device code -> Connect -> other device allows connection -> required platform permission -> connected -> Disconnect.
 
 The preceding conversation established this flow. Technical setup is automatic. This initial implementation uses native Compose controls and shared Kotlin UI source for Windows and Android.
 
@@ -14,7 +14,7 @@ Restrained strategy: tinted neutral surfaces, deep green action color, restraine
 
 ## Layout
 
-Maximum receiving column 440dp. 24dp horizontal spacing, 56dp primary action height, rounded 14dp controls, 8/16/24/40dp spacing rhythm. Secondary Help someone action remains quiet. The remote viewer can occupy the remaining window.
+Maximum connection column 440dp. 24dp horizontal spacing, 56dp primary action height, rounded 14dp controls, 8/16/24/40dp spacing rhythm. The eight-digit code is grouped in fours. No role choice. The remote viewer can occupy the remaining window.
 
 ## Interaction
 
@@ -22,6 +22,8 @@ All controls have text labels and native focus/disabled states. No modal permiss
 
 ## First local-network milestone
 
-Helper creates a short-lived invitation with the app and shares it manually. Recipient opens or pastes it, approves, and shares. Links carry a pinned TLS certificate fingerprint and high-entropy one-use secret. Clipboard copying only occurs following an explicit button press.
+Both devices expose a short-lived code on opening the app. Entering a code requests that device's screen; the owner approves. Invitation data remains internal, authenticated using the code and transferred without a user-facing link. Clipboard copying only occurs following an explicit button press.
+
+Android control permission uses short numbered steps before opening Settings. If Android restricts the APK, the inline recovery path explains the App info overflow menu and opens that app-specific page. Returning checks the actual service permission. Screen sharing without control remains available.
 
 No cloud image-generation assets or remote fonts are required.

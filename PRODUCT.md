@@ -6,11 +6,11 @@ product
 
 ## Users
 
-Ordinary people, including accountants, receiving help while present at their Windows computer or Android phone. They should not need to understand remote access or configure anything. Helpers operate the more detailed controls.
+Ordinary people, including accountants, connecting Windows computers and Android phones while present. They should not need to understand remote access or choose a helper/recipient role.
 
 ## Product Purpose
 
-Open-source attended remote help in both directions between Windows and Android. The primary action is opening a helper's invitation and allowing help. This strategy was established and refined with the user across the preceding design conversation, then approved for implementation.
+Open-source attended remote access in both directions between Windows and Android. Both devices show their own short code and a field to enter another device's code. The device whose screen is requested approves the connection. The user's October 8 feedback explicitly replaces the earlier invitation-link and helper-role flow.
 
 ## Brand Personality
 
@@ -22,11 +22,13 @@ No busy remote administration dashboard, account gate, setup wizard with five pe
 
 ## Design Principles
 
-1. One obvious next action. Receiving help is the default.
+1. One identical home screen: this device's code, another device's code, Connect. No helper roles or invitation links in the UI.
 2. Same components, words, states, and ordering on Windows and Android.
 3. Automate configuration, never fabricate consent or connection success.
-4. Clearly show who is helping, viewing versus controlling, and Stop help.
-5. A stopped invitation cannot grant future access.
+4. Clearly show the connected device, viewing versus controlling, and Disconnect.
+5. A stopped connection/code cannot grant future access. Switching apps should preserve an active or pending connection.
+6. Responsive interaction is essential. Bound frame queues, measure delivered performance, and never call a target FPS an achieved result.
+7. Windows delivery is a single portable EXE; Android updates remain local APKs. Explain unavoidable Android restrictions inside the app.
 
 ## Accessibility & Inclusion
 
