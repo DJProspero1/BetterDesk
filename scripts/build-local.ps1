@@ -21,23 +21,27 @@ try {
     if (-not $SkipTests) { $tasks = @(':desktop:test') + $tasks }
     & (Join-Path $aliasPath 'gradlew.bat') -p $aliasPath @tasks --no-daemon '-Pkotlin.incremental=false'
     if ($LASTEXITCODE -ne 0) { throw "Local build failed with exit code $LASTEXITCODE" }
-    $dist = Join-Path $repoRoot 'dist'
+    $version = '0.6.0'
+    $dist = Join-Path $repoRoot ('desktop\build\distribution-stage-' + [guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $dist -Force | Out-Null
-    Copy-Item -LiteralPath (Join-Path $repoRoot 'android\build\outputs\apk\debug\android-debug.apk') -Destination (Join-Path $dist 'BetterDesk-Android-0.5.0-debug.apk') -Force
-    & (Join-Path $PSScriptRoot 'package-portable.ps1') -Version '0.5.0'
-    $artifacts = @('BetterDesk-Windows-0.5.0.exe', 'BetterDesk-Android-0.5.0-debug.apk')
+    Copy-Item -LiteralPath (Join-Path $repoRoot 'android\build\outputs\apk\debug\android-debug.apk') -Destination (Join-Path $dist "BetterDesk-Android-$version-debug.apk") -Force
+    & (Join-Path $PSScriptRoot 'package-portable.ps1') -Version $version -OutputDirectory $dist
+    $artifacts = @("BetterDesk-Windows-$version.exe", "BetterDesk-Android-$version-debug.apk")
     $hashes = foreach ($artifact in $artifacts) {
         $hash = Get-FileHash -LiteralPath (Join-Path $dist $artifact) -Algorithm SHA256
         "$($hash.Hash.ToLowerInvariant())  $artifact"
     }
     Set-Content -LiteralPath (Join-Path $dist 'SHA256SUMS.txt') -Value $hashes -Encoding utf8
     @(
-        'BetterDesk 0.5.0, local development build',
+        "BetterDesk $version, local development build",
         "Built locally: $([DateTime]::UtcNow.ToString('u'))",
+        "Source revision: $(& git -C $repoRoot rev-parse HEAD)",
+        "Working tree dirty: $([bool](& git -C $repoRoot status --porcelain))",
         'Windows: unsigned portable x64 EXE, automatic private runtime cache, no installer.',
         'Android: APK signed with the local development key; install as an update.',
-        'Update both devices. Direct LAN or BetterDesk Railway relay. No cloud builds or public downloads.'
+        'Update both devices. Direct LAN or BetterDesk Railway relay. Built locally; distribution through private GitHub Releases.'
     ) | Set-Content -LiteralPath (Join-Path $dist 'BUILD-INFO.txt') -Encoding utf8
+    & (Join-Path $PSScriptRoot 'publish-distribution.ps1') -Staging $dist -Version $version
     $hashes
 } finally {
     $env:JAVA_TOOL_OPTIONS = $priorJavaOptions

@@ -2,8 +2,10 @@
 
 Current delivery is a private development build. The source may be prepared for
 open source, but repository publication, consumer distribution and public downloads
-are separate decisions. Do not upload EXEs/APKs to GitHub releases or the website.
-All native builds, signing and packaging remain local.
+are separate decisions. The owner has authorized EXE/APK downloads in this
+existing private GitHub repository. The public website remains a waitlist.
+All native builds, signing and packaging remain local; GitHub only stores source
+and the completed assets. No cloud build workflow is used.
 
 ## Version and source preparation
 
@@ -14,7 +16,7 @@ Update version references together:
 - `scripts/build-local.ps1` and `scripts/package-portable.ps1`: artifact/version defaults.
 - `README.md`, this guide and [CHANGELOG.md](../CHANGELOG.md): delivery names/history.
 
-Version 0.5.0 uses Android versionCode 6. There is not yet a single version manifest;
+Version 0.6.0 uses Android versionCode 7. There is not yet a single version manifest;
 search for the previous version before committing. Keep the Android application ID
 and the signing key stable for updates. Update [VERIFICATION.md](VERIFICATION.md)
 with actual coverage and limits, not intended tests. Check instruction-file parity
@@ -35,14 +37,14 @@ Local outputs for this milestone:
 
 | File under `dist/` | Meaning |
 | --- | --- |
-| `BetterDesk-Windows-0.5.0.exe` | Unsigned x64 portable EXE, including app and Java runtime |
-| `BetterDesk-Android-0.5.0-debug.apk` | Local debug-signed Android APK |
+| `BetterDesk-Windows-0.6.0.exe` | Unsigned x64 portable EXE, including app and Java runtime |
+| `BetterDesk-Android-0.6.0-debug.apk` | Local debug-signed Android APK |
 | `SHA256SUMS.txt` | SHA-256 of those final artifacts |
-| `BUILD-INFO.txt` | Build time and packaging notes; does not currently embed Git revision |
+| `BUILD-INFO.txt` | UTC build time, source Git revision, dirty state and packaging notes |
 
 ```powershell
-Get-FileHash .\dist\BetterDesk-Windows-0.5.0.exe -Algorithm SHA256
-Get-FileHash .\dist\BetterDesk-Android-0.5.0-debug.apk -Algorithm SHA256
+Get-FileHash .\dist\BetterDesk-Windows-0.6.0.exe -Algorithm SHA256
+Get-FileHash .\dist\BetterDesk-Android-0.6.0-debug.apk -Algorithm SHA256
 Get-Content .\dist\SHA256SUMS.txt
 git rev-parse HEAD
 git status --short
@@ -51,6 +53,42 @@ git status --short
 Record a dirty checkout if applicable; do not pretend the revision alone identifies
 uncommitted source. Byte-for-byte reproducible packages are not established:
 timestamps, the local signing key, JDK vendor and resolved native artifacts matter.
+
+## Distribution cleanup and private GitHub Releases
+
+Every successful `build-local.ps1` invocation stages four complete outputs under
+`desktop/build/distribution-stage-*`, validates checksums, then replaces `dist/`.
+Only the current EXE/APK and two metadata files remain in `dist/`. Failed compilation,
+packaging or checksum verification preserves the prior working distribution.
+Recognized older binaries are removed after replacement; unrelated notes/previews
+are preserved under `desktop/build/distribution-previous-*`. Links/junctions in
+the distribution tree are rejected. Do not point cleanup at arbitrary paths.
+
+For each delivery, finish tests/docs, commit the source, build locally from that
+clean commit, verify the final binaries, then push that commit to `origin/main`
+under the owner's authorization. Prepare release notes describing changes and
+actual test limits (never codes, private screenshots or credentials). With the
+authorized local GitHub CLI login:
+
+```powershell
+.\scripts\test-release-scripts.ps1
+.\scripts\publish-release.ps1 -Version 0.6.0 -NotesFile .\desktop\build\release-notes.md
+```
+
+The publisher checks repository privacy, instruction parity, clean source,
+`origin/main`, the build's source revision and artifact hashes. It creates/reuses a
+draft, uploads all four files, downloads them again and compares every SHA-256.
+Only then does it publish the new latest release and delete older versioned app
+releases/assets. Git source tags/history and unrelated drafts are retained.
+Never remove the last working release before verifying its replacement. A failed
+upload/readback leaves the earlier release intact. Published versions cannot be
+overwritten: increment the version and rebuild. Final GitHub readback must show
+the new release and its four uploaded assets. This remains a private, unsigned
+Windows/debug-signed Android development channel, despite GitHub's Latest label.
+
+The offline script tests use an isolated checkout and Git/GitHub doubles. They
+exercise failed checksums, safe cleanup, junction rejection, upload failure and
+publication-before-deletion without modifying GitHub.
 
 ## Windows packaging
 

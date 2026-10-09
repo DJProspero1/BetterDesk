@@ -4,6 +4,17 @@ This records user-visible milestones. Native artifacts remain local development
 builds; dates do not imply a public release. Validation is in
 [docs/VERIFICATION.md](docs/VERIFICATION.md).
 
+## 0.6.0 - 2026-10-09
+
+- Native device playback sound in both directions, with viewer mute; no microphone capture.
+- Switch screens from either app, with the other device's approval and fresh Android capture consent.
+- Always-visible full-screen exit and short, reduced-motion-aware control transitions.
+- Android remote Home/Back can leave BetterDesk; approval and OS security controls stay protected.
+- Safely replace and clean `dist/` after successful local builds. Publish verified
+  EXE/APK assets in private GitHub Releases, then remove older versioned releases.
+- Session protocol 2: update both devices. Android audio capture needs API 29+
+  and permission; apps can block their sound. See the measured performance limits.
+
 ## 0.5.0 - 2026-10-09
 
 - Shared black interface and connection/monitor icon across Android and Windows,

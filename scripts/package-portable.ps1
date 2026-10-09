@@ -1,4 +1,4 @@
-param([string]$Version = '0.5.0')
+param([string]$Version = '0.6.0', [string]$OutputDirectory)
 $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $app = Join-Path $repoRoot 'desktop\build\compose\binaries\main\app\BetterDesk'
@@ -6,7 +6,7 @@ if (-not (Test-Path -LiteralPath (Join-Path $app 'BetterDesk.exe'))) { throw 'Bu
 $compiler = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 if (-not (Test-Path -LiteralPath $compiler)) { throw 'Windows .NET Framework compiler is missing.' }
 $temporary = Join-Path $repoRoot 'desktop\build\portable'
-$dist = Join-Path $repoRoot 'dist'
+$dist = if ($OutputDirectory) { $OutputDirectory } else { Join-Path $repoRoot 'dist' }
 New-Item -ItemType Directory -Path $temporary,$dist -Force | Out-Null
 # A unique intermediate avoids deleting/replacing a payload used by another build.
 $payload = Join-Path $temporary (([guid]::NewGuid().ToString('N')) + '.zip')

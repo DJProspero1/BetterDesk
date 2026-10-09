@@ -1,6 +1,13 @@
 package app.betterdesk.ui
 
 import androidx.compose.foundation.Image
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -112,7 +119,7 @@ fun BetterDeskApp(session: HelpSession, onFullScreenChange: (Boolean) -> Unit = 
                                 Primary(t("Connect", "Ligar"), Pairing.validDeviceCode(deviceCode) && deviceCode != state.deviceCode) { session.connectCode(deviceCode) }
                             }
                             Stage.INVITATION -> {
-                                Heading(t("Allow ${state.peer} to connect?", "Permitir a ligação de ${state.peer}?"), t("They will see your screen and can control this device. Allow only a connection you expect.", "A pessoa poderá ver o ecrã e controlar este dispositivo. Permita apenas uma ligação que espera."))
+                                Heading(t("Allow ${state.peer} to connect?", "Permitir a ligação de ${state.peer}?"), t("They can see your screen, hear device sound and control this device. Your microphone stays off.", "A pessoa poderá ver o ecrã, ouvir o som do dispositivo e controlá-lo. O microfone fica desligado."))
                                 Primary(t("Allow connection", "Permitir ligação")) { session.allowHelp() }
                                 TextButton(onClick = { session.home() }) { Text(t("Decline", "Recusar")) }
                             }
@@ -160,6 +167,8 @@ fun BetterDeskApp(session: HelpSession, onFullScreenChange: (Boolean) -> Unit = 
                             Stage.SHARING -> {
                                 Heading(t("Connected to ${state.peer}", "Ligado a ${state.peer}"), if (state.remoteControl) t("Your screen is shared. They can tap and type. Stay with your device.", "O ecrã está partilhado. A pessoa pode tocar e escrever. Fique junto do dispositivo.") else t("Your screen is shared. Only you can tap and type.", "O ecrã está partilhado. Só o utilizador pode tocar e escrever."))
                                 Primary(t("Disconnect", "Desligar")) { session.stop() }
+                                SessionSwitch(session, state, portuguese)
+                                Text(if (state.audioAvailable) t("Device sound is shared", "O som do dispositivo está partilhado") else t("Device sound is unavailable", "O som do dispositivo está indisponível"), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Spacer(Modifier.height(16.dp))
                                 Text(t("You can continue using your device.", "Pode continuar a utilizar o dispositivo."), color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
@@ -184,6 +193,27 @@ fun BetterDeskApp(session: HelpSession, onFullScreenChange: (Boolean) -> Unit = 
                 Text(t("Your permission. Every connection.", "A sua autorização. Em cada ligação."), Modifier.fillMaxWidth().padding(24.dp), textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
         }
         }
+    }
+}
+
+@Composable private fun SessionSwitch(session: HelpSession, state: HelpState, pt: Boolean) {
+    fun t(en: String, portuguese: String) = if (pt) portuguese else en
+    when (state.switchState) {
+        "incoming" -> Column(Modifier.fillMaxWidth().padding(12.dp)) {
+            Text(t("Switch screens?", "Trocar ecrãs?"), fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+            Text(if (state.stage == Stage.VIEWING) t("Your screen and device sound will be shared. Your microphone stays off.", "O seu ecrã e som serão partilhados. O microfone fica desligado.")
+                else t("You will see the other device's screen.", "Vai ver o ecrã do outro dispositivo."), fontSize = 15.sp)
+            Row {
+                Button(onClick = session::acceptSwitch) { Text(t("Allow switch", "Permitir troca")) }
+                TextButton(onClick = session::cancelSwitch) { Text(t("Decline", "Recusar")) }
+            }
+        }
+        "sent" -> Column(Modifier.padding(12.dp)) {
+            Text(t("Waiting for the other device…", "A aguardar o outro dispositivo…"), fontSize = 15.sp)
+            TextButton(onClick = session::cancelSwitch) { Text(t("Cancel switch", "Cancelar troca")) }
+        }
+        "switching" -> Text(t("Switching screens…", "A trocar ecrãs…"), Modifier.padding(12.dp), fontSize = 15.sp)
+        else -> TextButton(onClick = session::requestSwitch) { Text(t("Switch screens", "Trocar ecrãs")) }
     }
 }
 
@@ -214,6 +244,8 @@ fun BetterDeskApp(session: HelpSession, onFullScreenChange: (Boolean) -> Unit = 
     var inputOpen by rememberSaveable { mutableStateOf(false) }
     var controlsOpen by rememberSaveable { mutableStateOf(false) }
     var fresh by remember { mutableStateOf(true) }
+    val duration = if (session.platform.reduceMotion) 0 else 180
+    val inputEnabled = state.remoteControl && fresh && state.switchState.isEmpty()
     val focusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
@@ -241,35 +273,46 @@ fun BetterDeskApp(session: HelpSession, onFullScreenChange: (Boolean) -> Unit = 
                     })
             }
         }
-        if (!controlsOpen) {
-            FilledTonalButton(onClick = { controlsOpen = true }, modifier = Modifier.align(Alignment.BottomEnd).safeDrawingPadding().padding(12.dp).heightIn(min = 48.dp)) {
-                Text(t("Controls", "Controlos"))
+        if (!controlsOpen && state.switchState.isEmpty()) {
+            Row(Modifier.align(Alignment.BottomEnd).safeDrawingPadding().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilledTonalButton(onClick = session::requestSwitch, modifier = Modifier.heightIn(min = 48.dp)) { Text(t("Switch screens", "Trocar ecrãs")) }
+                FilledTonalButton(onClick = { controlsOpen = true }, modifier = Modifier.heightIn(min = 48.dp)) { Text(t("Controls", "Controlos")) }
             }
-        } else {
-        Surface(Modifier.align(Alignment.BottomCenter).safeDrawingPadding().imePadding().padding(8.dp).widthIn(max = 760.dp).fillMaxWidth(), shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surface) {
+        }
+        AnimatedVisibility(controlsOpen || state.switchState.isNotEmpty(),
+            modifier = Modifier.align(Alignment.BottomCenter).safeDrawingPadding().imePadding().padding(8.dp).widthIn(max = 760.dp).fillMaxWidth(),
+            enter = fadeIn(tween(duration)) + slideInVertically(tween(duration, easing = CubicBezierEasing(.22f, 1f, .36f, 1f))) { it / 6 },
+            exit = fadeOut(tween(duration * 3 / 4)) + slideOutVertically(tween(duration * 3 / 4)) { it / 6 }) {
+        Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.verticalScroll(rememberScrollState()).padding(8.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(if (!fresh) t("Waiting for the screen…", "A aguardar o ecrã…") else if (state.remoteControl) t("You can control this screen", "Pode controlar este ecrã") else t("Viewing only", "Apenas visualização"), Modifier.weight(1f).padding(horizontal = 8.dp), fontSize = 14.sp)
             TextButton(onClick = { controlsOpen = false; inputOpen = false; focusManager.clearFocus(); keyboard?.hide() }) { Text(t("Hide", "Ocultar")) }
             TextButton(onClick = { session.stop() }) { Text(t("Disconnect", "Desligar")) }
         }
+        if (state.switchState.isNotEmpty()) SessionSwitch(session, state, pt)
         if (!inputOpen) FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-            TextButton(onClick = { onFullScreenChange(!fullScreen) }) { Text(if (fullScreen) t("Exit full screen", "Sair do ecrã inteiro") else t("Full screen", "Ecrã inteiro")) }
-            TextButton(onClick = { inputOpen = !inputOpen }, enabled = state.remoteControl && fresh) { Text(t("Type", "Escrever")) }
-            TextButton(onClick = { session.input("scrollUp", .5f, .5f) }, enabled = state.remoteControl && fresh) { Text(t("Scroll up", "Subir")) }
-            TextButton(onClick = { session.input("scrollDown", .5f, .5f) }, enabled = state.remoteControl && fresh) { Text(t("Scroll down", "Descer")) }
-            TextButton(onClick = { session.input("back") }, enabled = state.remoteControl && fresh) { Text(t("Back / Esc", "Voltar / Esc")) }
-            TextButton(onClick = { session.input("home") }, enabled = state.remoteControl && fresh) { Text(t("Home", "Início")) }
+            if (state.switchState.isEmpty()) TextButton(onClick = session::requestSwitch) { Text(t("Switch screens", "Trocar ecrãs")) }
+            TextButton(onClick = session::toggleSound, enabled = state.audioAvailable) { Text(if (!state.audioAvailable) t("Sound unavailable", "Som indisponível") else if (state.muted) t("Unmute", "Ligar som") else t("Mute", "Silenciar")) }
+            TextButton(onClick = { inputOpen = !inputOpen }, enabled = inputEnabled) { Text(t("Type", "Escrever")) }
+            TextButton(onClick = { session.input("scrollUp", .5f, .5f) }, enabled = inputEnabled) { Text(t("Scroll up", "Subir")) }
+            TextButton(onClick = { session.input("scrollDown", .5f, .5f) }, enabled = inputEnabled) { Text(t("Scroll down", "Descer")) }
+            TextButton(onClick = { session.input("back") }, enabled = inputEnabled) { Text(t("Back / Esc", "Voltar / Esc")) }
+            TextButton(onClick = { session.input("home") }, enabled = inputEnabled) { Text(t("Home", "Início")) }
         }
         if (inputOpen) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(typed, { typed = it.take(512) }, Modifier.weight(1f).focusRequester(focusRequester), label = { Text(t("Text to type", "Texto a escrever")) }, keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None), maxLines = 3)
-                TextButton(onClick = { session.input("text", text = typed); typed = "" }, enabled = typed.isNotEmpty() && state.remoteControl && fresh) { Text(t("Send", "Enviar")) }
-                TextButton(onClick = { session.input("enter") }, enabled = state.remoteControl && fresh) { Text(t("Enter", "Enter")) }
+                TextButton(onClick = { session.input("text", text = typed); typed = "" }, enabled = typed.isNotEmpty() && inputEnabled) { Text(t("Send", "Enviar")) }
+                TextButton(onClick = { session.input("enter") }, enabled = inputEnabled) { Text(t("Enter", "Enter")) }
             }
         }
         }
         }
+        }
+        // Always discoverable, including before Controls is opened and while typing.
+        FilledTonalButton(onClick = { onFullScreenChange(!fullScreen) }, modifier = Modifier.align(Alignment.TopEnd).safeDrawingPadding().padding(8.dp).heightIn(min = 48.dp)) {
+            Text(if (fullScreen) t("Exit full screen", "Sair do ecrã inteiro") else t("Full screen", "Ecrã inteiro"))
         }
     }
 }

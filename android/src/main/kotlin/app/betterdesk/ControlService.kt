@@ -10,6 +10,7 @@ import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import app.betterdesk.core.Message
 import app.betterdesk.core.isValidInput
+import app.betterdesk.core.AndroidInputPolicy
 
 class ControlService : AccessibilityService() {
     companion object { @Volatile var instance: ControlService? = null }
@@ -22,8 +23,8 @@ class ControlService : AccessibilityService() {
         if (!CaptureBridge.active || !input.isValidInput() || getSystemService(KeyguardManager::class.java).isKeyguardLocked) return
         val root = rootInActiveWindow ?: return
         val owner = root.packageName?.toString().orEmpty()
-        // The helper cannot operate BetterDesk consent, Android permission UI or Settings.
-        if (owner == packageName || owner.contains("permissioncontroller") || owner == "com.android.settings" || owner == "com.android.systemui") return
+        // Home/Back may leave BetterDesk; taps/text still cannot approve a request.
+        if (!AndroidInputPolicy.allows(owner, packageName, input.action)) return
         val metrics = android.util.DisplayMetrics()
         val manager = getSystemService(android.view.WindowManager::class.java)
         if (Build.VERSION.SDK_INT >= 30) {

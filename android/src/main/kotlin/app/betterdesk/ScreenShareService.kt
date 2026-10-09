@@ -25,9 +25,12 @@ object CaptureBridge {
     @Volatile var onFrame: ((Packet.Frame) -> Unit)? = null
     var onReady: ((Boolean) -> Unit)? = null
     var onStopped: (() -> Unit)? = null
+    @Volatile var startAudio: (((Packet.Audio) -> Unit) -> Boolean)? = null
+    @Volatile var stopAudio: (() -> Unit)? = null
 }
 
 class ScreenShareService : Service() {
+    private var playbackCapture: PlaybackAudioCapture? = null
     private var projection: MediaProjection? = null
     private var display: VirtualDisplay? = null
     private var reader: ImageReader? = null
@@ -76,6 +79,9 @@ class ScreenShareService : Service() {
             val dimensions = displayDimensions()
             resize(dimensions.first, dimensions.second)
             CaptureBridge.active = true
+            val sound = PlaybackAudioCapture(this, projection!!).also { playbackCapture = it }
+            CaptureBridge.startAudio = { callback -> CaptureBridge.active && sound.start(callback) }
+            CaptureBridge.stopAudio = sound::stop
             // MediaProjection now owns foreground lifetime. Avoid a second,
             // obsolete "Connection is available" notification while sharing.
             stopService(Intent(this, ConnectionService::class.java))
@@ -200,6 +206,8 @@ class ScreenShareService : Service() {
     override fun onDestroy() {
         val wasActive = CaptureBridge.active
         CaptureBridge.active = false
+        CaptureBridge.startAudio = null; CaptureBridge.stopAudio = null
+        playbackCapture?.stop(); playbackCapture = null
         CaptureBridge.requestKeyFrame = null
         stopForeground(STOP_FOREGROUND_REMOVE)
         getSystemService(NotificationManager::class.java).cancel(1)

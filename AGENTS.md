@@ -57,6 +57,10 @@ These rules apply to work in this repository. Read [PRODUCT.md](PRODUCT.md) and
 - Controls overlay the image on demand and must not shrink it. Keep Disconnect
   reachable, respect cutouts and the keyboard, and restore normal bars/window
   placement when viewing ends.
+- Keep the full-screen exit control visible without opening another menu. Either
+  device can request Switch screens; the other device must explicitly approve.
+  Never let remote input operate switch approval. Use short, purposeful transitions
+  that respect reduced motion and do not delay input or interrupt streaming.
 - Use one computer/connection icon across the UI, Android launcher and
   notifications, Windows executable and taskbar. Edit `assets/icon-paths.json`
   and regenerate with `scripts/generate-icons.ps1`; do not let variants drift.
@@ -91,6 +95,9 @@ These rules apply to work in this repository. Read [PRODUCT.md](PRODUCT.md) and
   Never advertise universal 60 FPS or call an emulator result a physical-device result.
 - Keep queues bounded, drop/recover stale video safely, revoke stale input, and
   release sockets, codecs, wake locks and foreground services on every stop/error.
+- Share supported device playback audio with the screen in both directions, using
+  native capture/playback and bounded buffers. Explain OS restrictions or denied
+  permissions honestly. Device sound sharing never authorizes microphone capture.
 
 ## Security and privacy
 
@@ -100,7 +107,7 @@ These rules apply to work in this repository. Read [PRODUCT.md](PRODUCT.md) and
   capabilities, strict protocol bounds and fail-closed input validation. Do not
   weaken host validation or cryptography to make a test pass.
 - Never log or commit connection codes, invitations, credentials, tickets, screen
-  contents or typed text. Keep secrets outside source/build outputs and use
+  contents, audio samples or typed text. Keep secrets outside source/build outputs and use
   synthetic content for test screenshots. Aggregate local performance counters
   are allowed; telemetry and screen recording are not.
 - Do not add automatic clipboard reading, file transfer, microphone access or
@@ -125,8 +132,16 @@ These rules apply to work in this repository. Read [PRODUCT.md](PRODUCT.md) and
 - Source may be committed and pushed to the existing private GitHub repository
   under the owner's authorization. Keep it private until explicitly told otherwise.
   Potential open-source readiness does not authorize publication.
-- Keep app binaries local. Do not publish GitHub release assets or download links.
-  The separate BetterDesk website on Vercel is a waitlist, not a download portal.
+- Build binaries locally, then publish verified Windows/Android builds and checksums
+  to Releases in the existing private GitHub repository. After verifying the new
+  release assets, remove superseded app releases/assets so only the latest build
+  remains available. Preserve source history/tags. Never delete the last working
+  release before its replacement is verified. The website remains a waitlist.
+- Clean the distribution folder after every successful build: retain only the
+  current Windows EXE, Android APK and their current metadata/checksums. Publish
+  complete outputs before removing stale ones; a failed build must preserve the
+  previous working distribution. Restrict cleanup to verified distribution/staging
+  paths inside this checkout; preserve unrelated files outside the clean dist folder.
 - Keep website and Railway infrastructure in separate projects/repositories.
   Railway hosts connection services and the waitlist database; Vercel hosts the
   website. Cloud infrastructure hosting does not authorize cloud native builds.

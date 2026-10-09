@@ -15,7 +15,8 @@ AppUserModelID and a window icon as well as packaging EXE icons.
 VIEWING bypasses the regular app header/footer and enters native full screen.
 Android uses WindowInsetsControllerCompat with transient system bars available by
 swipe; Windows uses WindowPlacement.Fullscreen and restores the prior placement.
-The image fits without cropping. Input/disconnect controls overlay it on demand,
+The image fits without cropping. Exit full screen stays visible at the top.
+Switch screens is available directly on both devices; input/disconnect controls overlay the image on demand,
 with safe-area and IME padding. Android explicitly requests adjustResize so the
 keyboard cannot pan the text field outside the visible landscape window.
 
@@ -48,6 +49,20 @@ Desktop Duplication emits new desktop content only. Authenticated heartbeats the
 
 The viewer negotiates the codec inside the pinned TLS handshake. Android can produce AVC directly into a MediaCodec surface; Windows decodes it using native FFmpeg. JPEG remains the fallback. AVC uses no B-frames. Any capture-queue or acknowledgement-window drop marks a reference gap and requests a keyframe. Dependent frames are suppressed until a keyframe newer than that gap arrives. Codec headers accompany keyframes. Recovery never grows the video queue, and request frequency is bounded. See [performance](PERFORMANCE.md) and [native dependency notices](../THIRD_PARTY.md).
 
+## Sound and direction changes
+
+Session protocol 2 negotiates playback audio alongside video. Native WASAPI
+loopback and Android AudioPlaybackCapture produce fixed 20 ms stereo PCM packets;
+native output runs away from the socket reader. Separate bounded queues prevent
+audio from accumulating indefinitely. Audio and video share the encrypted TCP
+stream, so network congestion can still delay both. No microphone is captured.
+
+Either endpoint can request a screen switch. The other endpoint approves locally;
+remote input is disabled while the request is pending. Both stop their old media
+workers and exchange stopped markers before reversing direction on the same TLS
+session. Epochs reject stale media/input. Android obtains fresh capture consent
+each time it becomes the source. See [AUDIO_AND_SWITCHING.md](AUDIO_AND_SWITCHING.md).
+
 ## Platform differences
 
 - Windows: D3D11/DXGI primary-display capture through JNA, GDI fallback, Skia resize/JPEG encoding, AWT robot mouse input and JNA Unicode keyboard input. Native capture resources are created and released on the capture worker. The D3D library proxy is retained while COM objects reference it. A single .NET Framework EXE embeds the application and JVM, expands them once per build into a content-hashed LocalAppData cache, then opens it. No admin rights or installer. Subsequent runs reuse that cache.
@@ -74,7 +89,7 @@ join a multicast group. No Wi-Fi multicast lock has been added. Android document
 that such a lock enables multicast reception and can increase battery drain. Evaluate
 native NSD/mDNS discovery and ConnectivityManager network-change callbacks as separate
 improvements, with physical-device coverage and Windows interoperability before
-shipping. Neither is implemented in 0.5.0. See [MulticastLock](https://developer.android.com/reference/android/net/wifi/WifiManager.MulticastLock).
+shipping. Neither is implemented in 0.6.0. See [MulticastLock](https://developer.android.com/reference/android/net/wifi/WifiManager.MulticastLock).
 
 ## Next milestones
 

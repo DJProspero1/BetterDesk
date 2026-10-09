@@ -79,5 +79,6 @@ Bug reports should include app version on both ends, OS/API versions, connection
 direction, LAN/relay route if known, reproducible steps, expected/actual behavior,
 and whether the problem persists with synthetic content. Omit codes, names and
 screen/input contents. Security-sensitive findings follow [SECURITY.md](SECURITY.md)
-instead of an ordinary issue. Do not publish app binaries, make the repository
-public, or deploy the separate website/infrastructure as part of a routine app change.
+instead of an ordinary issue. Publish verified locally built app binaries only
+through the private [release workflow](docs/RELEASING.md). Do not make the repository
+public or deploy the separate website/infrastructure as part of a routine app change.

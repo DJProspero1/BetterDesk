@@ -10,6 +10,34 @@ import android.view.WindowManager
 
 /** Separate opt-in test APK; never bundled into BetterDesk. No network or recording. */
 class MotionActivity : Activity() {
+    private var stopTone: (() -> Unit)? = null
+    override fun onStart() {
+        super.onStart()
+        if (intent.getBooleanExtra("audio", false)) {
+            val running = java.util.concurrent.atomic.AtomicBoolean(true)
+            val audio = android.media.AudioTrack.Builder()
+                .setAudioAttributes(android.media.AudioAttributes.Builder().setUsage(android.media.AudioAttributes.USAGE_MEDIA).build())
+                .setAudioFormat(android.media.AudioFormat.Builder().setSampleRate(48000).setEncoding(android.media.AudioFormat.ENCODING_PCM_16BIT).setChannelMask(android.media.AudioFormat.CHANNEL_OUT_STEREO).build())
+                .setTransferMode(android.media.AudioTrack.MODE_STREAM).setBufferSizeInBytes(15360).build()
+            stopTone = { running.set(false); runCatching { audio.stop() } }
+            Thread({
+                var sample = 0L
+                try {
+                    audio.play()
+                    while (running.get()) {
+                        val pcm = ByteArray(3840)
+                        repeat(960) { n ->
+                            val value = (1800 * kotlin.math.sin(2 * Math.PI * 660 * sample++ / 48000)).toInt()
+                            repeat(2) { c -> pcm[n * 4 + c * 2] = value.toByte(); pcm[n * 4 + c * 2 + 1] = (value shr 8).toByte() }
+                        }
+                        check(audio.write(pcm, 0, pcm.size) > 0)
+                    }
+                } catch (_: Exception) { }
+                finally { audio.release() }
+            }, "BetterDesk fixture tone").start()
+        }
+    }
+    override fun onStop() { stopTone?.invoke(); stopTone = null; super.onStop() }
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)

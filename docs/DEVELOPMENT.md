@@ -64,7 +64,11 @@ From the app repository in PowerShell:
 
 This checks agent-file parity, creates/verifies an ASCII-path junction, runs the
 desktop suite, builds both native packages, wraps Windows as a portable EXE, and
-writes checksums/build metadata under ignored `dist/`. See
+writes checksums/build metadata under ignored `dist/`. Outputs are staged and
+verified before replacing the previous distribution. After success, `dist/`
+contains only the current EXE, APK and two metadata files. Failed builds preserve
+the previous distribution; unrelated previews/notes are preserved outside `dist/`.
+Publishing to private GitHub Releases is a separate explicit local script. See
 [RELEASING.md](RELEASING.md) for artifact names and signing limitations.
 
 JDK packaging can fail under non-ASCII paths. By default the checked junction is

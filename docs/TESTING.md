@@ -22,11 +22,13 @@ $env:BETTERDESK_BROKER_FIXTURE = (Resolve-Path '..\BetterDesk-Infrastructure\scr
 & "$workspace\gradlew.bat" -p $workspace :desktop:test --no-daemon '-Pkotlin.incremental=false'
 ```
 
-The 0.5.0 ordinary suite contains 46 tests: 41 enabled with the fixture, and five
+The 0.6.0 ordinary suite contains 55 tests: 49 enabled with the fixture, and six
 opt-in device/benchmark tests. Without the fixture another nine checks skip.
 Coverage includes invitation bounds, J-PAKE, pinning, approval before capture,
 input validation, cancellation, route fallback, frame recovery, AVC decoding and
-shared UI. No ordinary test captures an unrelated real desktop.
+shared UI. Switch/audio checks cover approval, decline, cancellation, repeated
+reversal, stale callbacks, mute, denied new capture, Android navigation policy and
+PCM conversion. No ordinary test captures an unrelated real desktop.
 
 Inspect `desktop/build/reports/tests/test/index.html` and XML under
 `desktop/build/test-results/test/`; report failures and skipped checks separately.
@@ -85,9 +87,10 @@ Remove-Item Env:BETTERDESK_ANDROID_SERIAL
 The device harness invokes RelayDeviceTest with private temporary test parameters;
 do not run that instrumentation class without the host harness. The capture
 direction measures actual Android capture/AVC and Windows decoding over Railway,
-then checks notification/capture cleanup. The viewer direction uses synthetic
+and native playback sound, then checks notification/capture cleanup. The viewer direction uses synthetic
 Windows frames and an input sink, exercises Android rotation/full-screen controls,
-real keyboard text sending and disconnect. It does not operate the real Windows OS.
+real keyboard text sending, actual AudioTrack playback, switches requested by both
+devices and fresh Android capture consent, then disconnect. It does not operate the real Windows OS.
 
 Use `--rerun` for host device tests: the installed test APK is an external input,
 so Gradle can otherwise report UP-TO-DATE after that APK changes. Reports include
@@ -96,8 +99,18 @@ so Gradle can otherwise report UP-TO-DATE after that APK changes. Reports includ
 
 ## Performance and manual acceptance
 
-The five opt-in checks are AndroidDeviceTest, two AndroidRelayDeviceTest checks,
-CaptureBenchmarkTest and StreamBenchmarkTest. Follow
+The six opt-in checks are AndroidDeviceTest, two AndroidRelayDeviceTest checks,
+CaptureBenchmarkTest, StreamBenchmarkTest and NativeAudioTest. The latter plays
+a brief quiet synthetic tone and verifies native WASAPI loopback and restart:
+
+```powershell
+$env:BETTERDESK_NATIVE_AUDIO = '1'
+& "$workspace\gradlew.bat" -p $workspace :desktop:test --rerun --tests app.betterdesk.NativeAudioTest --no-daemon '-Pkotlin.incremental=false'
+Remove-Item Env:BETTERDESK_NATIVE_AUDIO
+.\scripts\test-release-scripts.ps1
+```
+
+Follow
 [PERFORMANCE.md](PERFORMANCE.md) for their switches and benchmark method. Capture
 FPS, decoded FPS, distinct drawn FPS and input-to-photon latency are different
 measurements. Never infer a new result from an old release's benchmark.
@@ -110,6 +123,8 @@ For relevant UI/lifecycle changes, check both directions and both native apps:
 | Network | Reachable LAN preferred; blocked/unavailable LAN falls back before approval; interruption stops safely |
 | Viewer | No persistent header; portrait/landscape, window resize, insets, full-screen exit/re-entry, no image crop |
 | Input | View-only disables input; overlay preserves image bounds; text remains reachable with keyboard open |
+| Switch screens | Either endpoint requests; the other approves/declines; pending input disabled; fresh Android capture consent; no new code; old capture stops |
+| Sound | Native playback both directions; viewer mute/unmute; denied/unsupported capture keeps video; stop/switch releases audio; no microphone |
 | Language | Change flag; switch apps; rotate; close/reopen; update same signed build; choice remains |
 | Android lifecycle | Genuine capture prompt; restricted-settings instructions; notification during sharing and removal after either end stops |
 | Windows identity | Outer EXE, extracted EXE, open window and taskbar show the same icon; test existing pins separately |

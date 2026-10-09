@@ -1,5 +1,65 @@
 # Local verification, 9 October 2026
 
+## Version 0.6: sound, screen switching and private release delivery
+
+The ordinary local JVM suite covers 55 checks: 49 enabled and six native/device
+checks opt-in. New coverage exercises consent before switching, both request
+directions, decline/cancel, repeated reversal, old callbacks/epochs, pending-input
+blocking, mute/unmute, denied new capture, PCM conversion and malformed audio sizes.
+The Android input policy permits Home/Back from BetterDesk while keeping its own
+approval controls and system permission screens protected. That navigation change
+has policy coverage; physical-device accessibility navigation remains unverified.
+
+Native Windows WASAPI capture passed with a brief quiet 660 Hz fixture tone,
+bounded PCM packets, stop and rapid restart. Android's real AudioPlaybackCapture,
+MediaProjection, foreground notification and AVC encoder were exercised through
+Railway into the actual Windows decoder/player. A completed audio-enabled run received
+1,648 PCM packets; 1,637 contained the known fixture tone. No sound recording was
+saved. Remote disconnect stopped projection and removed BetterDesk notifications.
+
+The Android viewer received synthetic Windows video/sound through Railway and its
+actual AudioTrack playback head advanced. It rotated, preserved the session, entered
+text with the real keyboard, and exposed Exit full screen before opening Controls.
+Screenshots verified that exit remains visible in landscape with the keyboard open.
+The phone requested a switch, the Windows fixture approved, and Android obtained
+a fresh genuine screen-capture grant. Windows then requested a switch back; Android
+approved, stopped capture/its sharing notification and resumed viewing on the same
+session. Completed native viewer/switch instrumentation passed in 44.468 seconds;
+a later viewer run passed in 48.905 seconds.
+The harness scrolls genuine native permission pages when their buttons are below
+the landscape viewport and checks that the capture dialog actually closes. It
+never grants permission through app-ops or Settings writes.
+
+These checks use Windows 11 and the API 36 emulator, controlled/synthetic screen
+content and local builds. They do not establish physical/OEM compatibility, actual
+Windows OS input in the synthetic reverse fixture, protected-app audio capture,
+microphone capture, precise A/V synchronization or input-to-photon latency.
+
+Audio-enabled 30-second relay runs drew 38.65 and 33.67 FPS. A same-build comparison
+without audio capture/tone drew 44.60 FPS. This is below the 60 FPS target and below
+the historical 0.4 video-only result. Native source logs were also below 60 FPS;
+receiver decoding stayed under 1 ms. Audio/network/emulator effects need further
+isolation. See [PERFORMANCE.md](PERFORMANCE.md), including bandwidth overhead.
+
+Offline release-script checks verified that invalid staged checksums preserve the
+previous distribution, successful replacement removes stale binaries and preserves
+unrelated notes, and junction paths are rejected. Git/GitHub doubles verified that
+failed asset readback retains the older release and a successful draft retry
+downloads/verifies/publishes before deleting superseded releases. Live publication
+uses the same guarded script and verifies all four assets by downloaded SHA-256.
+All native builds remain local; the repository stays private and the public website
+stays a waitlist. These are unsigned Windows/debug-signed Android development builds.
+
+The agent files remain identical, all PowerShell scripts parse, and the local
+Markdown links resolve. Reproduction commands and release sequencing are in
+[TESTING.md](TESTING.md) and [RELEASING.md](RELEASING.md). Evidence remains under
+ignored `desktop/build/reports/`; historical results below refer to earlier versions.
+
+The owner stopped further testing because of local load and audible test playback.
+Test apps/audio were stopped. Publication proceeds with `build-local.ps1 -SkipTests`;
+no test suite, emulator interaction or sound test is restarted for publication.
+The evidence above records completed earlier checks, not a new publication test run.
+
 ## Version 0.5: shared black interface and full-screen viewing
 
 The local JVM suite passed 41 enabled checks, with five device/benchmark checks

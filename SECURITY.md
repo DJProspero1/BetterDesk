@@ -14,6 +14,17 @@ This is an early prototype, not audited remote-support software. Report issues p
 - Stop revokes input first, stops capture and closes sockets. Already dispatched OS input can finish; stop is not a rollback of an action already performed.
 - Pending relay requests are explicitly canceled with a private capability. The requested device checks that capability while waiting for approval. Failed cleanup cannot silently authorize capture; tickets, local approval and invitation expiry still apply. Service restarts and broken connections require a fresh attended session.
 - Remote input cannot operate BetterDesk's own permission controls. Android additionally blocks locked devices and common system permission/settings screens.
+- Android Home/Back can leave BetterDesk during an authorized session. This does
+  not permit taps, text or Enter on its consent/switch controls.
+- Switching direction requires one local request and the other device's explicit
+  approval over the existing pinned TLS connection. Both media writers stop before
+  the new direction starts; a new epoch rejects old frames, sound, acknowledgements
+  and input. Capture permissions are not transferred between devices. A declined
+  request preserves the current stream; a failure during handoff closes access.
+- Playback sound capture is scoped to approved screen sharing. Android uses
+  AudioPlaybackCapture with the genuine audio/MediaProjection grants; Windows uses
+  a render-endpoint WASAPI loopback stream. Neither opens the microphone. No audio
+  is recorded to disk or included in logs. Audio packet size and queues are bounded.
 - This version has no trusted-device/unattended mode. A stored Android accessibility grant does not authorize any future session.
 
 Before production: independent protocol/platform audit, dependency/license review, signed updates, abuse handling, physical-device compatibility testing, denial-of-service testing, and clear release privacy/distribution policies.

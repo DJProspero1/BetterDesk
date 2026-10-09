@@ -81,6 +81,9 @@ class UiTest {
             compose.onNodeWithTag("remote-image").assertWidthIsEqualTo(390.dp)
             compose.onNodeWithText("BetterDesk").assertDoesNotExist()
             compose.onNodeWithText("Disconnect").assertDoesNotExist()
+            compose.onNodeWithText("Exit full screen").assertIsDisplayed().performClick()
+            compose.onNodeWithText("Full screen").assertIsDisplayed().performClick()
+            compose.onNodeWithText("Switch screens").assertIsDisplayed()
             snapshot("viewer-portrait")
             compose.runOnIdle { landscape = true }
             compose.onNodeWithTag("remote-image").assertHeightIsEqualTo(390.dp)

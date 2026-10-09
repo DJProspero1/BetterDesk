@@ -14,6 +14,20 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 class DesktopPlatform : RemotePlatform {
+    override val receivesAudio = true
+    override val reduceMotion: Boolean get() = runCatching { java.awt.Toolkit.getDefaultToolkit().getDesktopProperty("win.clientAreaAnimation") == false }.getOrDefault(false)
+    @Volatile private var audioCapture: WasapiAudio? = null
+    private val audioPlayer = DesktopAudioPlayer()
+    override fun startAudio(onAudio: (Packet.Audio) -> Unit): Boolean {
+        stopAudioCapture()
+        val capture = WasapiAudio(); audioCapture = capture
+        if (!active.get()) { capture.stop(); return false }
+        return capture.start(onAudio).also { if (!active.get()) capture.stop() }
+    }
+    override fun stopAudioCapture() { audioCapture?.stop(); audioCapture = null }
+    override fun playAudio(audio: Packet.Audio) = audioPlayer.play(audio)
+    override fun startAudioPlayback() = audioPlayer.start()
+    override fun stopAudioPlayback() = audioPlayer.stop()
     private val preferences by lazy { java.util.prefs.Preferences.userRoot().node("app/betterdesk") }
     override var languageTag: String?
         get() = runCatching { preferences.get("language", null) }.getOrNull()?.takeIf { it == "en" || it == "pt" }

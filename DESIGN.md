@@ -16,7 +16,7 @@ Restrained monochrome strategy: near-black background, charcoal controls, off-wh
 
 Maximum connection column 440dp. 24dp horizontal spacing, 56dp primary action height, rounded 14dp controls, 8/16/24/40dp spacing rhythm. Codes are grouped in fours: twelve digits when available online, eight for local-only fallback. No role choice.
 
-The remote viewer occupies the entire available display, with no app header, footer or reserved toolbar space. Preserve the remote aspect ratio without stretching or cropping; different display shapes can still produce black margins. Both apps enter native full-screen mode when viewing. A small Controls button opens an overlay with Disconnect, input and full-screen actions; Hide closes it. Opening controls does not shrink the image. Respect cutouts and system/keyboard insets for controls. Ending the connection restores normal system bars/window placement.
+The remote viewer occupies the entire available display, with no app header, footer or reserved toolbar space. Preserve the remote aspect ratio without stretching or cropping; different display shapes can still produce black margins. Both apps enter native full-screen mode when viewing. Keep an Exit full screen button visible at the top edge even before Controls opens. Controls and Switch screens remain directly available at the bottom. Controls opens an overlay with Disconnect, input and sound actions; Hide closes it. Opening controls does not shrink the image. Respect cutouts and system/keyboard insets. Ending the connection restores normal system bars/window placement.
 
 Use the shared monitor with two connection arrows on the app header, Android launcher/notification, Windows executable and taskbar window. Its source is assets/icon-paths.json; scripts/generate-icons.ps1 builds vector assets and a multi-resolution ICO locally. Android adaptive icons retain the glyph inside the safe area.
 
@@ -35,3 +35,19 @@ Show “Getting a code…” while registering. A failed Internet registration c
 Android control permission uses short numbered steps before opening Settings. If Android restricts the APK, the inline recovery path explains the App info overflow menu and opens that app-specific page. Returning checks the actual service permission. Screen sharing without control remains available.
 
 No cloud image-generation assets or remote fonts are required.
+
+## Sound, switching and motion
+
+The approval copy explains screen, device sound and control; the microphone stays
+off. Unsupported or denied sound is stated briefly without blocking video. A viewer
+can mute/unmute playback in Controls.
+
+Switch screens uses the same label on both devices. The requester sees waiting
+and Cancel switch; the other device sees an inline request with Allow switch and
+Decline, explaining which screen will be shared. The request stays visible even
+when Controls was closed. Remote input cannot press this approval. No code-entry
+or new role-selection screen appears during the handoff.
+
+Control overlays fade/slide into place in 180 ms and leave in 135 ms, without
+moving the remote image or delaying interaction. Native reduced-motion settings
+make these transitions immediate. Avoid decorative motion in the stream itself.

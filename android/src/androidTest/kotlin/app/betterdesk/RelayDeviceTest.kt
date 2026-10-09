@@ -8,6 +8,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
+import androidx.test.uiautomator.Direction
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
 import app.betterdesk.core.Stage
@@ -28,14 +29,36 @@ class RelayDeviceTest {
         while (!condition()) { if(System.currentTimeMillis()>=end) throw AssertionError("Android relay state timed out: ${Runtime.session?.state?.value?.stage}; ${Runtime.session?.failureSummary}"); Thread.sleep(100) }
     }
     private fun click(text: String) {
-        val item = device.wait(Until.findObject(By.text(Pattern.compile(text))),10000) ?: error("Required control unavailable")
-        item.click()
+        repeat(6) {
+            val item = device.wait(Until.findObject(By.text(Pattern.compile(text))),1500)
+            if(item!=null) { item.click(); return }
+            val scroll = device.findObject(By.res("com.android.systemui","screen_share_permission_dialog"))
+                ?: device.findObject(By.scrollable(true).pkg("app.betterdesk"))
+            scroll?.scroll(Direction.DOWN,.7f)
+        }
+        error("Required control unavailable")
+    }
+    private fun approveProjection() {
+        val dialog=By.res("com.android.systemui","screen_share_permission_dialog")
+        repeat(8) {
+            device.waitForIdle()
+            val button=device.wait(Until.findObject(By.res("com.android.systemui","start_button")),1000)
+                ?: device.findObject(By.text(Pattern.compile("Start now|Share screen|Start|Iniciar agora|Partilhar ecrã|Iniciar")))
+            if(button!=null) {
+                button.click()
+                if(device.wait(Until.gone(dialog),1500)) return
+            }
+            device.findObject(dialog)?.scroll(Direction.DOWN,.7f)
+            device.waitForIdle()
+        }
+        error("Genuine Android capture approval did not complete")
     }
     @Test fun relaySession() {
         assumeTrue(args.getString("relayTest") == "1")
         val id = args.getString("runId")!!.also { require(it.matches(Regex("[a-f0-9-]{36}"))) }
         val mode = args.getString("mode")!!
         val codeFile = File(context.filesDir,"relay-code-$id")
+        if(device.hasObject(By.res("com.android.systemui","screen_share_permission_dialog")))device.pressBack()
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             try {
                 if(mode=="share") {
@@ -46,13 +69,17 @@ class RelayDeviceTest {
                     click("Allow connection|Permitir ligação")
                     until { Runtime.session!!.state.value.stage in setOf(Stage.CONTROL_PERMISSION,Stage.CONNECTING) }
                     if(Runtime.session!!.state.value.stage==Stage.CONTROL_PERMISSION) click("Share my screen only|Partilhar apenas o ecrã")
-                    // Handle only the expected notification permission for this test app.
-                    device.wait(Until.findObject(By.res(Pattern.compile(".*permissioncontroller:id/permission_allow_button"))),2000)?.click()
-                    val projection = device.wait(Until.findObject(By.res("com.android.systemui","start_button")),10000)
-                    if(projection!=null) projection.click() else click("Start now|Share screen|Start|Iniciar agora|Partilhar ecrã|Iniciar")
+                    // Use the genuine OS prompts for playback audio and notifications.
+                    repeat(3) {
+                        val allow = device.wait(Until.findObject(By.res(Pattern.compile(".*permissioncontroller:id/permission_allow(_foreground_only)?_button"))),1500)
+                        allow?.click()
+                    }
+                    approveProjection()
                     until { Runtime.session!!.state.value.stage==Stage.SHARING }
                     until { context.getSystemService(NotificationManager::class.java).activeNotifications.any { it.id==1 } }
-                    context.startActivity(Intent().setClassName("app.betterdesk.motionfixture","app.betterdesk.motionfixture.MotionActivity").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    val sound=args.getString("videoOnly")!="1"
+                    assertEquals(sound,Runtime.session!!.state.value.audioAvailable)
+                    context.startActivity(Intent().setClassName("app.betterdesk.motionfixture","app.betterdesk.motionfixture.MotionActivity").putExtra("audio",sound).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     until(120000) { Runtime.session!!.state.value.stage in setOf(Stage.ENDED,Stage.ERROR) }
                     until { !CaptureBridge.active && context.getSystemService(NotificationManager::class.java).activeNotifications.isEmpty() }
                 } else {
@@ -81,6 +108,8 @@ class RelayDeviceTest {
                     }
                     until { barsHidden() }
                     assertNull(device.findObject(By.text("BetterDesk")))
+                    assertNotNull(device.findObject(By.text(Pattern.compile("Exit full screen|Sair do ecrã inteiro"))))
+                    until { Runtime.platform!!.audioFramesPlayed() > 4800 }
                     device.takeScreenshot(File(context.filesDir,"relay-viewer-portrait.png"))
                     device.setOrientationLeft()
                     until { context.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE }
@@ -109,7 +138,21 @@ class RelayDeviceTest {
                     click("Send|Enviar")
                     click("Hide|Ocultar")
                     File(context.filesDir,"relay-progress.txt").writeText("Input sent")
-                    Thread.sleep(3000)
+                    // Either device can request the reversal; each new Android capture
+                    // must use a fresh, genuine MediaProjection approval.
+                    click("Switch screens|Trocar ecrãs")
+                    until { Runtime.session!!.state.value.stage==Stage.CONTROL_PERMISSION || Runtime.session!!.state.value.stage==Stage.CONNECTING }
+                    if(Runtime.session!!.state.value.stage==Stage.CONTROL_PERMISSION) click("Share my screen only|Partilhar apenas o ecrã")
+                    approveProjection()
+                    until { Runtime.session!!.state.value.stage==Stage.SHARING }
+                    assertSame(connectedSession,Runtime.session)
+                    until { CaptureBridge.active && context.getSystemService(NotificationManager::class.java).activeNotifications.any { it.id==1 } }
+                    until { Runtime.session!!.state.value.switchState=="incoming" }
+                    click("Allow switch|Permitir troca")
+                    until { Runtime.session!!.state.value.stage==Stage.VIEWING }
+                    until { !CaptureBridge.active && context.getSystemService(NotificationManager::class.java).activeNotifications.none { it.id==1 } }
+                    until { barsHidden() }
+                    assertNotNull(device.findObject(By.text(Pattern.compile("Exit full screen|Sair do ecrã inteiro"))))
                     click("Controls|Controlos")
                     click("Disconnect|Desligar")
                     until { Runtime.session!!.state.value.stage==Stage.ENDED }
@@ -124,6 +167,7 @@ class RelayDeviceTest {
                 device.dumpWindowHierarchy(File(context.filesDir,"relay-failure.xml"))
                 throw e
             } finally {
+                if(device.hasObject(By.res("com.android.systemui","screen_share_permission_dialog")))device.pressBack()
                 if (mode == "view") { device.setOrientationNatural(); device.unfreezeRotation() }
                 codeFile.delete()
                 scenario.onActivity { Runtime.session?.stop() }

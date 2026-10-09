@@ -19,6 +19,15 @@ import java.lang.ref.WeakReference
 import kotlin.coroutines.resume
 
 class AndroidPlatform(private val context: Context) : RemotePlatform {
+    override val receivesAudio = true
+    override val reduceMotion: Boolean get() = android.provider.Settings.Global.getFloat(context.contentResolver, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
+    private val audioPlayer = AndroidAudioPlayer()
+    override fun startAudio(onAudio: (Packet.Audio) -> Unit) = CaptureBridge.startAudio?.invoke(onAudio) == true
+    override fun stopAudioCapture() { CaptureBridge.stopAudio?.invoke() }
+    override fun playAudio(audio: Packet.Audio) = audioPlayer.play(audio)
+    override fun startAudioPlayback() = audioPlayer.start()
+    override fun stopAudioPlayback() = audioPlayer.stop()
+    internal fun audioFramesPlayed() = audioPlayer.framesPlayed()
     private val preferences = context.getSharedPreferences("appearance", Context.MODE_PRIVATE)
     override var languageTag: String?
         get() = preferences.getString("language", null)?.takeIf { it == "en" || it == "pt" }

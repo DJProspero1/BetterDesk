@@ -1,4 +1,4 @@
-# Connection protocol, version 0.5.0
+# Connection protocol, application version 0.6.0
 
 This is an implementation guide, not a frozen interoperability standard or a
 security audit. Update both apps together. Authoritative implementations are
@@ -16,6 +16,8 @@ approves a request. These are protocol descriptions, not roles the UI asks users
 to choose. The viewer creates the ephemeral TLS identity and acts as the TLS
 server, even over an outbound relay socket. The sharing device pins that identity
 and sends screen frames. Input travels in the opposite direction.
+These media roles can reverse after local switch approval; TLS client/server roles
+stay fixed. Session wire protocol is now 2; the opaque relay API remains version 1.
 
 ```mermaid
 sequenceDiagram
@@ -132,9 +134,10 @@ counts payload bytes only, excluding the header. A boolean is one byte.
 | Type byte | Fields after type | Payload |
 | --- | --- | --- |
 | 1 | `length:int32` | UTF-8 Message JSON, 1..16,384 bytes |
-| 2 | `length:int32, id:int64, width:int32, height:int32` | JPEG, 1..2,000,000 bytes |
+| 2 | `length:int32, id:int64, width:int32, height:int32, epoch:int64` | JPEG, 1..2,000,000 bytes |
 | 3 | Same as type 2 | Legacy independent AVC frame |
 | 4 | Same as type 2, then `keyFrame:boolean` | Predictive AVC, including headers on keyframes |
+| 5 | `length:int32, id:int64, epoch:int64` | Exactly 3,840 bytes: 20 ms, 48 kHz stereo signed PCM16 little-endian |
 
 Frame IDs must be positive and strictly increase at the viewer. Each dimension is
 1..4096 and the receive-side product cannot exceed 4,194,304 pixels. Decoders also
@@ -142,11 +145,25 @@ validate dimensions/content. Unknown packet types fail. Message decoding rejects
 unknown JSON fields; known optional properties use defaults. This requires care
 when changing the schema: there is no general backwards-compatibility negotiation.
 
-The sharing side sends `hello` with the invitation secret after TLS pin validation.
-The viewer replies `accepted` with its codec preference. After actual capture
-permission/setup, the sharing side sends `ready` with the control capability.
+The sharing side sends `hello` with the invitation secret and `protocol=2` after
+TLS pin validation. The viewer replies `accepted` with `protocol=2`, its codec
+preference and audio receive capability. Missing/wrong versions fail before media.
+After actual capture permission/setup, the source sends `ready` with control/audio
+availability and the current epoch. Every frame, audio packet, input, acknowledgement
+and heartbeat carries that epoch. Audio IDs are positive and monotonically increasing
+per direction; epochs start at zero and advance once per completed switch.
 Normal messages are `ping`, `frameAck`, `capability` (control revoked) and `input`.
 Closing transport ends the session; there is no persistent-access token.
+
+`switchRequest` contains a random 43-character token in `text` and the current
+epoch. A matching `switchAccepted` requires the remote person's approval;
+`switchCancel` declines/cancels. Pending requests expire after 30 seconds and
+disable remote input. Acceptance stops old capture/playback and drains media
+writers. Each side sends `switchStopped` with the token, next epoch and its own
+receive codec/audio capability. Both markers must arrive before roles flip and
+new capture starts. Old-epoch media/input is discarded; fresh `ready` gates media.
+Failure/denied new capture ends the session. See
+[AUDIO_AND_SWITCHING.md](AUDIO_AND_SWITCHING.md) for lifecycle and race limitations.
 
 The viewer acknowledges a frame after decoding/publishing it, **not** after physical
 display scanout. Heartbeats run every 750 ms. A healthy unchanged capture can keep

@@ -32,6 +32,9 @@ class TransportTest {
                     val predictive = wire.read() as Packet.Frame
                     assertEquals("avc", predictive.codec)
                     assertFalse(predictive.keyFrame)
+                    val audio = wire.read() as Packet.Audio
+                    assertEquals(4, audio.epoch)
+                    assertContentEquals(ByteArray(Wire.AUDIO_BYTES) { 4 }, audio.pcm)
                     wire.send(Message("accepted"))
                     message.text
                 }
@@ -43,6 +46,7 @@ class TransportTest {
                 wire.sendFrame(Packet.Frame(1, 2, 2, byteArrayOf(1, 2, 3)))
                 wire.sendFrame(Packet.Frame(2, 2, 2, byteArrayOf(0, 0, 1, 5), "avc-intra"))
                 wire.sendFrame(Packet.Frame(3, 2, 2, byteArrayOf(0, 0, 1, 1), "avc", false))
+                wire.sendAudio(Packet.Audio(1, ByteArray(Wire.AUDIO_BYTES) { 4 }, 4))
                 assertEquals("accepted", (wire.read() as Packet.Control).message.type)
             }
             assertEquals("Olá", receiver.get(6, TimeUnit.SECONDS))
@@ -75,5 +79,17 @@ class TransportTest {
                 }
             }
         } finally { listener.close() }
+    }
+
+    @Test fun `invalid audio size is rejected before payload allocation`() {
+        ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { listener ->
+            Socket("127.0.0.1", listener.localPort).use { sender ->
+                listener.accept().use { receiver ->
+                    receiver.soTimeout = 1000
+                    DataOutputStream(sender.getOutputStream()).apply { writeByte(5); writeInt(Int.MAX_VALUE); flush() }
+                    assertFails { Wire(receiver).read() }
+                }
+            }
+        }
     }
 }

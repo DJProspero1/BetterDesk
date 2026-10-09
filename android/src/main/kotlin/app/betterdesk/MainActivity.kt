@@ -26,7 +26,7 @@ object Runtime {
 
 class MainActivity : ComponentActivity() {
     private var pendingProjection: Intent? = null
-    private val notifications = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+    private val sharingPermissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         // A user's notification choice never silently grants screen capture.
         // The separate, genuine MediaProjection prompt still follows.
         pendingProjection?.let(projection::launch)
@@ -46,9 +46,13 @@ class MainActivity : ComponentActivity() {
         pendingProjection = savedInstanceState?.getParcelable("pendingProjection")
         val platform = Runtime.platform ?: AndroidPlatform(applicationContext).also { Runtime.platform = it }
         platform.attach(this) { request ->
-            if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            val permissions = mutableListOf<String>()
+            if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) permissions += Manifest.permission.POST_NOTIFICATIONS
+            // Android calls this audio permission even for playback-only MediaProjection capture.
+            if (Build.VERSION.SDK_INT >= 29 && ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) permissions += Manifest.permission.RECORD_AUDIO
+            if (permissions.isNotEmpty()) {
                 pendingProjection = request
-                notifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+                sharingPermissions.launch(permissions.toTypedArray())
             } else projection.launch(request)
         }
         val session = Runtime.session ?: HelpSession(platform).also { Runtime.session = it }

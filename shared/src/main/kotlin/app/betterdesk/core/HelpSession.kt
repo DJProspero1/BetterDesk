@@ -18,7 +18,8 @@ data class HelpState(
     val image: ImageBitmap? = null, val frame: Long = 0, val remoteControl: Boolean = false,
     val error: String = "", val peer: String = "", val frameAt: Long = 0,
     val deviceCode: String = "", val codeExpires: Long = 0, val permissionReturned: Boolean = false,
-    val codeLoading: Boolean = false, val viaRelay: Boolean = false
+    val codeLoading: Boolean = false, val viaRelay: Boolean = false,
+    val switchState: String = "", val audioAvailable: Boolean = false, val muted: Boolean = false
 )
 
 /** One attended session. A transport handshake never authorizes capture or input. */
@@ -59,11 +60,40 @@ class HelpSession(
     @Volatile private var relayClient: RelayClient? = null
     private var relayCancellation: String? = null
     private val inputQueue = Channel<Pair<Long, Message>>(32)
+    private val playbackQueue = Channel<Pair<Long, Packet.Audio>>(3, BufferOverflow.DROP_OLDEST)
+    @Volatile private var viewer = false
+    @Volatile private var epoch = 0L
+    @Volatile private var mediaGeneration = 0L
+    @Volatile private var incomingReady = false
+    private var incomingAudio = false
+    private var lastReceivedFrame = 0L
+    private var lastReceivedAudio = 0L
+    private var lastInput = 0L
+    private var mediaWork: Job? = null
+    private var peerAudio = false
+    private var switchToken: String? = null
+    private var switchTimeout: Job? = null
+    private var locallyStopped = false
+    private var remotelyStopped = false
 
     init {
         scope.launch(Dispatchers.IO) {
             for ((sessionGeneration, input) in inputQueue) {
-                if (sessionGeneration == generation) runCatching { wire?.send(input) }
+                if (sessionGeneration == generation && input.epoch == epoch && viewer && mutable.value.switchState.isEmpty()) runCatching { wire?.send(input) }
+            }
+        }
+        scope.launch(Dispatchers.IO) {
+            for ((sessionGeneration, audio) in playbackQueue) {
+                if (sessionGeneration == generation && audio.epoch == epoch && viewer && incomingReady && !mutable.value.muted && mutable.value.switchState != "switching") {
+                    runCatching { platform.playAudio(audio) }.onFailure {
+                        withContext(Dispatchers.Main) {
+                            if (sessionGeneration == generation && audio.epoch == epoch && viewer && !mutable.value.muted && mutable.value.switchState != "switching") {
+                                platform.stopAudioPlayback()
+                                mutable.update { it.copy(audioAvailable = false) }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -232,7 +262,7 @@ class HelpSession(
                         tls.startHandshake()
                         val connected = Wire(tls)
                         val hello = (connected.read() as? Packet.Control)?.message
-                        check(System.currentTimeMillis() < remote.expires && hello?.type == "hello" && TlsIdentity.constantEquals(hello.secret, remote.secret))
+                        check(System.currentTimeMillis() < remote.expires && hello?.type == "hello" && hello.protocol == 2 && TlsIdentity.constantEquals(hello.secret, remote.secret))
                         tls.soTimeout = 15000
                         connected
                     }
@@ -240,11 +270,12 @@ class HelpSession(
                 server?.close(); server = null
                 if (current != generation) { connection.close(); return@launch }
                 wire = connection
+                viewer = true
                 withContext(Dispatchers.IO) {
-                    connection.send(Message("accepted", text = safeName, videoCodec = platform.preferredIncomingCodec))
+                    connection.send(Message("accepted", text = safeName, videoCodec = platform.preferredIncomingCodec, audio = platform.receivesAudio, protocol = 2))
                 }
                 mutable.value = HelpState(Stage.CONNECTING, invitation = invitation, viaRelay = invitation?.relayTicket != null)
-                pump(connection, helper = true, current = current)
+                pump(connection, current)
             } catch (e: CancellationException) { throw e }
             catch (e: RelayFailure) { if (generation == current) finishError(if (e.status in setOf(404, 410)) "code" else "network") }
             catch (_: java.io.EOFException) { if (generation == current) stop() }
@@ -267,7 +298,7 @@ class HelpSession(
                 candidate.startHandshake()
                 val connection = Wire(candidate)
                 val hello = (connection.read() as? Packet.Control)?.message
-                if (System.currentTimeMillis() >= invitation.expires || hello?.type != "hello" || !TlsIdentity.constantEquals(hello.secret, invitation.secret)) error("Invalid invitation")
+                if (System.currentTimeMillis() >= invitation.expires || hello?.type != "hello" || hello.protocol != 2 || !TlsIdentity.constantEquals(hello.secret, invitation.secret)) error("Invalid invitation")
                 candidate.soTimeout = 15_000
                 return connection
             } catch (_: Exception) { candidate.close(); socket = null; failed++ }
@@ -302,7 +333,7 @@ class HelpSession(
         }
         if (mutable.value.stage == Stage.SHARING && !platform.controlAvailable() && mutable.value.remoteControl) {
             mutable.value = mutable.value.copy(remoteControl = false)
-            scope.launch(Dispatchers.IO) { runCatching { wire?.send(Message("capability", control = false)) } }
+            sendControl(Message("capability", control = false, epoch = epoch))
         }
     }
 
@@ -312,6 +343,11 @@ class HelpSession(
     }
 
     private fun connectRecipient(viewOnly: Boolean = false) {
+        if (wire != null && !viewer) {
+            mutable.value = mutable.value.copy(stage = Stage.CONNECTING)
+            startMedia(wire!!, generation, viewOnly)
+            return
+        }
         val invitation = mutable.value.invitation ?: return
         val current = generation
         mutable.value = mutable.value.copy(stage = Stage.CONNECTING)
@@ -337,10 +373,11 @@ class HelpSession(
                             configureTls(candidate)
                             candidate.startHandshake()
                             connected = Wire(candidate)
-                            connected.send(Message("hello", secret = invitation.secret))
+                            connected.send(Message("hello", secret = invitation.secret, protocol = 2))
                             val accepted = (connected.read() as? Packet.Control)?.message
-                            check(accepted?.type == "accepted")
+                            check(accepted?.type == "accepted" && accepted.protocol == 2)
                             platform.selectOutgoingCodec(accepted!!.videoCodec)
+                            peerAudio = accepted.audio
                             candidate.soTimeout = 15000
                         } else for (host in invitation.hosts) {
                             ensureActive()
@@ -351,10 +388,11 @@ class HelpSession(
                                 candidate.connect(InetSocketAddress(host, invitation.port), 1500)
                                 candidate.startHandshake()
                                 connected = Wire(candidate)
-                                connected.send(Message("hello", secret = invitation.secret))
+                                connected.send(Message("hello", secret = invitation.secret, protocol = 2))
                                 val accepted = (connected.read() as? Packet.Control)?.message
-                                check(accepted?.type == "accepted")
+                                check(accepted?.type == "accepted" && accepted.protocol == 2)
                                 platform.selectOutgoingCodec(accepted!!.videoCodec)
+                                peerAudio = accepted.audio
                                 candidate.soTimeout = 15_000
                                 break
                             } catch (_: Exception) { candidate.close(); connected = null }
@@ -363,35 +401,10 @@ class HelpSession(
                     }
                     if (current != generation) { connection.close(); return@coroutineScope }
                     wire = connection
-                    frameWindow.setCapacity(if (invitation.relayTicket == null) 4 else 12)
-                    // One reader and heartbeat remain alive throughout the OS permission prompt.
-                    val reader = async { pump(connection, helper = false, current = current) }
-                    val recovery = VideoRecovery(platform::requestKeyFrame)
-                    val frames = Channel<Packet.Frame>(4, BufferOverflow.DROP_OLDEST) { performance.dropped("queue"); recovery.discard(it) }
-                    val allowed = platform.startSharing(
-                        // Retain the first capture even if it arrives before startSharing returns.
-                        // Transmission still starts only after successful local approval below.
-                        onFrame = { if (current == generation) { capturedFrame = it.id; frames.trySend(it) } },
-                        onStopped = { scope.launch { if (current == generation) stop() } }
-                    )
-                    if (!allowed || current != generation) {
-                        frames.close(); reader.cancel(); stop(); return@coroutineScope
-                    }
-                    authorized.set(true)
-                    val control = !viewOnly && platform.controlAvailable()
-                    mutable.value = mutable.value.copy(stage = Stage.SHARING, remoteControl = control)
-                    withContext(Dispatchers.IO) { connection.send(Message("ready", control = control)) }
-                    val writer = launch(Dispatchers.IO) {
-                        for (frame in frames) {
-                            if (!authorized.get() || generation != current) break
-                            if (!recovery.accepts(frame)) { performance.dropped("recovery"); recovery.discard(frame); continue }
-                            if (!frameWindow.awaitOffer(frame.id)) { performance.dropped("window"); recovery.discard(frame); continue }
-                            sentFrame = frame.id; sentAt = System.nanoTime()
-                            connection.sendFrame(frame)
-                        }
-                    }
-                    try { reader.await() }
-                    finally { writer.cancel(); frames.close() }
+                    viewer = false
+                    startMedia(connection, current, viewOnly)
+                    // One reader and heartbeat remain alive throughout OS permissions.
+                    pump(connection, current)
                 }
             } catch (e: CancellationException) { throw e }
             catch (_: java.io.EOFException) { if (generation == current) stop() }
@@ -400,24 +413,187 @@ class HelpSession(
         }
     }
 
-    private suspend fun pump(connection: Wire, helper: Boolean, current: Long) = coroutineScope {
+    private fun startMedia(connection: Wire, current: Long, viewOnly: Boolean) {
+        if (mediaWork?.isActive == true) return
+        val media = ++mediaGeneration
+        val streamEpoch = epoch
+        frameWindow.setCapacity(if (mutable.value.viaRelay) 12 else 4)
+        mediaWork = scope.launch {
+            val recovery = VideoRecovery(platform::requestKeyFrame)
+            val frames = Channel<Packet.Frame>(4, BufferOverflow.DROP_OLDEST) { performance.dropped("queue"); recovery.discard(it) }
+            val audio = Channel<Packet.Audio>(3, BufferOverflow.DROP_OLDEST)
+            try {
+                coroutineScope {
+                    val allowed = platform.startSharing(
+                        onFrame = { if (current == generation && media == mediaGeneration) { capturedFrame = it.id; frames.trySend(it.copy(epoch = streamEpoch)) } },
+                        onStopped = { scope.launch { if (current == generation && media == mediaGeneration) stop() } }
+                    )
+                    if (!allowed || current != generation || media != mediaGeneration) { if (current == generation) stop(); return@coroutineScope }
+                    authorized.set(true)
+                    val control = !viewOnly && platform.controlAvailable()
+                    val sound = peerAudio && withContext(Dispatchers.IO) {
+                        runCatching { platform.startAudio { if (current == generation && media == mediaGeneration && authorized.get()) audio.trySend(it.copy(epoch = streamEpoch)) } }.getOrDefault(false)
+                    }
+                    if (current != generation || media != mediaGeneration) return@coroutineScope
+                    mutable.value = mutable.value.copy(stage = Stage.SHARING, remoteControl = control, audioAvailable = sound)
+                    withContext(Dispatchers.IO) { connection.send(Message("ready", control = control, audio = sound, epoch = streamEpoch)) }
+                    launch(Dispatchers.IO) {
+                        for (frame in frames) {
+                            if (!authorized.get() || current != generation || media != mediaGeneration) break
+                            if (!recovery.accepts(frame)) { performance.dropped("recovery"); recovery.discard(frame); continue }
+                            if (!frameWindow.awaitOffer(frame.id)) { performance.dropped("window"); recovery.discard(frame); continue }
+                            if (!authorized.get() || current != generation || media != mediaGeneration) break
+                            sentFrame = frame.id; sentAt = System.nanoTime()
+                            connection.sendFrame(frame)
+                        }
+                    }
+                    launch(Dispatchers.IO) {
+                        for (packet in audio) {
+                            if (!authorized.get() || current != generation || media != mediaGeneration) break
+                            connection.sendAudio(packet)
+                        }
+                    }
+                    awaitCancellation()
+                }
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) { rememberFailure(e); if (current == generation) finishError("connection") }
+            finally { frames.close(); audio.close() }
+        }
+    }
+
+    private fun sendControl(message: Message) {
+        val current = generation
+        val connection = wire ?: return
+        scope.launch(Dispatchers.IO) {
+            try { if (current == generation) connection.send(message) }
+            catch (e: Exception) { withContext(Dispatchers.Main) { if (current == generation) finishError("connection") } }
+        }
+    }
+
+    fun toggleSound() {
+        if (!viewer || mutable.value.stage != Stage.VIEWING) return
+        mutable.value = mutable.value.copy(muted = !mutable.value.muted)
+        if (mutable.value.muted) { while (playbackQueue.tryReceive().isSuccess) Unit; platform.stopAudioPlayback() }
+        else platform.startAudioPlayback()
+    }
+
+    fun requestSwitch() {
+        if (mutable.value.stage !in setOf(Stage.SHARING, Stage.VIEWING) || switchToken != null) return
+        val token = Invitation.secret()
+        switchToken = token
+        mutable.value = mutable.value.copy(switchState = "sent")
+        armSwitchTimeout(token)
+        sendControl(Message("switchRequest", text = token, epoch = epoch))
+    }
+
+    private fun armSwitchTimeout(token: String) {
+        switchTimeout?.cancel()
+        switchTimeout = scope.launch { delay(30_000); if (switchToken == token) cancelSwitch() }
+    }
+
+    fun cancelSwitch() {
+        if (mutable.value.switchState !in setOf("sent", "incoming")) return
+        val token = switchToken ?: return
+        clearSwitch()
+        sendControl(Message("switchCancel", text = token, epoch = epoch))
+    }
+
+    private fun clearSwitch() {
+        switchTimeout?.cancel(); switchTimeout = null; switchToken = null
+        locallyStopped = false; remotelyStopped = false
+        mutable.value = mutable.value.copy(switchState = "")
+    }
+
+    fun acceptSwitch() {
+        if (mutable.value.switchState != "incoming") return
+        val token = switchToken ?: return
+        val current = generation
+        // Disable remote input immediately, before the outgoing acceptance is scheduled.
+        mutable.value = mutable.value.copy(switchState = "switching")
+        switchTimeout?.cancel()
+        scope.launch {
+            try {
+                withContext(Dispatchers.IO) { wire?.send(Message("switchAccepted", text = token, epoch = epoch)) }
+                if (current == generation) stopForSwitch(token, current)
+            } catch (e: Exception) { if (current == generation) finishError("connection") }
+        }
+    }
+
+    private suspend fun stopForSwitch(token: String, current: Long) {
+        if (token != switchToken || current != generation || locallyStopped) return
+        switchTimeout?.cancel()
+        mutable.value = mutable.value.copy(switchState = "switching", remoteControl = false)
+        authorized.set(false); mediaGeneration++
+        platform.keepConnectionAlive(true)
+        platform.stopAudioCapture(); platform.stopAudioPlayback(); platform.stopSharing()
+        while (playbackQueue.tryReceive().isSuccess) Unit
+        val previous = mediaWork; mediaWork = null
+        withTimeout(5000) { previous?.cancelAndJoin() }
+        if (current != generation || switchToken != token) return
+        // Every old media write has ended before this marker goes on the same TLS stream.
+        withContext(Dispatchers.IO) { wire!!.send(Message("switchStopped", text = token, epoch = epoch + 1,
+            videoCodec = platform.preferredIncomingCodec, audio = platform.receivesAudio)) }
+        locallyStopped = true
+        finishSwitch(current)
+    }
+
+    private fun finishSwitch(current: Long) {
+        if (!locallyStopped || !remotelyStopped || current != generation) return
+        viewer = !viewer; epoch++
+        incomingReady = false; incomingAudio = false; lastReceivedFrame = 0; lastReceivedAudio = 0; lastInput = 0
+        sentFrame = 0; sentAt = 0; capturedFrame = 0; frameWindow.clear(); performance.reset()
+        clearSwitch()
+        mutable.value = HelpState(stage = Stage.CONNECTING, peer = mutable.value.peer, viaRelay = mutable.value.viaRelay)
+        if (!viewer) {
+            if (platform.isAndroid && !platform.controlAvailable()) mutable.value = mutable.value.copy(stage = Stage.CONTROL_PERMISSION)
+            else startMedia(wire!!, current, viewOnly = false)
+        }
+    }
+
+    private suspend fun switchMessage(message: Message, current: Long) {
+        if (current != generation) return
+        require(message.text.matches(Regex("[A-Za-z0-9_-]{43}")))
+        when (message.type) {
+            "switchRequest" -> {
+                if (message.epoch != epoch || switchToken != null || mutable.value.stage !in setOf(Stage.SHARING, Stage.VIEWING)) {
+                    sendControl(Message("switchCancel", text = message.text, epoch = message.epoch)); return
+                }
+                switchToken = message.text
+                mutable.value = mutable.value.copy(switchState = "incoming")
+                armSwitchTimeout(message.text)
+            }
+            "switchCancel" -> if (message.epoch == epoch && switchToken == message.text && mutable.value.switchState in setOf("sent", "incoming")) clearSwitch()
+            "switchAccepted" -> if (message.epoch == epoch && switchToken == message.text && mutable.value.switchState == "sent") {
+                mutable.value = mutable.value.copy(switchState = "switching")
+                stopForSwitch(message.text, current)
+            }
+            "switchStopped" -> {
+                check(message.epoch == epoch + 1 && switchToken == message.text && mutable.value.switchState == "switching")
+                check(message.videoCodec in setOf("jpeg", "avc"))
+                peerAudio = message.audio
+                platform.selectOutgoingCodec(message.videoCodec)
+                remotelyStopped = true
+                finishSwitch(current)
+            }
+        }
+    }
+
+    private suspend fun pump(connection: Wire, current: Long) = coroutineScope {
         val heartbeat = launch(Dispatchers.IO) {
             while (isActive) {
                 delay(750)
-                val healthy = !helper && authorized.get() && platform.captureResponsive() && capturedFrame <= sentFrame
+                val healthy = !viewer && authorized.get() && platform.captureResponsive() && capturedFrame <= sentFrame
                 if (healthy) sentAt = System.nanoTime()
-                connection.send(Message("ping", frame = if (healthy) sentFrame else 0))
+                connection.send(Message("ping", frame = if (healthy) sentFrame else 0, epoch = epoch))
             }
         }
         try {
             withContext(Dispatchers.IO) {
-                var ready = false
-                var lastReceivedFrame = 0L
-                var lastInput = 0L
                 while (isActive && current == generation) {
                     when (val packet = connection.read()) {
                         is Packet.Frame -> {
-                            check(helper && ready && packet.id > lastReceivedFrame)
+                            if (packet.epoch != epoch || mutable.value.switchState == "switching") continue
+                            check(viewer && incomingReady && packet.id > lastReceivedFrame)
                             lastReceivedFrame = packet.id
                             val decodeStarted = System.nanoTime()
                             val image = platform.decode(packet) ?: error("Invalid image")
@@ -427,31 +603,42 @@ class HelpSession(
                             mutable.update { state ->
                                 if (current == generation) state.copy(stage = Stage.VIEWING, image = image, frame = packet.id, frameAt = System.nanoTime()) else state
                             }
-                            connection.send(Message("frameAck", frame = packet.id))
+                            connection.send(Message("frameAck", frame = packet.id, epoch = packet.epoch))
+                        }
+                        is Packet.Audio -> {
+                            if (packet.epoch != epoch || mutable.value.switchState == "switching") continue
+                            check(viewer && incomingReady && incomingAudio && packet.id > lastReceivedAudio)
+                            lastReceivedAudio = packet.id
+                            if (!mutable.value.muted) playbackQueue.trySend(current to packet)
                         }
                         is Packet.Control -> when (packet.message.type) {
-                            "ping" -> if (helper && packet.message.frame > 0 && packet.message.frame == lastReceivedFrame) {
+                            "switchRequest", "switchCancel", "switchAccepted", "switchStopped" -> withContext(Dispatchers.Main) { switchMessage(packet.message, current) }
+                            "ping" -> if (viewer && packet.message.epoch == epoch && packet.message.frame > 0 && packet.message.frame == lastReceivedFrame) {
                                 withContext(Dispatchers.Main) {
                                     if (current == generation) mutable.value = mutable.value.copy(frameAt = System.nanoTime())
                                 }
                             }
-                            "frameAck" -> { check(!helper); frameWindow.acknowledge(packet.message.frame) }
+                            "frameAck" -> if (packet.message.epoch == epoch && !viewer) frameWindow.acknowledge(packet.message.frame)
                             "ready" -> {
-                                check(helper && !ready); ready = true
-                                withContext(Dispatchers.Main) { mutable.value = mutable.value.copy(remoteControl = packet.message.control) }
+                                check(viewer && !incomingReady && packet.message.epoch == epoch); incomingReady = true; incomingAudio = packet.message.audio
+                                withContext(Dispatchers.Main) {
+                                    mutable.value = mutable.value.copy(remoteControl = packet.message.control, audioAvailable = packet.message.audio)
+                                    if (packet.message.audio && !mutable.value.muted) platform.startAudioPlayback()
+                                }
                             }
                             "capability" -> {
-                                check(helper && ready && !packet.message.control)
+                                if (packet.message.epoch != epoch || mutable.value.switchState == "switching") continue
+                                check(viewer && incomingReady && !packet.message.control)
                                 withContext(Dispatchers.Main) { mutable.value = mutable.value.copy(remoteControl = false) }
                             }
                             "input" -> {
                                 val message = packet.message
                                 val now = System.nanoTime()
-                                check(!helper)
-                                if (authorized.get() && mutable.value.remoteControl && platform.controlAvailable() && message.isValidInput()
+                                if (message.epoch != epoch || viewer) continue
+                                if (authorized.get() && mutable.value.switchState.isEmpty() && mutable.value.remoteControl && platform.controlAvailable() && message.isValidInput()
                                     && message.frame <= sentFrame && message.frame >= sentFrame - 60 && now - sentAt < 2_000_000_000 && now - lastInput > 20_000_000) {
                                     lastInput = now
-                                    withContext(Dispatchers.Main) { if (authorized.get() && current == generation) platform.applyInput(message) }
+                                    withContext(Dispatchers.Main) { if (authorized.get() && current == generation && message.epoch == epoch && mutable.value.switchState.isEmpty()) platform.applyInput(message) }
                                 }
                             }
                             else -> error("Unexpected message")
@@ -464,8 +651,8 @@ class HelpSession(
 
     fun input(action: String, x: Float = 0f, y: Float = 0f, endX: Float = x, endY: Float = y, text: String = "") {
         val state = mutable.value
-        if (state.stage != Stage.VIEWING || !state.remoteControl || System.nanoTime() - state.frameAt > 2_000_000_000) return
-        val message = Message("input", action = action, x = x, y = y, endX = endX, endY = endY, text = text, frame = state.frame)
+        if (state.stage != Stage.VIEWING || state.switchState.isNotEmpty() || !state.remoteControl || System.nanoTime() - state.frameAt > 2_000_000_000) return
+        val message = Message("input", action = action, x = x, y = y, endX = endX, endY = endY, text = text, frame = state.frame, epoch = epoch)
         if (message.isValidInput()) inputQueue.trySend(generation to message)
     }
 
@@ -473,7 +660,14 @@ class HelpSession(
     fun home() { stopTransport(); mutable.value = HelpState() }
     private fun finishError(key: String) { stopTransport(); mutable.value = HelpState(Stage.ERROR, error = key) }
     private fun stopTransport(preserveConnection: Boolean = false) {
-        authorized.set(false); generation++; permissionPending = false
+        authorized.set(false); generation++; mediaGeneration++; permissionPending = false
+        switchTimeout?.cancel(); switchTimeout = null; switchToken = null
+        locallyStopped = false; remotelyStopped = false
+        mediaWork?.cancel(); mediaWork = null
+        platform.stopAudioCapture(); platform.stopAudioPlayback()
+        while (playbackQueue.tryReceive().isSuccess) Unit
+        viewer = false; epoch = 0; incomingReady = false; incomingAudio = false; peerAudio = false
+        lastReceivedFrame = 0; lastReceivedAudio = 0; lastInput = 0
         pairingHost?.close(); pairingHost = null
         pairingJob?.cancel(); pairingJob = null
         approvalExpiry?.cancel(); approvalExpiry = null
@@ -490,5 +684,5 @@ class HelpSession(
         socket = null; server = null; wire = null
         work?.cancel(); work = null; sentFrame = 0; sentAt = 0; capturedFrame = 0; frameWindow.clear(); performance.reset()
     }
-    fun dispose() { stopTransport(); inputQueue.close(); scope.cancel() }
+    fun dispose() { stopTransport(); inputQueue.close(); playbackQueue.close(); scope.cancel() }
 }

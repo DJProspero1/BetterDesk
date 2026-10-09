@@ -70,7 +70,7 @@ a physical Wi-Fi test.
 Final app benchmarks are written to ignored `desktop/build/reports/stream-benchmark.txt`
 and `android-render-benchmark.txt`. Release verification summarizes those results.
 
-## Internet relay measurement, 9 October
+## Version 0.4 Internet relay measurement, 9 October
 
 The same API 36 emulator streamed its real capture through the public Railway TCP
 relay to the Windows decoder/viewer for 30 seconds after warmup. An eight-frame
@@ -85,6 +85,27 @@ discarded predictive frames after gaps. This is a measured improvement, not a 60
 result or a physical-device test. No input-to-photon latency was measured. Evidence
 is in `desktop/build/reports/android-relay-performance.txt`; reproduction is in
 VERIFICATION.md. Internet quality adaptation remains necessary on weaker links.
+
+## Version 0.6 sound and frame-rate checks
+
+New 30-second API 36 emulator-to-Windows Railway runs with actual playback sound
+received/drew 39.41/38.65 FPS (P95 gap 58 ms), then 33.90/33.67 FPS (65 ms).
+The video payload was 1.61 and 1.35 Mbps respectively; uncompressed stereo sound
+adds about 1.536 Mbps before overhead. These numbers do **not** meet the 60 FPS
+target and are lower than the historical video-only 0.4 measurement. Native source
+logs also showed roughly 32-44 encoded FPS; receiver decoding remained under 1 ms.
+The same-build comparison with capture sound and the fixture tone disabled drew
+44.60 FPS (45.16 received, P95 gap 47 ms, video 1.87 Mbps). It was also below the
+historical result. The difference suggests audio/emulator overhead deserves further
+work, but these sequential runs do not isolate load or network variability as causes.
+Do not describe them as a latency improvement or extrapolate them to physical phones.
+
+For a same-build comparison, set `BETTERDESK_COMPARE_VIDEO_ONLY=1` with the opt-in
+AndroidRelayDeviceTest capture check. That test-only flag disables audio negotiation
+and the fixture tone, and writes `0.6-video-only.txt`; ordinary audio runs write
+`0.6-audio-enabled.txt` under `desktop/build/reports/`. The shipped app has no such
+environment override. Native sound requires further physical-device, synchronization
+and constrained-network measurement. See [VERIFICATION.md](VERIFICATION.md).
 
 ## Reproduce locally
 

@@ -1,6 +1,6 @@
 # Platform behavior, permissions and troubleshooting
 
-This describes version 0.5.0. The shared interface is the product contract; native
+This describes version 0.6.0. The shared interface is the product contract; native
 differences exist where the OS requires them. The verified environments are
 Windows 11 x64 and an Android API 36 emulator. Declared minimum Android API 26 is
 not a claim of complete vendor/version coverage.
@@ -21,9 +21,13 @@ between devices.
 Viewing enters full screen without an app header or permanent toolbar. The image
 fits without stretching or cropping, so unlike display shapes still leave black
 margins. **Controls** opens an overlay; **Hide** closes it. Disconnect, Type,
-scroll and navigation controls depend on the remote capability. Full-screen exit
+scroll and navigation controls depend on the remote capability. Exit full screen
+is always visible at the top, including before Controls is opened. It
 restores the native window/bars. Overlay controls respect safe areas and keyboard
 insets; the Android activity requests `adjustResize` for landscape typing.
+Either device can request **Switch screens**; the other person approves or declines.
+An approved switch reuses the connection but requires any new OS capture permissions.
+Short panel transitions honor the platform's reduced-motion setting.
 
 ## Windows
 
@@ -52,6 +56,7 @@ insets; the Android activity requests `adjustResize` for landscape typing.
 | Native capability | Why it exists / behavior |
 | --- | --- |
 | MediaProjection | Genuine per-session screen-capture consent; denial leaves no authorized capture |
+| AudioPlaybackCapture / AudioTrack (capture API 29+) | Supported app playback accompanies the screen; native low-latency playback on the viewer |
 | AccessibilityService | Optional input gestures/text; grant through real Settings; view-only remains available |
 | Notification permission (API 33+) | Requested before the separate sharing prompt; denial does not grant capture |
 | Media-projection foreground service | Sharing lifetime, visible sharing notice and Disconnect action |
@@ -62,9 +67,11 @@ insets; the Android activity requests `adjustResize` for landscape typing.
 
 The manifest declares `INTERNET`, `ACCESS_NETWORK_STATE`, `CHANGE_NETWORK_STATE`,
 `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_CONNECTED_DEVICE`,
-`FOREGROUND_SERVICE_MEDIA_PROJECTION`, `WAKE_LOCK` and `POST_NOTIFICATIONS`.
+`FOREGROUND_SERVICE_MEDIA_PROJECTION`, `WAKE_LOCK`, `RECORD_AUDIO` and `POST_NOTIFICATIONS`.
 `BIND_ACCESSIBILITY_SERVICE` protects the service binding; it is not an ordinary
-runtime prompt. There is no microphone, contacts, file-storage or camera grant.
+runtime prompt. Android requires the permission labeled microphone/record audio
+for playback capture, but BetterDesk never opens a microphone source. Denial keeps
+video available without sound. There is no contacts, file-storage or camera grant.
 
 Sideloaded APKs may have accessibility restricted by Android. BetterDesk explains
 the steps before opening Settings and includes **Android blocked this?** recovery
@@ -73,8 +80,9 @@ the app cannot legitimately do it silently. Labels/menus vary by OS and vendor.
 See [Android's restricted-settings guidance](https://support.google.com/android/answer/12623953).
 
 Android control requires unlocked full-display capture and an active accessibility
-service. It refuses BetterDesk, Settings, permission-controller and system-UI
-screens. App-only capture cannot safely authorize whole-display coordinates.
+service. BetterDesk permits global Home/Back to leave its own screen, while taps,
+text and gestures on its own approval controls remain blocked. Settings,
+permission-controller and system-UI screens remain blocked. App-only capture cannot safely authorize whole-display coordinates.
 Text targets the focused editable accessibility node; custom renderers, games,
 some password fields and unsupported widgets can reject it. Protected content may
 appear blank. Screen lock/revoked projection stops sharing.
@@ -101,7 +109,7 @@ localization and remain native.
 | Windows language | Java per-user Preferences node `app/betterdesk`, key `language`; independent of the versioned portable cache |
 | Windows extracted runtime/app | `%LOCALAPPDATA%/BetterDesk/portable/<content-hash>/`; previous caches remain until manually removed while stopped |
 | Codes, keys, invitations, tickets | Ephemeral process/connection state; not stored as future access credentials |
-| Screen/input content | Live endpoint memory and encrypted transport; no app recording/history/telemetry |
+| Screen/audio/input content | Live endpoint memory and encrypted transport; no app recording/history/telemetry |
 | Local development outputs | Ignored `build/` and `dist/`; tests can save synthetic screenshots and timing reports |
 
 Android backup is disabled in the manifest. OS-managed accessibility/notification
@@ -131,6 +139,8 @@ public distribution; this implementation guide is not a provider-retention promi
 | Language resets | Update without clearing data; check the same Windows user/Android app installation. Native notification language is currently separate. |
 | Old Windows taskbar icon | Check whether an old process or pinned shortcut targets the previous EXE. Test the current portable EXE/window before changing Windows caches. |
 | Low FPS or lag | Compare LAN and relay, source refresh rate, motion, codec and bandwidth. Windows JPEG is bandwidth-heavy; see measured limits in PERFORMANCE.md. |
+| No device sound | Check viewer mute/output volume and source playback volume. Android needs API 29+, audio permission and an app that allows capture; calls/protected content may remain silent. Windows captures the default multimedia output. See AUDIO_AND_SWITCHING.md. |
+| Switch ends the session | Both devices need 0.6.0. A failed new capture or denied OS prompt ends the handoff safely; reconnect normally. |
 
 Report reproducible failures using [CONTRIBUTING.md](../CONTRIBUTING.md), with
 redacted metadata rather than session codes or private screenshots.

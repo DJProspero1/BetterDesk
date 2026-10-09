@@ -32,6 +32,8 @@ No busy remote administration dashboard, account gate, setup wizard with five pe
 8. Use native Android integrations wherever they improve the experience without reducing quality. Preserve the shared Windows/Android flow. Prefer built-in system capabilities for capture, input, permissions, notifications and lifecycle; measure performance and battery impact before adding background work.
 9. Apply design feedback to both apps by default. Use a black interface and a shared computer/connection icon. Viewing is full screen with controls available on demand; permanent app branding must not take space from the remote screen.
 10. Save an explicit language choice across rotation, app switches, restarts and updates. Use a flag button with an accessible language name, not a platform-dependent flag emoji.
+11. Keep Exit full screen directly visible. Either device can request Switch screens, with clear approval on the other device and fresh OS capture permission where required.
+12. Share supported device sound alongside the screen, with a viewer mute control. Never capture the microphone. Use short, purposeful motion that respects reduced-motion settings.
 
 ## Accessibility & Inclusion
 
@@ -39,4 +41,4 @@ Keyboard focus, screen-reader labels, large touch targets, scalable text, no sta
 
 ## Local development
 
-The user authorizes private GitHub source hosting and the BetterDesk Railway relay. All native builds and tests run locally. No cloud builds or GitHub Actions. Connections prefer a reachable local network and otherwise use the public relay. App binaries stay local; the separate website offers a waitlist, not downloads.
+The user authorizes private GitHub source hosting, private GitHub Releases and the BetterDesk Railway relay. All native builds and tests run locally. No cloud builds or GitHub Actions. Connections prefer a reachable local network and otherwise use the public relay. Keep only the latest verified distribution and private app release, replacing older outputs only after verification. The separate website offers a waitlist, not downloads.
