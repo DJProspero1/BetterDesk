@@ -5,6 +5,9 @@ import androidx.compose.ui.graphics.ImageBitmap
 interface RemotePlatform {
     val isAndroid: Boolean
     val defaultName: String
+    var languageTag: String?
+        get() = null
+        set(value) = Unit
     fun controlAvailable(): Boolean
     fun openControlSettings()
     fun openAppSettings() = Unit

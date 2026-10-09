@@ -1,5 +1,53 @@
 # Local verification, 9 October 2026
 
+## Version 0.5: shared black interface and full-screen viewing
+
+The local JVM suite passed 41 enabled checks, with five device/benchmark checks
+remaining opt-in. Shared UI checks render phone/desktop home and approval screens,
+verify the language flag stores and restores a choice, and resize the viewer from
+portrait to landscape. The image fills the maximum aspect-correct area; opening the
+controls overlay does not change its bounds. Screenshots were inspected locally.
+
+Android instrumentation verified a flag-selected Portuguese preference survives
+activity recreation and a new platform/session instance. A separate live Railway
+test connected the actual Android viewer to the controlled Windows fixture, rotated
+the phone, checked hidden system bars and full-display image bounds, exited and
+re-entered full screen, typed through the real keyboard, sent input and disconnected.
+The same session survived rotation and normal status bars returned after disconnect.
+This exposed and fixed Android's default keyboard panning: the activity now requests
+adjustResize so the landscape text field remains reachable while typing. The final
+test passed in 21.207 seconds. Use `:desktop:test --rerun --tests
+'*AndroidRelayDeviceTest*Android connects to Windows*'` with
+`BETTERDESK_ANDROID_RELAY=1` after installing both local APKs; the Android test APK is
+an external input to the host test, so a cached host result is insufficient.
+
+The packaged Windows EXE was opened and its black interface, flag and new window
+icon inspected. The portable launcher and embedded application both contain the new
+multi-resolution ICO, and the Compose window uses the same vector with an explicit
+Windows AppUserModelID. Automated UI interaction was stopped when local user input
+intervened; a full Windows close/reopen language check was not completed manually.
+The shared preference wiring is covered by the UI test, and Windows stores it with
+native per-user preferences. Android persistence coverage is recreation/relaunch,
+not a physical-device process-death test.
+
+These are local Windows and API 36 emulator checks. No new FPS result, physical
+phone/OEM keyboard coverage, or guarantee about previously pinned Windows shortcuts
+is claimed. Builds remain local and source hosting remains private.
+
+Contributor documentation now covers fresh setup, source boundaries, the actual
+pairing/wire protocol, platform permissions/data, test reproduction, troubleshooting
+and local release preparation. Existing MIT licensing is retained; the dependency
+inventory explicitly identifies unfinished redistribution/notice work. All 82 local
+Markdown links checked in the root/docs guides resolved on disk.
+
+AGENTS.md, CLAUDE.md and .claude.md have identical SHA-256 hashes and staged Git
+blobs. The local build runs a byte-parity check; the tracked pre-commit hook is
+enabled in this checkout and compares staged contents. Isolated checks verified
+that matching copies pass, a changed mirror fails, explicit synchronization repairs
+it, and a deliberately different staged mirror is rejected without modifying the
+real index. All local PowerShell scripts parsed without errors. New clones must
+enable the hook as documented in CONTRIBUTING.md. No cloud CI was added.
+
 ## Version 0.4.1: prefer a reachable local connection
 
 Both apps retain the default local-first policy. New checks cover missing local

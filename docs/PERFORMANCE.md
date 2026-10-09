@@ -40,7 +40,8 @@ a physical Wi-Fi test.
   encoded payload bandwidth. They upload nothing and contain no screen or input data.
 - The receiver publishes decoded images through thread-safe StateFlow rather than
   waiting for the UI dispatcher before acknowledging each frame. Four frames can be
-  queued for capture and four can be in flight. A full window waits up to 16 ms for
+  queued for capture and four can be in flight locally (twelve through the relay).
+  A full window waits up to 16 ms for
   an acknowledgement before dropping. Buffers never grow without bound.
 
 ## Evidence

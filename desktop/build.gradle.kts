@@ -25,10 +25,11 @@ compose.desktop {
         mainClass = "app.betterdesk.desktop.MainKt"
         nativeDistributions {
             packageName = "BetterDesk"
-            packageVersion = "0.4.1"
+            packageVersion = "0.5.0"
             description = "Simple attended help for Windows and Android"
             vendor = "BetterDesk contributors"
-            modules("java.desktop", "java.naming", "java.logging", "jdk.crypto.ec", "jdk.unsupported")
+            modules("java.desktop", "java.prefs", "java.naming", "java.logging", "jdk.crypto.ec", "jdk.unsupported")
+            windows { iconFile.set(project.file("../assets/betterdesk.ico")) }
         }
     }
 }

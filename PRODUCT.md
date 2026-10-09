@@ -10,7 +10,7 @@ Ordinary people, including accountants, connecting Windows computers and Android
 
 ## Product Purpose
 
-Open-source attended remote access in both directions between Windows and Android. Both devices show their own short code and a field to enter another device's code. The device whose screen is requested approves the connection. The user's October 8 feedback explicitly replaces the earlier invitation-link and helper-role flow.
+Attended remote access in both directions between Windows and Android, developed with a possible open-source release in mind. Both devices show their own short code and a field to enter another device's code. The device whose screen is requested approves the connection. The product uses codes and a shared flow without invitation links or helper-role selection.
 
 ## Brand Personality
 
@@ -30,10 +30,12 @@ No busy remote administration dashboard, account gate, setup wizard with five pe
 6. Responsive interaction is essential. Bound frame queues, measure delivered performance, and never call a target FPS an achieved result.
 7. Windows delivery is a single portable EXE; Android updates remain local APKs. Explain unavoidable Android restrictions inside the app.
 8. Use native Android integrations wherever they improve the experience without reducing quality. Preserve the shared Windows/Android flow. Prefer built-in system capabilities for capture, input, permissions, notifications and lifecycle; measure performance and battery impact before adding background work.
+9. Apply design feedback to both apps by default. Use a black interface and a shared computer/connection icon. Viewing is full screen with controls available on demand; permanent app branding must not take space from the remote screen.
+10. Save an explicit language choice across rotation, app switches, restarts and updates. Use a flag button with an accessible language name, not a platform-dependent flag emoji.
 
 ## Accessibility & Inclusion
 
-Keyboard focus, screen-reader labels, large touch targets, scalable text, no status communicated by color alone, and no decorative motion. Match the system theme. English and European Portuguese copy share the same flow.
+Keyboard focus, screen-reader labels, large touch targets, scalable text, no status communicated by color alone, and no decorative motion. Use the requested black theme with high-contrast neutral text. English and European Portuguese copy share the same flow.
 
 ## Local development
 

@@ -4,6 +4,21 @@
 
 `shared/src/main/kotlin` is compiled into both targets. This uses the JVM common to Android and desktop rather than maintaining two frontends. Compose provides the same layout, labels, state transitions and accessibility semantics. Platform interfaces own capture, input and image decoding.
 
+Both apps use the requested black theme. Explicit English/Portuguese choice is
+stored through RemotePlatform.languageTag (Android SharedPreferences and Windows
+user preferences); the system language is used only when no choice exists. Flags
+are drawn locally rather than relying on emoji support. The monitor/connection
+icon comes from assets/icon-paths.json, generated locally into shared Compose and
+Android vectors plus SVG/PNG and a multi-size Windows ICO. Windows sets a stable
+AppUserModelID and a window icon as well as packaging EXE icons.
+
+VIEWING bypasses the regular app header/footer and enters native full screen.
+Android uses WindowInsetsControllerCompat with transient system bars available by
+swipe; Windows uses WindowPlacement.Fullscreen and restores the prior placement.
+The image fits without cropping. Input/disconnect controls overlay it on demand,
+with safe-area and IME padding. Android explicitly requests adjustResize so the
+keyboard cannot pan the text field outside the visible landscape window.
+
 The implementation is independent of RustDesk; no RustDesk code was copied.
 
 ## Connection direction
@@ -59,7 +74,7 @@ join a multicast group. No Wi-Fi multicast lock has been added. Android document
 that such a lock enables multicast reception and can increase battery drain. Evaluate
 native NSD/mDNS discovery and ConnectivityManager network-change callbacks as separate
 improvements, with physical-device coverage and Windows interoperability before
-shipping. Neither is implemented in 0.4.1. See [MulticastLock](https://developer.android.com/reference/android/net/wifi/WifiManager.MulticastLock).
+shipping. Neither is implemented in 0.5.0. See [MulticastLock](https://developer.android.com/reference/android/net/wifi/WifiManager.MulticastLock).
 
 ## Next milestones
 

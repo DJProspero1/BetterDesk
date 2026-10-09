@@ -1,4 +1,4 @@
-param([string]$Version = '0.4.1')
+param([string]$Version = '0.5.0')
 $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $app = Join-Path $repoRoot 'desktop\build\compose\binaries\main\app\BetterDesk'
@@ -14,6 +14,7 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 [IO.Compression.ZipFile]::CreateFromDirectory($app, $payload, [IO.Compression.CompressionLevel]::Optimal, $false)
 $output = Join-Path $dist "BetterDesk-Windows-$Version.exe"
 $source = Join-Path $repoRoot 'desktop\launcher\Portable.cs'
-& $compiler /nologo /target:winexe /platform:x64 /optimize+ /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.IO.Compression.dll /r:System.IO.Compression.FileSystem.dll "/resource:$payload,BetterDesk.Payload" "/out:$output" $source
+$icon = Join-Path $repoRoot 'assets\betterdesk.ico'
+& $compiler /nologo /target:winexe /platform:x64 /optimize+ /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.IO.Compression.dll /r:System.IO.Compression.FileSystem.dll "/win32icon:$icon" "/resource:$payload,BetterDesk.Payload" "/out:$output" $source
 if ($LASTEXITCODE -ne 0) { throw 'Portable launcher compilation failed.' }
 Get-Item -LiteralPath $output | Select-Object Name,Length,FullName

@@ -6,13 +6,15 @@ The source is hosted in a private GitHub repository during development. All nati
 
 ## Current milestone
 
-Version 0.4 is an **early Internet-connected development build**, not a production remote-support release. Connections prefer a reachable local network and otherwise use the BetterDesk Railway relay. It has not been externally security-audited. Do not distribute it to ordinary clients yet.
+Version 0.5 is an **early Internet-connected development build**, not a production remote-support release. Connections prefer a reachable local network and otherwise use the BetterDesk Railway relay. It has not been externally security-audited. Do not distribute it to ordinary clients yet.
 
 - Windows and Android have the same home screen: this device's code, another device's code, and Connect.
 - Enter the other device's twelve-digit code. Its owner explicitly approves sharing. If the connection service is unavailable, an eight-digit code is available for the local network.
 - LAN discovery or Internet routing plus password-authenticated pairing replaces copy/pasted invitation links. No account or server setup is needed in the apps.
 - Local connections are the default on both platforms. Before displaying approval, the requested device checks that it can reach the other device's screen port. Blocked ports, discovery failures or absent peers fall back to Railway automatically. Local discovery/pairing gets a 3.5-second budget; no network selector is shown. A successful local session sends screen and control traffic directly, although Internet code registration still contacts Railway.
-- Shared desktop/mobile UI with English and European Portuguese copy.
+- Shared black desktop/mobile UI with English and European Portuguese copy. The flag button saves the selected language across restarts and updates.
+- Viewing enters native full-screen mode on both platforms. The remote image fits the whole display without cropping; a small **Controls** button opens input, full-screen and disconnect actions as an overlay. The app header is absent during viewing, including after Android rotation.
+- One connection/monitor icon appears in the app, Android launcher and notification, and Windows EXE/taskbar. Regenerate assets locally with `scripts/generate-icons.ps1`.
 - Direct TLS connection with certificate pinning, a random 256-bit invitation secret, five-minute invitation expiry, one recipient, and no persistent identity or permanent access.
 - Native Windows Desktop Duplication capture, with a compatible GDI fallback. Streaming keeps bounded queues and uses an acknowledgement window of four frames locally or twelve through the relay. See [performance measurements](docs/PERFORMANCE.md) for measured results and limits; 60 FPS is not guaranteed.
 - Android uses genuine MediaProjection approval and an optional accessibility service.
@@ -22,7 +24,7 @@ Version 0.4 is an **early Internet-connected development build**, not a producti
 
 ## Build locally on Windows
 
-Prerequisites: JDK 17, Android SDK platform 36/build tools, and accepted Android SDK licenses. The Gradle wrapper downloads pinned dependencies on the first build. No code is uploaded by building.
+Prerequisites: Windows x64, JDK 17, Android SDK platform 36/build tools, and accepted Android SDK licenses. The complete ordinary test suite also needs Node 24 and the separate infrastructure broker fixture. Without that fixture, nine integration tests skip. Follow the [development guide](docs/DEVELOPMENT.md) for a fresh checkout. The Gradle wrapper downloads pinned dependencies on the first build. No code is uploaded by building.
 
 Create ignored `local.properties` with `sdk.dir=C:/path/to/Android/Sdk`.
 
@@ -32,8 +34,8 @@ Create ignored `local.properties` with `sdk.dir=C:/path/to/Android/Sdk`.
 
 Outputs:
 
-- **Windows: `dist/BetterDesk-Windows-0.4.1.exe`**. Double-click. No installer, ZIP extraction or separate Java installation.
-- **Android: `dist/BetterDesk-Android-0.4.1-debug.apk`**. Install as an update over the previous APK; the same local debug signing key is used.
+- **Windows: `dist/BetterDesk-Windows-0.5.0.exe`**. Double-click. No installer, ZIP extraction or separate Java installation.
+- **Android: `dist/BetterDesk-Android-0.5.0-debug.apk`**. Install as an update over the previous APK; the same local debug signing key is used.
 - Local checks: `desktop/build/reports/tests/test/index.html`.
 - Rendered UI checks: `desktop/build/screenshots/`.
 
@@ -49,7 +51,7 @@ The Android APK uses the local debug signing key. The Windows build is unsigned.
 2. Each device shows its own code. On either device, enter the other device's code and select **Connect**.
 3. The requested device selects **Allow connection**. No role selection or clickable link is involved.
 4. On Android, follow the short control instructions or choose **Share my screen only**. If Android blocks the setting, select **Android blocked this?** for the App info steps. Then confirm the genuine screen-sharing prompt.
-5. Select **Disconnect**, or use Android's Stop notification. Switching apps and returning keeps the connection; swiping BetterDesk out of Recents ends it. Pending codes expire after five minutes and can be renewed with **Get a code**.
+5. While viewing, open **Controls**, then **Disconnect**; the sharing device also has Disconnect and Android's Stop notification. Switching apps and returning keeps the connection; swiping BetterDesk out of Recents ends it. Pending codes expire after five minutes and can be renewed with **Get a code**.
 
 Treat codes as temporary secrets. A displayed device name is a label, not a verified real-world identity. Approve only an expected connection.
 
@@ -66,4 +68,21 @@ Treat codes as temporary secrets. A displayed device name is a label, not a veri
 - Android text uses the focused editable accessibility node; custom keyboards, games, password fields or apps without accessibility support may not work.
 - Capture and stop behavior needs physical-device testing across Android vendors. Desktop JVM packaging favors shared code and reliable local builds over a small download; optimize package size after proving the workflow.
 
-See [architecture](docs/ARCHITECTURE.md), [security](SECURITY.md), [product](PRODUCT.md), and [design](DESIGN.md).
+## Documentation
+
+| Guide | Purpose |
+| --- | --- |
+| [Contributing](CONTRIBUTING.md) | Workflow, review expectations and matching agent instructions |
+| [Development](docs/DEVELOPMENT.md) | Toolchain, fresh checkout, local builds and source map |
+| [Product](PRODUCT.md) / [Design](DESIGN.md) | Shared flow, visual rules and platform consistency |
+| [Architecture](docs/ARCHITECTURE.md) / [Protocol](docs/PROTOCOL.md) | Components, state, LAN/relay pairing, encryption and wire format |
+| [Platforms and troubleshooting](docs/PLATFORMS.md) | Permissions, lifecycle, saved data, capabilities and current limits |
+| [Testing](docs/TESTING.md) / [Verification](docs/VERIFICATION.md) | Reproducible checks and dated evidence with coverage gaps |
+| [Performance](docs/PERFORMANCE.md) | Measurement method, actual results and remaining bottlenecks |
+| [Local releases](docs/RELEASING.md) / [Changelog](CHANGELOG.md) | Versioning, portable EXE/APK delivery and milestones |
+| [Security](SECURITY.md) / [Third-party notices](THIRD_PARTY.md) | Trust boundaries, reporting and dependency obligations |
+
+BetterDesk's own code and documentation use the [MIT license](LICENSE).
+Dependency licenses remain separate. Preparing documentation for open source does
+not mean the repository or binaries have been published, audited or approved for
+consumer redistribution.

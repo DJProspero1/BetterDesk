@@ -1,6 +1,6 @@
 # Security boundaries
 
-This is an early prototype, not audited remote-support software. Report issues privately to the repository owner before public distribution.
+This is an early prototype, not audited remote-support software. Report issues privately to the repository owner before public distribution. The implementation is described in [the protocol guide](docs/PROTOCOL.md); this document states its trust boundaries, not a guarantee that every attack has been excluded.
 
 - The recipient approves locally before screen capture begins. A transport handshake alone never grants capture or input.
 - Each internal invitation uses a new in-memory EC key/certificate and random 256-bit secret. The receiver pins the exact SHA-256 certificate fingerprint. TLS 1.2/1.3 carries the session. A displayed device name is not authentication of a person.
@@ -17,5 +17,25 @@ This is an early prototype, not audited remote-support software. Report issues p
 - This version has no trusted-device/unattended mode. A stored Android accessibility grant does not authorize any future session.
 
 Before production: independent protocol/platform audit, dependency/license review, signed updates, abuse handling, physical-device compatibility testing, denial-of-service testing, and clear release privacy/distribution policies.
+
+## Reporting a vulnerability
+
+While the repository is private, contact its owner through the established private
+project channel. Do not place exploit details, live codes, tickets, credentials,
+screen captures or typed private data in an ordinary issue or public discussion.
+This repository does not yet advertise a dedicated security email, confirmed
+GitHub private-reporting endpoint or response-time commitment. Establish and test
+that channel before opening the project publicly; do not invent a contact address.
+
+A useful private report includes affected source revision/app versions, both OS
+versions, LAN or relay route, prerequisites, a minimal reproduction using synthetic
+data, impact and any suggested fix. Report capture without approval, input after
+stop, replay, pin/code bypass and permission-boundary failures as security issues.
+Never test against someone else's device without their authorization.
+
+Only the current development line is maintained; there is no supported-version
+matrix or automatic signed updater yet. Fixed builds require a local rebuild and
+an attended update. See [local release preparation](docs/RELEASING.md) and
+[platform data handling](docs/PLATFORMS.md) for remaining delivery/privacy work.
 
 Protocol reference: [Bouncy Castle J-PAKE](https://downloads.bouncycastle.org/lts-java/docs/bcprov-lts8on-2.73.5-javadoc/org/bouncycastle/crypto/agreement/jpake/JPAKEParticipant.html). Use of standard primitives is not an audit of BetterDesk's integration.

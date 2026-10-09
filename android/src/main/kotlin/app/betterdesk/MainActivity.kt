@@ -8,8 +8,13 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
 import androidx.activity.ComponentActivity
+import androidx.activity.enableEdgeToEdge
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import app.betterdesk.core.HelpSession
 import app.betterdesk.ui.BetterDeskApp
 import app.betterdesk.ui.BetterDeskTheme
@@ -33,6 +38,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT), navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT))
+        if (Build.VERSION.SDK_INT >= 28) {
+            window.attributes = window.attributes.apply { layoutInDisplayCutoutMode = android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES }
+        }
         @Suppress("DEPRECATION")
         pendingProjection = savedInstanceState?.getParcelable("pendingProjection")
         val platform = Runtime.platform ?: AndroidPlatform(applicationContext).also { Runtime.platform = it }
@@ -44,7 +53,14 @@ class MainActivity : ComponentActivity() {
         }
         val session = Runtime.session ?: HelpSession(platform).also { Runtime.session = it }
         intent?.dataString?.let(session::acceptInvitation)
-        setContent { BetterDeskTheme { BetterDeskApp(session) } }
+        setContent { BetterDeskTheme { BetterDeskApp(session, ::setFullScreen) } }
+    }
+
+    private fun setFullScreen(enabled: Boolean) {
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            if (enabled) hide(WindowInsetsCompat.Type.systemBars()) else show(WindowInsetsCompat.Type.systemBars())
+        }
     }
 
     override fun onNewIntent(intent: Intent) {

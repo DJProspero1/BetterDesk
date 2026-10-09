@@ -4,7 +4,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -12,6 +11,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
@@ -19,6 +19,12 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -32,23 +38,27 @@ import java.util.Locale
 
 @Composable
 fun BetterDeskTheme(content: @Composable () -> Unit) {
-    val dark = isSystemInDarkTheme()
-    val colors = if (dark) darkColorScheme(
-        primary = Color(0xFF9ED6BB), onPrimary = Color(0xFF103A2A), background = Color(0xFF151B18),
-        surface = Color(0xFF1D2520), onSurface = Color(0xFFE4EBE5), onBackground = Color(0xFFE4EBE5),
-        surfaceVariant = Color(0xFF2D3931), onSurfaceVariant = Color(0xFFBAC9BF)
-    ) else lightColorScheme(
-        primary = Color(0xFF22634E), onPrimary = Color(0xFFF5FBF7), background = Color(0xFFF5F7F3),
-        surface = Color(0xFFFAFCF9), onSurface = Color(0xFF202C26), onBackground = Color(0xFF202C26),
-        surfaceVariant = Color(0xFFE8EEE7), onSurfaceVariant = Color(0xFF516359)
+    val colors = darkColorScheme(
+        primary = Color(0xFFEDEDED), onPrimary = Color(0xFF111111), background = Color(0xFF0A0A0A),
+        surface = Color(0xFF151515), onSurface = Color(0xFFEDEDED), onBackground = Color(0xFFEDEDED),
+        surfaceVariant = Color(0xFF252525), onSurfaceVariant = Color(0xFFBDBDBD),
+        secondary = Color(0xFFCFCFCF), onSecondary = Color(0xFF171717),
+        primaryContainer = Color(0xFF303030), onPrimaryContainer = Color(0xFFEDEDED),
+        secondaryContainer = Color(0xFF303030), onSecondaryContainer = Color(0xFFEDEDED),
+        outline = Color(0xFF797979), outlineVariant = Color(0xFF3A3A3A), surfaceTint = Color.Transparent
     )
     MaterialTheme(colorScheme = colors, shapes = Shapes(medium = RoundedCornerShape(14.dp), large = RoundedCornerShape(20.dp)), content = content)
 }
 
 @Composable
-fun BetterDeskApp(session: HelpSession) {
+fun BetterDeskApp(session: HelpSession, onFullScreenChange: (Boolean) -> Unit = {}) {
     val state by session.state.collectAsState()
-    var portuguese by remember { mutableStateOf(Locale.getDefault().language == "pt") }
+    var portuguese by rememberSaveable { mutableStateOf((session.platform.languageTag ?: Locale.getDefault().language) == "pt") }
+    val viewing = state.stage == Stage.VIEWING
+    var fullScreen by rememberSaveable(viewing) { mutableStateOf(viewing) }
+    val fullScreenHandler by rememberUpdatedState(onFullScreenChange)
+    LaunchedEffect(fullScreen) { fullScreenHandler(fullScreen) }
+    DisposableEffect(Unit) { onDispose { fullScreenHandler(false) } }
     fun t(en: String, pt: String) = if (portuguese) pt else en
     val clipboard = LocalClipboardManager.current
     var deviceCode by remember { mutableStateOf("") }
@@ -59,17 +69,18 @@ fun BetterDeskApp(session: HelpSession) {
         if (state.stage == Stage.HOME) session.prepareDeviceCode()
     }
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        if (viewing) {
+            RemoteViewer(session, state, portuguese, Modifier.fillMaxSize(), fullScreen) { fullScreen = it }
+        } else {
         Column(Modifier.fillMaxSize().safeDrawingPadding()) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 18.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(36.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) {
-                    Text("B", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold, fontSize = 23.sp)
-                }
+                Image(rememberVectorPainter(BetterDeskIcon), null, Modifier.size(36.dp))
                 Text("BetterDesk", Modifier.padding(start = 10.dp).weight(1f), fontWeight = FontWeight.SemiBold, fontSize = 19.sp)
-                TextButton(onClick = { portuguese = !portuguese }) { Text(if (portuguese) "English" else "Português") }
+                LanguageButton(portuguese) {
+                    portuguese = !portuguese
+                    session.platform.languageTag = if (portuguese) "pt" else "en"
+                }
             }
-            if (state.stage == Stage.VIEWING) {
-                RemoteViewer(session, state, portuguese, Modifier.weight(1f))
-            } else {
                 Box(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 32.dp), contentAlignment = Alignment.Center) {
                     Column(Modifier.widthIn(max = 440.dp).fillMaxWidth(), horizontalAlignment = Alignment.Start) {
                         when (state.stage) {
@@ -171,7 +182,7 @@ fun BetterDeskApp(session: HelpSession) {
                     }
                 }
                 Text(t("Your permission. Every connection.", "A sua autorização. Em cada ligação."), Modifier.fillMaxWidth().padding(24.dp), textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-            }
+        }
         }
     }
 }
@@ -197,25 +208,26 @@ fun BetterDeskApp(session: HelpSession) {
 }
 
 @OptIn(ExperimentalLayoutApi::class)
-@Composable private fun RemoteViewer(session: HelpSession, state: HelpState, pt: Boolean, modifier: Modifier) {
+@Composable internal fun RemoteViewer(session: HelpSession, state: HelpState, pt: Boolean, modifier: Modifier, fullScreen: Boolean, onFullScreenChange: (Boolean) -> Unit) {
     fun t(en: String, portuguese: String) = if (pt) portuguese else en
-    var typed by remember { mutableStateOf("") }
-    var inputOpen by remember { mutableStateOf(false) }
+    var typed by rememberSaveable { mutableStateOf("") }
+    var inputOpen by rememberSaveable { mutableStateOf(false) }
+    var controlsOpen by rememberSaveable { mutableStateOf(false) }
     var fresh by remember { mutableStateOf(true) }
+    val focusRequester = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    LaunchedEffect(inputOpen) { if (inputOpen) focusRequester.requestFocus() }
     LaunchedEffect(state.frameAt) {
         fresh = true; delay(2000); fresh = false
     }
-    Column(modifier.fillMaxWidth()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(if (!fresh) t("Waiting for the screen…", "A aguardar o ecrã…") else if (state.remoteControl) t("You can control this screen", "Pode controlar este ecrã") else t("Viewing only", "Apenas visualização"), Modifier.weight(1f), fontSize = 14.sp)
-            TextButton(onClick = { session.stop() }) { Text(t("Disconnect", "Desligar")) }
-        }
-        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().background(Color(0xFF111814)).padding(8.dp), contentAlignment = Alignment.Center) {
+    Box(modifier.background(Color.Black).then(if (fullScreen) Modifier else Modifier.safeDrawingPadding()).testTag("remote-viewport")) {
+        BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             state.image?.let { image ->
                 val ratio = image.width.toFloat() / image.height
                 val width = minOf(maxWidth, maxHeight * ratio)
                 val height = width / ratio
-                Image(image, t("Shared screen", "Ecrã partilhado"), Modifier.size(width, height).drawWithContent {
+                Image(image, t("Shared screen", "Ecrã partilhado"), Modifier.size(width, height).testTag("remote-image").drawWithContent {
                     drawContent()
                     session.performance.presented(state.frame)
                 }
@@ -229,7 +241,20 @@ fun BetterDeskApp(session: HelpSession) {
                     })
             }
         }
-        FlowRow(Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.Center) {
+        if (!controlsOpen) {
+            FilledTonalButton(onClick = { controlsOpen = true }, modifier = Modifier.align(Alignment.BottomEnd).safeDrawingPadding().padding(12.dp).heightIn(min = 48.dp)) {
+                Text(t("Controls", "Controlos"))
+            }
+        } else {
+        Surface(Modifier.align(Alignment.BottomCenter).safeDrawingPadding().imePadding().padding(8.dp).widthIn(max = 760.dp).fillMaxWidth(), shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surface) {
+        Column(Modifier.verticalScroll(rememberScrollState()).padding(8.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(if (!fresh) t("Waiting for the screen…", "A aguardar o ecrã…") else if (state.remoteControl) t("You can control this screen", "Pode controlar este ecrã") else t("Viewing only", "Apenas visualização"), Modifier.weight(1f).padding(horizontal = 8.dp), fontSize = 14.sp)
+            TextButton(onClick = { controlsOpen = false; inputOpen = false; focusManager.clearFocus(); keyboard?.hide() }) { Text(t("Hide", "Ocultar")) }
+            TextButton(onClick = { session.stop() }) { Text(t("Disconnect", "Desligar")) }
+        }
+        if (!inputOpen) FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+            TextButton(onClick = { onFullScreenChange(!fullScreen) }) { Text(if (fullScreen) t("Exit full screen", "Sair do ecrã inteiro") else t("Full screen", "Ecrã inteiro")) }
             TextButton(onClick = { inputOpen = !inputOpen }, enabled = state.remoteControl && fresh) { Text(t("Type", "Escrever")) }
             TextButton(onClick = { session.input("scrollUp", .5f, .5f) }, enabled = state.remoteControl && fresh) { Text(t("Scroll up", "Subir")) }
             TextButton(onClick = { session.input("scrollDown", .5f, .5f) }, enabled = state.remoteControl && fresh) { Text(t("Scroll down", "Descer")) }
@@ -237,11 +262,14 @@ fun BetterDeskApp(session: HelpSession) {
             TextButton(onClick = { session.input("home") }, enabled = state.remoteControl && fresh) { Text(t("Home", "Início")) }
         }
         if (inputOpen) {
-            Row(Modifier.fillMaxWidth().imePadding().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(typed, { typed = it.take(512) }, Modifier.weight(1f), label = { Text(t("Text to type", "Texto a escrever")) }, keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None), maxLines = 3)
-                TextButton(onClick = { session.input("text", text = typed); typed = "" }, enabled = typed.isNotEmpty() && fresh) { Text(t("Send", "Enviar")) }
-                TextButton(onClick = { session.input("enter") }, enabled = fresh) { Text("↵") }
+            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(typed, { typed = it.take(512) }, Modifier.weight(1f).focusRequester(focusRequester), label = { Text(t("Text to type", "Texto a escrever")) }, keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None), maxLines = 3)
+                TextButton(onClick = { session.input("text", text = typed); typed = "" }, enabled = typed.isNotEmpty() && state.remoteControl && fresh) { Text(t("Send", "Enviar")) }
+                TextButton(onClick = { session.input("enter") }, enabled = state.remoteControl && fresh) { Text(t("Enter", "Enter")) }
             }
+        }
+        }
+        }
         }
     }
 }

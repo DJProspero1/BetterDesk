@@ -18,7 +18,7 @@ class ConnectionService : Service() {
         getSystemService(NotificationManager::class.java).createNotificationChannel(NotificationChannel("connection", "BetterDesk", NotificationManager.IMPORTANCE_LOW))
         val open = PendingIntent.getActivity(this, 10, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val stop = PendingIntent.getService(this, 11, Intent(this, ConnectionService::class.java).setAction("STOP"), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        val notification = NotificationCompat.Builder(this, "connection").setSmallIcon(R.drawable.ic_betterdesk)
+        val notification = NotificationCompat.Builder(this, "connection").setSmallIcon(R.drawable.ic_connection)
             .setContentTitle("BetterDesk").setContentText(if (pt) "Disponível para ligação" else "Connection is available")
             .setContentIntent(open).setOngoing(true).setSilent(true)
             .addAction(0, if (pt) "Parar" else "Stop", stop).build()

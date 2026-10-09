@@ -14,6 +14,10 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 class DesktopPlatform : RemotePlatform {
+    private val preferences by lazy { java.util.prefs.Preferences.userRoot().node("app/betterdesk") }
+    override var languageTag: String?
+        get() = runCatching { preferences.get("language", null) }.getOrNull()?.takeIf { it == "en" || it == "pt" }
+        set(value) { if (value == null) preferences.remove("language") else preferences.put("language", value) }
     override val isAndroid = false
     override val preferredIncomingCodec = "avc"
     private val decodeLock = Any()

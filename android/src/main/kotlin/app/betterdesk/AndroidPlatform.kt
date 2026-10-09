@@ -19,6 +19,10 @@ import java.lang.ref.WeakReference
 import kotlin.coroutines.resume
 
 class AndroidPlatform(private val context: Context) : RemotePlatform {
+    private val preferences = context.getSharedPreferences("appearance", Context.MODE_PRIVATE)
+    override var languageTag: String?
+        get() = preferences.getString("language", null)?.takeIf { it == "en" || it == "pt" }
+        set(value) { preferences.edit().putString("language", value).apply() }
     override val isAndroid = true
     override fun selectOutgoingCodec(codec: String) { CaptureBridge.useAvc = codec == "avc" }
     override fun requestKeyFrame() { CaptureBridge.requestKeyFrame?.invoke() }

@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+# Compare staged blobs, including on an initial commit. Never stage files for users.
+reference=$(git rev-parse --verify ':AGENTS.md') || exit 1
+for path in CLAUDE.md .claude.md; do
+    candidate=$(git rev-parse --verify ":$path") || exit 1
+    if [ "$reference" != "$candidate" ]; then
+        echo "Agent instructions differ in the index: $path." >&2
+        echo 'Edit AGENTS.md, run scripts/check-agent-instructions.ps1 -Sync, then stage all three copies.' >&2
+        exit 1
+    fi
+done

@@ -1,0 +1,120 @@
+# Testing
+
+Run all checks locally. Use synthetic content and dedicated test devices. Native
+capture/input tests and UI tests can open windows or interact with a device;
+coordinate them with the person using it. Never capture unrelated private work
+for a screenshot. No test may bypass genuine OS consent.
+
+## Ordinary suite
+
+Set up [DEVELOPMENT.md](DEVELOPMENT.md), including the Node broker fixture, then:
+
+```powershell
+.\scripts\build-local.ps1
+```
+
+For tests alone, use the checked ASCII junction and set the fixture explicitly
+(the wrapper script sets it only inside its own process):
+
+```powershell
+$workspace = Join-Path $env:LOCALAPPDATA 'BetterDesk\workspace'
+$env:BETTERDESK_BROKER_FIXTURE = (Resolve-Path '..\BetterDesk-Infrastructure\scripts\broker-fixture.mjs').Path
+& "$workspace\gradlew.bat" -p $workspace :desktop:test --no-daemon '-Pkotlin.incremental=false'
+```
+
+The 0.5.0 ordinary suite contains 46 tests: 41 enabled with the fixture, and five
+opt-in device/benchmark tests. Without the fixture another nine checks skip.
+Coverage includes invitation bounds, J-PAKE, pinning, approval before capture,
+input validation, cancellation, route fallback, frame recovery, AVC decoding and
+shared UI. No ordinary test captures an unrelated real desktop.
+
+Inspect `desktop/build/reports/tests/test/index.html` and XML under
+`desktop/build/test-results/test/`; report failures and skipped checks separately.
+UI renders appear in `desktop/build/screenshots/`. Subsequent filtered test runs
+can overwrite Gradle reports: preserve a dated local summary before running them.
+Historical evidence and limits belong in [VERIFICATION.md](VERIFICATION.md).
+
+## Android setup and local checks
+
+Use an already-running dedicated emulator or connected test phone. These commands
+do not start an emulator. Select its serial from `adb devices`; do not select a
+random attached device. The host device tests currently look for ADB at
+`%LOCALAPPDATA%\Android\Sdk\platform-tools\adb.exe`. A nonstandard SDK path needs
+a corresponding test-harness change; `local.properties` alone does not override it.
+
+```powershell
+$workspace = Join-Path $env:LOCALAPPDATA 'BetterDesk\workspace'
+$adb = Join-Path $env:LOCALAPPDATA 'Android\Sdk\platform-tools\adb.exe'
+$serial = 'emulator-5554' # Replace with the intended test device.
+& $adb devices
+& "$workspace\gradlew.bat" -p $workspace :android:assembleDebug :android:assembleDebugAndroidTest :motion-fixture:assembleDebug --no-daemon '-Pkotlin.incremental=false'
+& $adb -s $serial install -r .\android\build\outputs\apk\debug\android-debug.apk
+& $adb -s $serial install -r .\android\build\outputs\apk\androidTest\debug\android-debug-androidTest.apk
+& $adb -s $serial install -r .\motion-fixture\build\outputs\apk\debug\motion-fixture-debug.apk
+& $adb -s $serial shell am instrument -w -e class app.betterdesk.LanguagePreferenceTest app.betterdesk.test/androidx.test.runner.AndroidJUnitRunner
+& $adb -s $serial shell am instrument -w -e class app.betterdesk.LocalRouteTest app.betterdesk.test/androidx.test.runner.AndroidJUnitRunner
+```
+
+Stop on a failed build/install. An ADB process can exit zero even when
+instrumentation fails: require an `OK (...)` result and inspect the test output.
+LanguagePreferenceTest uses the real flag and verifies activity recreation and a
+new platform/session instance. It is not a physical process-death test.
+LocalRouteTest exercises Android discovery and a complete direct session with
+synthetic endpoints on one device, not a physical two-device Wi-Fi connection.
+
+## Live Railway integration (explicit opt-in)
+
+These tests use the public service from a local process. They allocate short-lived
+rooms and clean them up; they need no administrator keys. Use a temporary shell,
+or restore prior environment values afterward so an ordinary suite cannot
+accidentally contact production.
+
+```powershell
+$env:BETTERDESK_RELAY_LIVE = '1'
+& "$workspace\gradlew.bat" -p $workspace :desktop:test --rerun --tests app.betterdesk.RelayIntegrationTest --no-daemon '-Pkotlin.incremental=false'
+Remove-Item Env:BETTERDESK_RELAY_LIVE
+
+# After installing all three APKs above:
+$env:BETTERDESK_ANDROID_RELAY = '1'
+$env:BETTERDESK_ANDROID_SERIAL = $serial
+& "$workspace\gradlew.bat" -p $workspace :desktop:test --rerun --tests app.betterdesk.AndroidRelayDeviceTest --no-daemon '-Pkotlin.incremental=false'
+Remove-Item Env:BETTERDESK_ANDROID_RELAY
+Remove-Item Env:BETTERDESK_ANDROID_SERIAL
+```
+
+The device harness invokes RelayDeviceTest with private temporary test parameters;
+do not run that instrumentation class without the host harness. The capture
+direction measures actual Android capture/AVC and Windows decoding over Railway,
+then checks notification/capture cleanup. The viewer direction uses synthetic
+Windows frames and an input sink, exercises Android rotation/full-screen controls,
+real keyboard text sending and disconnect. It does not operate the real Windows OS.
+
+Use `--rerun` for host device tests: the installed test APK is an external input,
+so Gradle can otherwise report UP-TO-DATE after that APK changes. Reports include
+`android-relay-share.txt`, `android-relay-view.txt` and, for capture measurement,
+`android-relay-performance.txt` under `desktop/build/reports/`.
+
+## Performance and manual acceptance
+
+The five opt-in checks are AndroidDeviceTest, two AndroidRelayDeviceTest checks,
+CaptureBenchmarkTest and StreamBenchmarkTest. Follow
+[PERFORMANCE.md](PERFORMANCE.md) for their switches and benchmark method. Capture
+FPS, decoded FPS, distinct drawn FPS and input-to-photon latency are different
+measurements. Never infer a new result from an old release's benchmark.
+
+For relevant UI/lifecycle changes, check both directions and both native apps:
+
+| Area | Check |
+| --- | --- |
+| Connection | Same code/Connect flow; approval, decline, cancellation, timeout and retry |
+| Network | Reachable LAN preferred; blocked/unavailable LAN falls back before approval; interruption stops safely |
+| Viewer | No persistent header; portrait/landscape, window resize, insets, full-screen exit/re-entry, no image crop |
+| Input | View-only disables input; overlay preserves image bounds; text remains reachable with keyboard open |
+| Language | Change flag; switch apps; rotate; close/reopen; update same signed build; choice remains |
+| Android lifecycle | Genuine capture prompt; restricted-settings instructions; notification during sharing and removal after either end stops |
+| Windows identity | Outer EXE, extracted EXE, open window and taskbar show the same icon; test existing pins separately |
+| Cleanup | No continuing capture, active input, obsolete notifications or orphan fixture listeners after stop/error |
+
+Test physical phones, vendor permission screens/keyboards, high-DPI Windows and
+constrained networks before making compatibility claims. Record untested rows as
+pending, not passed. See [PLATFORMS.md](PLATFORMS.md) for expected limitations.

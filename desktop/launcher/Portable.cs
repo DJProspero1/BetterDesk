@@ -17,6 +17,8 @@ internal static class Portable
         Application.EnableVisualStyles();
         var window = new Form {
             Text = "BetterDesk", Width = 340, Height = 135,
+            Icon = System.Drawing.Icon.ExtractAssociatedIcon(Application.ExecutablePath),
+            BackColor = System.Drawing.Color.FromArgb(17, 17, 17), ForeColor = System.Drawing.Color.FromArgb(237, 237, 237),
             StartPosition = FormStartPosition.CenterScreen, FormBorderStyle = FormBorderStyle.FixedDialog,
             MaximizeBox = false, MinimizeBox = false
         };
