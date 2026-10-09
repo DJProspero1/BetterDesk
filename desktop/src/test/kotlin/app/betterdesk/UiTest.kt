@@ -17,6 +17,8 @@ import org.junit.Rule
 import org.junit.Test
 import java.io.File
 import java.util.Locale
+import kotlinx.serialization.json.*
+import java.util.concurrent.TimeUnit
 
 class UiTest {
     @get:Rule val compose = createComposeRule()
@@ -40,7 +42,13 @@ class UiTest {
     private fun renderAndInspect(width: Int, height: Int, name: String) {
         val oldLocale = Locale.getDefault()
         Locale.setDefault(Locale.ENGLISH)
-        val session = HelpSession(Platform(width < 500))
+        val fixture = System.getenv("BETTERDESK_BROKER_FIXTURE")?.let(::File)?.takeIf { it.isFile }?.let {
+            ProcessBuilder("node", it.absolutePath).redirectError(ProcessBuilder.Redirect.INHERIT).start()
+        }
+        val base = fixture?.inputStream?.bufferedReader()?.readLine()?.let {
+            Json.parseToJsonElement(it).jsonObject.getValue("url").jsonPrimitive.content
+        }
+        val session = HelpSession(Platform(width < 500), relayFactory = { base?.let { RelayClient(it, true) } })
         try {
             compose.setContent {
                 Box(Modifier.requiredSize(width.dp, height.dp).testTag("screen")) {
@@ -50,6 +58,10 @@ class UiTest {
             compose.waitForIdle()
             compose.onNodeWithText("Connect").assertIsDisplayed()
             compose.onNodeWithText("Device code").assertIsDisplayed()
+            if(base != null) {
+                compose.waitUntil(15000) { session.state.value.deviceCode.length == 12 }
+                compose.onNodeWithText(session.state.value.deviceCode.chunked(4).joinToString(" ")).assertIsDisplayed()
+            }
             snapshot(name + "-home")
             compose.runOnIdle { session.acceptInvitation(Invitation(listOf("127.0.0.1"), 33333, "ab".repeat(32), Invitation.secret(), "Luís", System.currentTimeMillis() + 60_000).link()) }
             compose.onNodeWithText("Allow connection").assertIsDisplayed()
@@ -63,7 +75,10 @@ class UiTest {
                 compose.onNodeWithText("Open app info").assertIsDisplayed()
                 snapshot(name + "-restricted-settings")
             } else compose.onNodeWithText("Decline").performClick()
-        } finally { session.dispose(); Locale.setDefault(oldLocale) }
+        } finally {
+            session.dispose(); Locale.setDefault(oldLocale)
+            fixture?.let { it.outputStream.close(); if (!it.waitFor(3, TimeUnit.SECONDS)) it.destroyForcibly() }
+        }
     }
     private fun snapshot(name: String) {
         val bitmap = compose.onNodeWithTag("screen").captureToImage()

@@ -78,11 +78,14 @@ fun BetterDeskApp(session: HelpSession) {
                                 Text(session.platform.defaultName, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Spacer(Modifier.height(12.dp))
                                 if (state.deviceCode.isNotEmpty()) {
-                                    Text(state.deviceCode.chunked(4).joinToString(" "), fontSize = 38.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 2.sp)
+                                    Text(state.deviceCode.chunked(4).joinToString(" "), fontSize = if (state.deviceCode.length == 12) 30.sp else 38.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp)
                                     TextButton(onClick = { clipboard.setText(AnnotatedString(state.deviceCode)); copied = true }) {
                                         Text(if (copied) t("Code copied", "Código copiado") else t("Copy code", "Copiar código"))
                                     }
-                                    Text(t("Share this code to allow a connection.", "Partilhe este código para permitir uma ligação."), fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(t("Share this code. You decide who connects.", "Partilhe este código. Decide quem se liga."), fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    if (state.deviceCode.length == 8) Text(t("Local network only. Check your internet connection.", "Apenas na rede local. Verifique a ligação à Internet."), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                } else if (state.codeLoading) {
+                                    Text(t("Getting a code…", "A obter um código…"), fontSize = 17.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 } else {
                                     TextButton(onClick = { session.prepareDeviceCode() }) { Text(t("Get a code", "Obter código")) }
                                 }
@@ -91,11 +94,11 @@ fun BetterDeskApp(session: HelpSession) {
                                 Spacer(Modifier.height(32.dp))
                                 Text(t("Connect to a device", "Ligar a um dispositivo"), fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
                                 Spacer(Modifier.height(16.dp))
-                                OutlinedTextField(deviceCode, { deviceCode = Pairing.normalize(it).filter { c -> c in '0'..'9' }.take(8) }, Modifier.fillMaxWidth(),
+                                OutlinedTextField(deviceCode, { deviceCode = Pairing.normalize(it).filter { c -> c in '0'..'9' }.take(12) }, Modifier.fillMaxWidth(),
                                     label = { Text(t("Device code", "Código do dispositivo")) }, singleLine = true,
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
                                 Spacer(Modifier.height(16.dp))
-                                Primary(t("Connect", "Ligar"), Pairing.valid(deviceCode) && deviceCode != state.deviceCode) { session.connectCode(deviceCode) }
+                                Primary(t("Connect", "Ligar"), Pairing.validDeviceCode(deviceCode) && deviceCode != state.deviceCode) { session.connectCode(deviceCode) }
                             }
                             Stage.INVITATION -> {
                                 Heading(t("Allow ${state.peer} to connect?", "Permitir a ligação de ${state.peer}?"), t("They will see your screen and can control this device. Allow only a connection you expect.", "A pessoa poderá ver o ecrã e controlar este dispositivo. Permita apenas uma ligação que espera."))
@@ -113,7 +116,7 @@ fun BetterDeskApp(session: HelpSession) {
                                 TextButton(onClick = { session.home() }) { Text(t("Cancel", "Cancelar")) }
                             }
                             Stage.CONNECTING -> {
-                                Heading(t("Getting connected…", "A estabelecer ligação…"), t("Confirm the screen-sharing prompt when it appears.", "Confirme o pedido de partilha de ecrã quando aparecer."))
+                                Heading(t("Getting connected…", "A estabelecer ligação…"), t("You can switch apps while you wait.", "Pode mudar de aplicação enquanto espera."))
                                 LinearProgressIndicator(Modifier.fillMaxWidth())
                                 TextButton(onClick = { session.stop() }) { Text(t("Cancel", "Cancelar")) }
                             }
@@ -155,9 +158,10 @@ fun BetterDeskApp(session: HelpSession) {
                             }
                             Stage.ERROR -> {
                                 val explanation = when (state.error) {
-                                    "code" -> t("Check the code and keep BetterDesk open on the other device. Both devices need the same Wi-Fi or local network.", "Confirme o código e mantenha o BetterDesk aberto no outro dispositivo. Ambos precisam da mesma rede Wi-Fi ou local.")
+                                    "code" -> t("Check the code and keep BetterDesk open on the other device. Ask for a new code if it has expired.", "Confirme o código e mantenha o BetterDesk aberto no outro dispositivo. Peça um novo código se tiver expirado.")
                                     "discovery" -> t("Another copy of BetterDesk may be open. Close it and try again.", "Pode estar aberta outra cópia do BetterDesk. Feche-a e tente novamente.")
-                                    else -> t("Sharing has stopped. Check that both devices are on the same network, then reconnect with a new code.", "A partilha parou. Confirme que os dispositivos estão na mesma rede e volte a ligar com um novo código.")
+                                    "network" -> t("Check your internet connection, then try again. BetterDesk may be temporarily unavailable.", "Verifique a ligação à Internet e tente novamente. O BetterDesk pode estar temporariamente indisponível.")
+                                    else -> t("Sharing has stopped. Check the connection, then reconnect with a new code.", "A partilha parou. Verifique a ligação e volte a ligar com um novo código.")
                                 }
                                 Heading(t("Couldn't connect", "Não foi possível ligar"), explanation)
                                 Primary(t("Try again", "Tentar novamente")) { session.home() }
@@ -166,7 +170,7 @@ fun BetterDeskApp(session: HelpSession) {
                         }
                     }
                 }
-                Text(t("Early version · Both devices must be on the same network", "Versão inicial · Os dispositivos devem estar na mesma rede"), Modifier.fillMaxWidth().padding(24.dp), textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                Text(t("Your permission. Every connection.", "A sua autorização. Em cada ligação."), Modifier.fillMaxWidth().padding(24.dp), textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
             }
         }
     }

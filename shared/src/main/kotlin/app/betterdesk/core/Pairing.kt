@@ -29,6 +29,7 @@ object Pairing {
     fun newCode(): String = random.nextInt(100_000_000).toString().padStart(8, '0')
     fun normalize(value: String): String = value.filterNot { it == ' ' || it == '-' }
     fun valid(value: String) = value.matches(Regex("[0-9]{8}"))
+    fun validDeviceCode(value: String) = value.matches(Regex("[0-9]{8}|[0-9]{12}"))
 
     data class Endpoint(val host: String, val port: Int)
 

@@ -36,4 +36,4 @@ Keyboard focus, screen-reader labels, large touch targets, scalable text, no sta
 
 ## Local development
 
-The user authorizes private GitHub source hosting. All builds and tests run locally. No cloud builds or GitHub Actions. Initial connections use the same local network; no public service is provisioned.
+The user authorizes private GitHub source hosting and the BetterDesk Railway relay. All native builds and tests run locally. No cloud builds or GitHub Actions. Connections prefer a reachable local network and otherwise use the public relay. App binaries stay local; the separate website offers a waitlist, not downloads.

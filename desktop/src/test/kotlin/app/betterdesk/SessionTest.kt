@@ -40,7 +40,21 @@ class SessionTest {
         override fun decode(frame: Packet.Frame) = ImageBitmap(frame.width, frame.height)
     }
     private suspend fun until(condition: () -> Boolean) { withTimeout(12_000) { while (!condition()) delay(20) } }
-    private fun session(platform: Platform) = HelpSession(platform, { listOf("127.0.0.1") }, java.net.InetAddress.getLoopbackAddress()).also(sessions::add)
+    private fun session(platform: Platform) = HelpSession(platform, { listOf("127.0.0.1") }, java.net.InetAddress.getLoopbackAddress(), relayFactory = { null }).also(sessions::add)
+
+    @Test fun `unavailable Internet keeps a usable local code without granting capture`() = runBlocking(dispatcher) {
+        val platform=Platform()
+        val target=HelpSession(platform, { listOf("127.0.0.1") }, java.net.InetAddress.getLoopbackAddress(),
+            relayFactory={ RelayClient("http://127.0.0.1:1", true) }).also(sessions::add)
+        target.prepareDeviceCode()
+        until { target.state.value.deviceCode.length==8 && !target.state.value.codeLoading }
+        val viewer=session(Platform())
+        viewer.connectCode(target.state.value.deviceCode)
+        until { target.state.value.stage==Stage.INVITATION }
+        assertFalse(target.state.value.viaRelay)
+        assertEquals(0,platform.starts)
+        target.stop();assertFalse(platform.keptAlive)
+    }
 
     @Test fun `opening an invitation cannot capture until locally approved and stopping revokes control`() = runBlocking(dispatcher) {
         val hp = Platform(); val rp = Platform()

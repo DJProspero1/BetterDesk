@@ -1,78 +1,111 @@
-# Local verification, 8 October 2026
+# Local verification, 9 October 2026
 
-## Version 0.3
+## Version 0.4: native app integration with Railway
 
-All tests, benchmarks, compilation and packaging run on the local Windows PC.
-No cloud build or development server is used. Outputs remain development builds for
-reachable local networks, with the same shared Windows/Android interface.
+All native builds, tests, signing and packaging ran on the local Windows PC.
+The public relay runs on Railway in EU West. No development server or cloud app
+build was used, and no app binaries are published for download.
 
 ## Automated checks
 
-All 24 ordinary JVM checks passed; three opt-in checks were skipped by the normal
-build and the two motion/integration benchmarks were run separately. The suite covers
-authenticated pairing, certificate pinning, malformed
-and oversized packets, consent before capture, disconnect/cancellation, bounded input
-and frame queues, stale-frame input rejection, and shared UI rendering at desktop and
-phone sizes. New checks cover native AVC decoding and pixel correctness, its LGPL
-library variant, predictive-frame recovery after drops, asynchronous acknowledgement
-waiting, and unchanged versus stalled capture heartbeats.
+The ordinary build passed 32 checks, including five against the real Node broker
+running as a temporary loopback test fixture. Five opt-in device/benchmark checks
+are skipped in this suite. The two new Android relay checks were run separately
+against the public Railway service and both passed. The five transport integration
+checks also passed against the public service.
 
-Capture benchmarks are opt-in and skipped in ordinary builds. Reports and UI images
-are generated under ignored desktop/build directories. The motion-fixture Android
-module is a separate test app and is never packaged into BetterDesk.
+Coverage includes code-authenticated pairing, certificate pinning, consent before
+capture, malformed/oversized messages, stale input rejection, codec recovery,
+wrong private digits, retry, decline, cancellation of a remote approval, direct-LAN
+preference for an Internet code, and local-only fallback when registration fails.
+Relay invitations cannot select a hostname or enter through an external link.
+Phone and desktop UI tests render the same twelve-digit code flow.
 
-## Measured streaming
+The infrastructure repository separately passes ten tests, including cancellation
+before approval and after joining, one-use tickets, bounds, waitlist consent,
+duplicate privacy and removal behavior.
 
-Both measurements used continuous motion for 30 seconds after warmup. Drawn FPS counts
-distinct decoded frame IDs submitted to Compose drawing, not repeated UI repaints.
-This does not measure physical display scanout or input-to-photon latency.
+## Actual Android integration
+
+The existing API 36 emulator was updated with the local APK. A separate test APK
+uses Android UI Automator to press the real connection, notification and
+MediaProjection prompts; no app-ops permission bypass is used.
+
+- **Android screen to Windows:** the real Android capture/AVC encoder, public
+  Railway TCP relay, pinned TLS, Windows native decoder and Compose viewer were
+  exercised together. The test switched to an animated fixture app while sharing.
+  Remote disconnect stopped capture and removed BetterDesk notifications.
+- **Android viewer to Windows:** Android entered the code, received live JPEG
+  frames through Railway, sent text using the actual Type/Send controls and
+  disconnected. A controlled Windows fixture generated a moving image and
+  received input, avoiding capture or input in unrelated PC applications. This
+  proves the Android viewer/transport/input path, not actual Windows OS input.
+
+This testing found and fixed an Android UI-thread network write in the final
+connection acceptance. The reverse path now passes with Android's normal
+network-on-main-thread enforcement enabled.
+
+## Measured performance
+
+The public-relay measurement used 30 seconds of continuous Android motion after
+warmup. Received FPS counts decoded frames. Drawn FPS counts distinct frame IDs
+submitted to Compose drawing, not physical display scanout or input latency.
 
 | Path | Received FPS | Drawn FPS | P95 draw gap | Encoded payload |
 | --- | ---: | ---: | ---: | ---: |
-| Windows capture to Windows viewer, pinned TLS loopback | 62.57 | 62.57 | 21 ms | 37.96 Mbps |
-| Android emulator to Windows viewer, pinned TLS | 59.94 | 59.87 | 24 ms | 1.65 Mbps |
+| Android emulator to Windows through Railway | 57.42 | 56.52 | 34 ms | 2.11 Mbps |
 
-Windows: RTX 4070, 2560 x 1440 display at 144 Hz, Desktop Duplication resized to
-1440 x 810, JPEG. Android: API 36 emulator, 1080 x 2400 at 60 Hz, software AVC encoder
-at 432 x 960, native Windows AVC decode averaging 0.87 ms. Hardware Android encoders
-retain a 1280-pixel long edge. The lower software resolution favors motion over detail.
+The relay acknowledgement window increased from eight to twelve bounded frames;
+the earlier relay run drew 48.56 FPS. Native decoding averaged 0.88 ms in the final
+run. Android used a software AVC encoder at 432 x 960 on a nominal 60 Hz emulator.
+This result is below 60 FPS and is not a physical-phone performance claim.
 
-The earlier Windows path measured about 24 FPS; Android JPEG measured about 30 FPS
-under continuous motion. Intermediate AVC runs drew 40-57 FPS before real-time codec
-scheduling. The final Android result is approximately nominal 60 Hz, but is still below
-a literal 60 drawn-FPS minimum. Physical phones and real Wi-Fi have not been measured.
-See PERFORMANCE.md for pipeline details and local reproduction commands.
+Previous 0.3 measurements on 8 October used direct connections: Windows loopback
+drew 62.57 FPS, and Android emulator to Windows drew 59.87 FPS. They were not
+remeasured as part of this relay integration. Details are in PERFORMANCE.md.
 
-## Android lifecycle and notification
+## Local outputs and packaging
 
-The updated APK was installed over the previous version on the already-running local
-emulator. Genuine connection approval, Android notification permission and MediaProjection
-consent were used. The integration test switched to a separate animated app, streamed
-its screen, and returned to BetterDesk without losing the connection.
+The single portable Windows EXE includes its runtime and automatically expands it
+into a private content-addressed cache. No installation, external Java or manual
+ZIP extraction is required. Android is a debug-signed APK update using the same
+local development key. Both devices must run the updated app.
 
-Native readbacks verified the screen-sharing notification exists during capture and the
-obsolete availability notification is absent. Both remote disconnect and the actual
-notification Disconnect action stopped MediaProjection, removed all BetterDesk
-notifications, and left the same Android process alive. Android can still hide app
-notifications if the user denies notification permission or disables its channel.
+The packaged Windows libraries and matching bundled runtime passed live HTTPS
+trust, relay registration/revocation and ephemeral TLS identity checks. Reports,
+device screenshots and build hashes stay in ignored local build/dist directories.
+The separate instrumentation and motion-fixture APKs are never bundled with the app.
+The final portable 0.4.0 EXE opened from its embedded cache, displayed a real
+twelve-digit Internet code and closed normally through its window Close button.
+Final Android readbacks showed no active MediaProjection or BetterDesk notification.
 
-## Packaging verification
+## Reproduce
 
-The local build produces a single portable Windows EXE and Android debug APK. The
-Windows launcher embeds its runtime and expands it automatically into a private local
-cache; the user does not install Java or unpack a ZIP. Both devices should be updated.
-Native AVC decoding also passed against the packaged application JARs and a copy of
-the bundled runtime, using the launcher's configured Skiko library path.
-The portable 0.3.0 EXE opened the BetterDesk window from its embedded runtime cache
-and closed normally after the smoke check. Final native Android readback showed no
-active MediaProjection or leftover BetterDesk notification.
+Run `scripts/build-local.ps1` through the checked ASCII workspace junction. It
+automatically uses an adjacent BetterDesk-Infrastructure broker fixture when
+present; otherwise set `BETTERDESK_BROKER_FIXTURE` to its absolute path. The fixture
+terminates when the test closes stdin.
 
-## Still unverified
+For live transport checks set `BETTERDESK_RELAY_LIVE=1` and run
+`:desktop:test --tests app.betterdesk.RelayIntegrationTest --rerun-tasks`.
+For device tests, build/install `:android:assembleDebugAndroidTest` and the separate
+`:motion-fixture:assembleDebug` APK alongside BetterDesk. Set
+`BETTERDESK_ANDROID_RELAY=1` and run
+`:desktop:test --tests app.betterdesk.AndroidRelayDeviceTest --rerun-tasks`.
+These device tests force Internet relay routing even on a shared local network.
+The default device is `emulator-5554`; `BETTERDESK_ANDROID_SERIAL` overrides it.
 
-- Sustained 60+ FPS and full remote control in both directions on physical devices.
-- End-to-end input latency, thermal throttling, real Wi-Fi loss and long sessions.
-- Different Android vendors, older versions, work profiles and policy-managed devices.
-- Windows UAC/elevated targets, monitor changes, mixed DPI and corporate firewalls.
-- Internet traversal, adaptive bitrate and Windows hardware video encoding.
+## Remaining limits
 
-Successful local tests do not establish production readiness or universal 60 FPS.
+- Sustained 60+ FPS, input-to-photon latency and full control on physical phones.
+- Android vendor differences, thermal throttling, work profiles and older versions.
+- Actual Windows screen capture/control over a mobile-data connection, UAC,
+  monitor changes and mixed DPI. Windows OS capture/input was not exercised by
+  the synthetic reverse-direction fixture.
+- Slow/lossy Internet, restrictive corporate networks and long sessions.
+- TCP head-of-line delay, no UDP/TURN or port-443 tunnel fallback, no adaptive
+  bitrate, and Windows hardware video encoding still pending.
+- The singleton relay has two-hour/2 GiB limits. Restart or network loss ends
+  the session; reconnecting requires a new attended exchange.
+
+Passing these checks does not establish production readiness or universal 60 FPS.

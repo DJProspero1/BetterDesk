@@ -17,19 +17,28 @@ data class HelpState(
     val stage: Stage = Stage.HOME, val invitation: Invitation? = null,
     val image: ImageBitmap? = null, val frame: Long = 0, val remoteControl: Boolean = false,
     val error: String = "", val peer: String = "", val frameAt: Long = 0,
-    val deviceCode: String = "", val codeExpires: Long = 0, val permissionReturned: Boolean = false
+    val deviceCode: String = "", val codeExpires: Long = 0, val permissionReturned: Boolean = false,
+    val codeLoading: Boolean = false, val viaRelay: Boolean = false
 )
 
 /** One attended session. A transport handshake never authorizes capture or input. */
 class HelpSession(
     val platform: RemotePlatform,
     private val localAddresses: () -> List<String> = Invitation::localAddresses,
-    private val bindAddress: java.net.InetAddress? = null
+    private val bindAddress: java.net.InetAddress? = null,
+    private val relayFactory: () -> RelayClient? = { RelayClient() },
+    private val localDiscovery: Boolean = true
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val mutable = MutableStateFlow(HelpState())
     val state = mutable.asStateFlow()
     val performance = FramePerformance()
+    internal var failureSummary = ""; private set
+    private fun rememberFailure(error: Exception) {
+        failureSummary = generateSequence<Throwable>(error) { it.cause }.take(4).joinToString("; ") {
+            it.javaClass.simpleName + " at " + it.stackTrace.firstOrNull { frame -> frame.className.startsWith("app.betterdesk") }
+        }
+    }
     private var work: Job? = null
     @Volatile private var server: SSLServerSocket? = null
     @Volatile private var socket: SSLSocket? = null
@@ -41,10 +50,13 @@ class HelpSession(
     @Volatile private var capturedFrame = 0L
     private var permissionPending = false
     private val frameWindow = FrameWindow(4)
-    private var pairingHost: PairingHost? = null
+    private var pairingHost: DeviceAvailability? = null
     private var pairingJob: Job? = null
     private var approvalExpiry: Job? = null
     @Volatile private var pairingSocket: java.net.Socket? = null
+    @Volatile private var relaySocket: java.net.Socket? = null
+    @Volatile private var relayClient: RelayClient? = null
+    private var relayCancellation: String? = null
     private val inputQueue = Channel<Pair<Long, Message>>(32)
 
     init {
@@ -58,50 +70,69 @@ class HelpSession(
     fun prepareDeviceCode() {
         if (mutable.value.stage != Stage.HOME || pairingHost != null || pairingJob?.isActive == true) return
         val current = generation
+        mutable.value = mutable.value.copy(codeLoading = true)
         pairingJob = scope.launch {
             try {
                 platform.keepConnectionAlive(true)
-                val host = withContext(Dispatchers.IO) {
-                    PairingHost(onInvitation = { invitation ->
-                        scope.launch { if (generation == current && mutable.value.stage == Stage.HOME) acceptInvitation(invitation.link()) }
+                val host = DeviceAvailability(relayFactory(), bindAddress, localDiscovery,
+                    onInvitation = { invitation ->
+                        scope.launch { if (generation == current && mutable.value.stage == Stage.HOME) receiveInvitation(invitation) }
                     }, onClosed = {
                         scope.launch {
                             if (generation == current && mutable.value.stage == Stage.HOME) {
                                 pairingHost = null
-                                mutable.value = mutable.value.copy(deviceCode = "", codeExpires = 0)
+                                mutable.value = mutable.value.copy(deviceCode = "", codeExpires = 0, codeLoading = false)
                                 // Expired/attempt-limited codes are never silently kept usable.
                                 platform.keepConnectionAlive(false)
                             }
                         }
-                    }).also { try { it.start() } catch (e: Exception) { it.close(); throw e } }
-                }
-                if (current != generation) { host.close(); return@launch }
+                    })
                 pairingHost = host
-                mutable.value = mutable.value.copy(deviceCode = host.code, codeExpires = host.expires)
+                withContext(Dispatchers.IO) { host.start() }
+                if (current != generation) { host.close(); return@launch }
+                mutable.value = mutable.value.copy(deviceCode = host.code, codeExpires = host.expires, codeLoading = false)
             } catch (e: CancellationException) { throw e }
-            catch (_: Exception) { if (current == generation) finishError("discovery") }
+            catch (_: Exception) { if (current == generation) finishError("network") }
         }
     }
 
     fun connectCode(value: String) {
         if (mutable.value.stage != Stage.HOME) return
         val code = Pairing.normalize(value)
-        if (!Pairing.valid(code) || code == mutable.value.deviceCode) return
+        if (!Pairing.validDeviceCode(code) || code == mutable.value.deviceCode) return
         createInvitation(platform.defaultName, code)
     }
 
     fun acceptInvitation(value: String) {
         if (mutable.value.stage !in setOf(Stage.HOME, Stage.ENDED, Stage.ERROR, Stage.INVITATION)) return
-        val parsed = runCatching { Invitation.parse(value) }.getOrElse {
-            mutable.value = HelpState(Stage.ERROR, error = "invitation"); return
+        val parsed = runCatching { Invitation.parse(value).also { require(it.relayTicket == null) } }.getOrElse {
+            finishError("invitation"); return
         }
+        receiveInvitation(parsed)
+    }
+
+    private fun receiveInvitation(parsed: Invitation) {
         stopTransport(preserveConnection = true)
         platform.keepConnectionAlive(true)
-        mutable.value = HelpState(Stage.INVITATION, invitation = parsed, peer = parsed.name)
+        relayCancellation = parsed.relayTicket
+        mutable.value = HelpState(Stage.INVITATION, invitation = parsed, peer = parsed.name, viaRelay = parsed.relayTicket != null)
         val current = generation
         approvalExpiry = scope.launch {
-            delay((parsed.expires - System.currentTimeMillis()).coerceAtLeast(0))
-            if (current == generation && mutable.value.stage in setOf(Stage.INVITATION, Stage.CONTROL_PERMISSION)) finishError("expired")
+            val client = if (parsed.relayTicket != null) relayFactory() else null
+            try {
+                while (current == generation && mutable.value.stage in setOf(Stage.INVITATION, Stage.CONTROL_PERMISSION)) {
+                    val remaining = parsed.expires - System.currentTimeMillis()
+                    if (remaining <= 0) { finishError("expired"); break }
+                    delay(minOf(1500L, remaining))
+                    if (current != generation || mutable.value.stage !in setOf(Stage.INVITATION, Stage.CONTROL_PERMISSION)) break
+                    if (client != null && parsed.relayTicket != null) {
+                        val active = withContext(Dispatchers.IO) { client.active(parsed.relayTicket) }
+                        if (!active && current == generation) { stop(); break }
+                    }
+                }
+            } catch (e: CancellationException) { throw e }
+            catch (_: Exception) { if (current == generation) finishError("network") }
+            finally { client?.close() }
         }
     }
 
@@ -114,42 +145,98 @@ class HelpSession(
             try {
                 platform.keepConnectionAlive(true)
                 val identity = withContext(Dispatchers.IO) { TlsIdentity.create() }
-                val hosts = withContext(Dispatchers.IO) { localAddresses() }
-                check(hosts.isNotEmpty()) { "network" }
-                val listener = withContext(Dispatchers.IO) {
-                    (identity.context.serverSocketFactory.createServerSocket(0, 8, bindAddress) as SSLServerSocket).apply {
-                        enabledProtocols = supportedProtocols.filter { it == "TLSv1.3" || it == "TLSv1.2" }.toTypedArray()
-                        soTimeout = 1000
+                val hosts = withContext(Dispatchers.IO) { runCatching { localAddresses() }.getOrDefault(emptyList()) }
+                var connection: Wire? = null
+                var invitation: Invitation? = null
+                if (hosts.isNotEmpty() && (deviceCode == null || localDiscovery)) {
+                    val listener = withContext(Dispatchers.IO) {
+                        (identity.context.serverSocketFactory.createServerSocket(0, 8, bindAddress) as SSLServerSocket).apply {
+                            enabledProtocols = supportedProtocols.filter { it == "TLSv1.3" || it == "TLSv1.2" }.toTypedArray()
+                            soTimeout = 1000
+                        }
                     }
-                }
-                if (current != generation) { listener.close(); return@launch }
-                server = listener
-                val invitation = Invitation(hosts, listener.localPort, identity.fingerprint, Invitation.secret(), safeName, System.currentTimeMillis() + 5 * 60_000)
-                mutable.value = HelpState(Stage.WAITING, invitation = invitation)
-                if (deviceCode != null) {
-                    val paired = withContext(Dispatchers.IO) {
-                        val endpoints = Pairing.discover()
+                    if (current != generation) { listener.close(); return@launch }
+                    server = listener
+                    val direct = Invitation(hosts, listener.localPort, identity.fingerprint, Invitation.secret(), safeName, System.currentTimeMillis() + Pairing.LIFETIME_MS)
+                    if (deviceCode == null) mutable.value = HelpState(Stage.WAITING, invitation = direct)
+                    val paired = deviceCode == null || withContext(Dispatchers.IO) {
                         var success = false
-                        for (endpoint in endpoints) {
+                        for (endpoint in Pairing.discover()) {
                             ensureActive()
-                            if (runCatching { Pairing.send(endpoint, deviceCode, invitation) { pairingSocket = it } }.isSuccess) { success = true; break }
+                            if (runCatching { Pairing.send(endpoint, deviceCode.takeLast(8), direct) {
+                                pairingSocket = it; if (current != generation) it.close()
+                            } }.isSuccess) { success = true; break }
                         }
                         pairingSocket = null
                         success
                     }
-                    if (!paired) { if (current == generation) finishError("code"); return@launch }
+                    if (paired) {
+                        invitation = direct
+                        mutable.value = HelpState(Stage.WAITING, invitation = direct)
+                        connection = withContext(Dispatchers.IO) { accept(listener, direct, current) }
+                    }
+                    listener.close(); server = null
                 }
-                val connection = withContext(Dispatchers.IO) { accept(listener, invitation, current) }
+                if (connection == null) {
+                    if (deviceCode?.length != 12) { if (current == generation) finishError("code"); return@launch }
+                    val client = relayFactory() ?: error("Internet unavailable")
+                    relayClient = client
+                    val config = withContext(Dispatchers.IO) { client.config() }
+                    val allocation = withContext(Dispatchers.IO) { client.allocate(deviceCode.take(4)).also {
+                        // Preserve a cleanup capability even if cancellation wins the IO handoff.
+                        if (current != generation) client.cleanupRequest(it.viewerTicket)
+                        else relayCancellation = it.viewerTicket
+                    } }
+                    val remote = Invitation(emptyList(), 0, identity.fingerprint, Invitation.secret(), safeName, allocation.expires, allocation.deviceTicket)
+                    invitation = remote
+                    withContext(Dispatchers.IO) {
+                        client.connect(config, allocation.pairTicket, minOf(allocation.expires, System.currentTimeMillis() + 15000)) {
+                            pairingSocket = it; if (current != generation) it.close()
+                        }.use { pair ->
+                            val timeout = Pairing.deadline(pair)
+                            try {
+                                val exchange = CodeExchange(pair, deviceCode.takeLast(8), true)
+                                exchange.sendSecret(remote.link())
+                                check(exchange.receiveSecret() == "accepted")
+                            } finally { timeout.cancel(false) }
+                        }
+                        pairingSocket = null
+                    }
+                    mutable.value = HelpState(Stage.WAITING, invitation = remote, viaRelay = true)
+                    connection = withContext(Dispatchers.IO) {
+                        val raw = client.connect(config, allocation.viewerTicket, allocation.expires) {
+                            relaySocket = it; if (current != generation) it.close()
+                        }
+                        val tls = identity.context.socketFactory.createSocket(raw, config.host, config.port, true) as SSLSocket
+                        socket = tls; if (current != generation) { tls.close(); error("Canceled") }
+                        tls.useClientMode = false
+                        configureTls(tls)
+                        tls.startHandshake()
+                        val connected = Wire(tls)
+                        val hello = (connected.read() as? Packet.Control)?.message
+                        check(System.currentTimeMillis() < remote.expires && hello?.type == "hello" && TlsIdentity.constantEquals(hello.secret, remote.secret))
+                        tls.soTimeout = 15000
+                        connected
+                    }
+                }
                 server?.close(); server = null
                 if (current != generation) { connection.close(); return@launch }
                 wire = connection
-                connection.send(Message("accepted", text = safeName, videoCodec = platform.preferredIncomingCodec))
-                mutable.value = HelpState(Stage.CONNECTING, invitation = invitation)
+                withContext(Dispatchers.IO) {
+                    connection.send(Message("accepted", text = safeName, videoCodec = platform.preferredIncomingCodec))
+                }
+                mutable.value = HelpState(Stage.CONNECTING, invitation = invitation, viaRelay = invitation?.relayTicket != null)
                 pump(connection, helper = true, current = current)
             } catch (e: CancellationException) { throw e }
+            catch (e: RelayFailure) { if (generation == current) finishError(if (e.status in setOf(404, 410)) "code" else "network") }
             catch (_: java.io.EOFException) { if (generation == current) stop() }
-            catch (_: Exception) { if (generation == current) finishError("connection") }
+            catch (e: Exception) { rememberFailure(e); if (generation == current) finishError("connection") }
         }
+    }
+
+    private fun configureTls(candidate: SSLSocket) {
+        candidate.enabledProtocols = candidate.supportedProtocols.filter { it == "TLSv1.3" || it == "TLSv1.2" }.toTypedArray()
+        candidate.soTimeout = 8000; candidate.tcpNoDelay = true
     }
 
     private fun accept(listener: SSLServerSocket, invitation: Invitation, current: Long): Wire {
@@ -219,13 +306,30 @@ class HelpSession(
                     val connection = withContext(Dispatchers.IO) {
                         val context = TlsIdentity.client(invitation.fingerprint)
                         var connected: Wire? = null
-                        for (host in invitation.hosts) {
+                        if (invitation.relayTicket != null) {
+                            val client = relayFactory() ?: error("Internet unavailable")
+                            relayClient = client
+                            val config = client.config()
+                            val raw = client.connect(config, invitation.relayTicket, invitation.expires) {
+                                relaySocket = it; if (current != generation) it.close()
+                            }
+                            val candidate = context.socketFactory.createSocket(raw, config.host, config.port, true) as SSLSocket
+                            socket = candidate; if (current != generation) { candidate.close(); error("Canceled") }
+                            candidate.useClientMode = true
+                            configureTls(candidate)
+                            candidate.startHandshake()
+                            connected = Wire(candidate)
+                            connected.send(Message("hello", secret = invitation.secret))
+                            val accepted = (connected.read() as? Packet.Control)?.message
+                            check(accepted?.type == "accepted")
+                            platform.selectOutgoingCodec(accepted!!.videoCodec)
+                            candidate.soTimeout = 15000
+                        } else for (host in invitation.hosts) {
                             ensureActive()
                             val candidate = context.socketFactory.createSocket() as SSLSocket
                             socket = candidate
                             try {
-                                candidate.enabledProtocols = candidate.supportedProtocols.filter { it == "TLSv1.3" || it == "TLSv1.2" }.toTypedArray()
-                                candidate.soTimeout = 5000; candidate.tcpNoDelay = true
+                                configureTls(candidate)
                                 candidate.connect(InetSocketAddress(host, invitation.port), 1500)
                                 candidate.startHandshake()
                                 connected = Wire(candidate)
@@ -241,6 +345,7 @@ class HelpSession(
                     }
                     if (current != generation) { connection.close(); return@coroutineScope }
                     wire = connection
+                    frameWindow.setCapacity(if (invitation.relayTicket == null) 4 else 12)
                     // One reader and heartbeat remain alive throughout the OS permission prompt.
                     val reader = async { pump(connection, helper = false, current = current) }
                     val recovery = VideoRecovery(platform::requestKeyFrame)
@@ -272,7 +377,7 @@ class HelpSession(
                 }
             } catch (e: CancellationException) { throw e }
             catch (_: java.io.EOFException) { if (generation == current) stop() }
-            catch (_: Exception) { if (generation == current) finishError("connection") }
+            catch (e: Exception) { rememberFailure(e); if (generation == current) finishError("connection") }
             finally { if (generation == current) stop() }
         }
     }
@@ -355,6 +460,12 @@ class HelpSession(
         pairingJob?.cancel(); pairingJob = null
         approvalExpiry?.cancel(); approvalExpiry = null
         runCatching { pairingSocket?.close() }; pairingSocket = null
+        runCatching { relaySocket?.close() }; relaySocket = null
+        relayCancellation?.let { ticket ->
+            (relayClient ?: relayFactory())?.let { client -> client.cleanupRequest(ticket); client.close() }
+        }
+        relayCancellation = null
+        relayClient?.close(); relayClient = null
         if (!preserveConnection) platform.keepConnectionAlive(false)
         platform.stopSharing()
         runCatching { socket?.close() }; runCatching { server?.close() }; runCatching { wire?.close() }

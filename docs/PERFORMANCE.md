@@ -1,4 +1,4 @@
-# Frame-rate work, 8 October 2026
+# Frame-rate work, updated 9 October 2026
 
 ## Target and measurement
 
@@ -69,6 +69,22 @@ a physical Wi-Fi test.
 Final app benchmarks are written to ignored `desktop/build/reports/stream-benchmark.txt`
 and `android-render-benchmark.txt`. Release verification summarizes those results.
 
+## Internet relay measurement, 9 October
+
+The same API 36 emulator streamed its real capture through the public Railway TCP
+relay to the Windows decoder/viewer for 30 seconds after warmup. An eight-frame
+acknowledgement window drew 48.56 FPS, with P95 draw gap 42 ms. Increasing the bounded
+relay window to twelve frames received 57.42 FPS and drew 56.52 FPS, P95 gap 34 ms,
+payload 2.11 Mbps and decode time 0.88 ms. The capture queue remains four frames;
+direct LAN sessions retain their four-frame window. This reduces the throughput
+ceiling imposed by round-trip acknowledgements but can hold more frames in flight.
+
+The software source encoder also remained below nominal 60 FPS and recovery still
+discarded predictive frames after gaps. This is a measured improvement, not a 60 FPS
+result or a physical-device test. No input-to-photon latency was measured. Evidence
+is in `desktop/build/reports/android-relay-performance.txt`; reproduction is in
+VERIFICATION.md. Internet quality adaptation remains necessary on weaker links.
+
 ## Reproduce locally
 
 Run through the ASCII workspace junction described by `scripts/build-local.ps1`.
@@ -101,4 +117,4 @@ Internet-grade adaptive bitrate, GPU display surfaces,
 hardware Windows video encoding and input-to-photon latency measurements remain work.
 If the link cannot sustain the payload, bounded queues prevent unlimited lag but FPS
 will fall. A future adaptation policy should reduce resolution/bitrate before allowing
-latency to accumulate. No Internet relay or cloud build has been introduced.
+latency to accumulate. The Internet relay is now integrated; native builds remain local.
