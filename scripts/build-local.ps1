@@ -22,16 +22,16 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Local build failed with exit code $LASTEXITCODE" }
     $dist = Join-Path $repoRoot 'dist'
     New-Item -ItemType Directory -Path $dist -Force | Out-Null
-    Copy-Item -LiteralPath (Join-Path $repoRoot 'android\build\outputs\apk\debug\android-debug.apk') -Destination (Join-Path $dist 'BetterDesk-Android-0.4.0-debug.apk') -Force
-    & (Join-Path $PSScriptRoot 'package-portable.ps1') -Version '0.4.0'
-    $artifacts = @('BetterDesk-Windows-0.4.0.exe', 'BetterDesk-Android-0.4.0-debug.apk')
+    Copy-Item -LiteralPath (Join-Path $repoRoot 'android\build\outputs\apk\debug\android-debug.apk') -Destination (Join-Path $dist 'BetterDesk-Android-0.4.1-debug.apk') -Force
+    & (Join-Path $PSScriptRoot 'package-portable.ps1') -Version '0.4.1'
+    $artifacts = @('BetterDesk-Windows-0.4.1.exe', 'BetterDesk-Android-0.4.1-debug.apk')
     $hashes = foreach ($artifact in $artifacts) {
         $hash = Get-FileHash -LiteralPath (Join-Path $dist $artifact) -Algorithm SHA256
         "$($hash.Hash.ToLowerInvariant())  $artifact"
     }
     Set-Content -LiteralPath (Join-Path $dist 'SHA256SUMS.txt') -Value $hashes -Encoding utf8
     @(
-        'BetterDesk 0.4.0, local development build',
+        'BetterDesk 0.4.1, local development build',
         "Built locally: $([DateTime]::UtcNow.ToString('u'))",
         'Windows: unsigned portable x64 EXE, automatic private runtime cache, no installer.',
         'Android: APK signed with the local development key; install as an update.',

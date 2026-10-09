@@ -52,6 +52,11 @@ class RelayIntegrationTest {
     private fun session(platform: Platform = Platform(), local: Boolean = false) = HelpSession(platform,
         { listOf("127.0.0.1") }, java.net.InetAddress.getLoopbackAddress(),
         relayFactory = { RelayClient(base, !live) }, localDiscovery = local).also(sessions::add)
+    // Deliberately omit localDiscovery to exercise the app's real default.
+    private fun defaultSession(platform: Platform = Platform(), bind: String = "127.0.0.1",
+        discover: () -> List<Pairing.Endpoint> = Pairing::discover) = HelpSession(platform,
+        { listOf(bind) }, java.net.InetAddress.getByName(bind),
+        relayFactory = { RelayClient(base, !live) }, discoverLocal = discover).also(sessions::add)
     private suspend fun until(condition: () -> Boolean) { withTimeout(20000) { while (!condition()) delay(20) } }
     private suspend fun code(session: HelpSession): String {
         session.prepareDeviceCode(); until { session.state.value.deviceCode.length == 12 }
@@ -85,13 +90,44 @@ class RelayIntegrationTest {
         assertEquals(0,platform.starts)
     }
     @Test fun `internet code uses a direct connection when the peer is nearby`() = runBlocking(dispatcher) {
-        val platform = Platform(); val target = session(platform,local=true); val viewer = session(local=true)
+        val platform = Platform(); val target = defaultSession(platform); val viewer = defaultSession()
         viewer.connectCode(code(target)); until { target.state.value.stage == Stage.INVITATION }
         assertFalse(target.state.value.viaRelay); target.allowHelp()
         until { target.state.value.stage == Stage.SHARING }
         platform.frame?.invoke(Packet.Frame(1,2,2,byteArrayOf(1)))
         until { viewer.state.value.stage == Stage.VIEWING }; assertFalse(viewer.state.value.viaRelay)
         target.stop(); until { viewer.state.value.stage == Stage.ENDED }
+    }
+    private suspend fun verifyFallback(viewer: HelpSession, target: HelpSession, platform: Platform) {
+        viewer.connectCode(code(target)); until { target.state.value.stage == Stage.INVITATION }
+        assertTrue(target.state.value.viaRelay); assertEquals(0,platform.starts)
+        target.allowHelp(); until { target.state.value.stage == Stage.SHARING }
+        platform.frame?.invoke(Packet.Frame(1,2,2,byteArrayOf(1)))
+        until { viewer.state.value.stage == Stage.VIEWING }; assertTrue(viewer.state.value.viaRelay)
+        viewer.input("tap",.5f,.5f); until { platform.inputs==1 }
+        viewer.stop(); until { target.state.value.stage==Stage.ENDED }
+    }
+    @Test fun `default route falls back when no local peer answers`() = runBlocking(dispatcher) {
+        val platform=Platform();val target=session(platform)
+        verifyFallback(defaultSession(),target,platform)
+    }
+    @Test fun `discovery socket failure falls back without another user action`() = runBlocking(dispatcher) {
+        val platform=Platform();val target=session(platform)
+        verifyFallback(defaultSession(discover={throw java.net.SocketException("Discovery unavailable")}),target,platform)
+    }
+    @Test fun `discovered peer with a blocked reverse screen port falls back before approval`() = runBlocking(dispatcher) {
+        val platform=Platform();val target=defaultSession(platform)
+        // Pairing goes through 127.0.0.1; the screen listener is reachable only on 127.0.0.2.
+        verifyFallback(defaultSession(bind="127.0.0.2"),target,platform)
+    }
+    @Test fun `unresponsive local candidate cannot delay relay by a full pairing timeout`() = runBlocking(dispatcher) {
+        val platform=Platform();val target=session(platform)
+        java.net.ServerSocket(0,1,java.net.InetAddress.getLoopbackAddress()).use { stalled ->
+            val viewer=defaultSession(discover={listOf(Pairing.Endpoint("127.0.0.1",stalled.localPort))})
+            val started=System.nanoTime()
+            verifyFallback(viewer,target,platform)
+            assertTrue((System.nanoTime()-started)/1_000_000 < 12000,"LAN fallback exceeded its bounded attempt")
+        }
     }
     @Test fun `an external relay link cannot bypass authenticated code pairing`() = runBlocking(dispatcher) {
         val platform = Platform();val target = session(platform)

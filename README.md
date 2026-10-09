@@ -11,6 +11,7 @@ Version 0.4 is an **early Internet-connected development build**, not a producti
 - Windows and Android have the same home screen: this device's code, another device's code, and Connect.
 - Enter the other device's twelve-digit code. Its owner explicitly approves sharing. If the connection service is unavailable, an eight-digit code is available for the local network.
 - LAN discovery or Internet routing plus password-authenticated pairing replaces copy/pasted invitation links. No account or server setup is needed in the apps.
+- Local connections are the default on both platforms. Before displaying approval, the requested device checks that it can reach the other device's screen port. Blocked ports, discovery failures or absent peers fall back to Railway automatically. Local discovery/pairing gets a 3.5-second budget; no network selector is shown. A successful local session sends screen and control traffic directly, although Internet code registration still contacts Railway.
 - Shared desktop/mobile UI with English and European Portuguese copy.
 - Direct TLS connection with certificate pinning, a random 256-bit invitation secret, five-minute invitation expiry, one recipient, and no persistent identity or permanent access.
 - Native Windows Desktop Duplication capture, with a compatible GDI fallback. Streaming keeps bounded queues and uses an acknowledgement window of four frames locally or twelve through the relay. See [performance measurements](docs/PERFORMANCE.md) for measured results and limits; 60 FPS is not guaranteed.
@@ -31,8 +32,8 @@ Create ignored `local.properties` with `sdk.dir=C:/path/to/Android/Sdk`.
 
 Outputs:
 
-- **Windows: `dist/BetterDesk-Windows-0.4.0.exe`**. Double-click. No installer, ZIP extraction or separate Java installation.
-- **Android: `dist/BetterDesk-Android-0.4.0-debug.apk`**. Install as an update over the previous APK; the same local debug signing key is used.
+- **Windows: `dist/BetterDesk-Windows-0.4.1.exe`**. Double-click. No installer, ZIP extraction or separate Java installation.
+- **Android: `dist/BetterDesk-Android-0.4.1-debug.apk`**. Install as an update over the previous APK; the same local debug signing key is used.
 - Local checks: `desktop/build/reports/tests/test/index.html`.
 - Rendered UI checks: `desktop/build/screenshots/`.
 

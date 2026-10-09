@@ -16,6 +16,15 @@ It also registers a short-lived lease with `https://api.betterdesk.dev`. The fou
 
 The relay invitation carries a single-use stream ticket instead of network addresses. HTTPS supplies a validated Railway hostname and port. The relay sees ciphertext and connection metadata. Cancel/decline revokes the pending stream capability; approval polling dismisses a canceled request. Registration failure falls back to a local-only code with a visible explanation. Restarting the singleton relay interrupts sessions; no automatic reconnection or transport migration is implemented.
 
+Local discovery and pairing have a shared 3.5-second attempt budget. Before accepting
+the encrypted local invitation, the requested device makes an 800 ms TCP reachability
+probe to the authenticated pairing peer's screen port. It uses that observed peer IP
+for the session, avoiding unrelated VPN or virtual-adapter addresses. The probe closes
+immediately and grants no capture/input permission. If discovery, listener creation,
+pairing or the probe fails before approval delivery, a twelve-digit code falls back to
+Railway. An eight-digit offline code remains local-only. Once an approval has been
+delivered, transport failures end that attempt; they do not create a second request.
+
 ## Threading and lifecycle
 
 UI actions use the main dispatcher; decoded images publish through thread-safe StateFlow updates from IO. Blocking sockets use IO threads. One reader owns each socket; writes are serialized. Heartbeats keep the connection alive during platform permission prompts. Screen frames have a four-frame capture queue and an acknowledgement window of four frames locally or twelve through the relay. A full window waits up to 16 ms for an acknowledgement before dropping a frame. Windows capture permits up to 120 updates per second; Android AVC requests 60 FPS. Actual throughput is measured separately. Input has a bounded queue and generation checks. Every stopped session increments the generation to invalidate queued work.
@@ -30,6 +39,27 @@ The viewer negotiates the codec inside the pinned TLS handshake. Android can pro
 - Android: a connected-device foreground service owns availability while switching apps, with a partial wake lock released on Stop/expiry. Once sharing starts, MediaProjection's foreground service replaces it, avoiding duplicate notifications. Android 13+ requests notification permission before the separate genuine screen-capture prompt. The sharing notification includes Disconnect; service teardown explicitly removes it on local or remote stop. Users can deny notification permission or disable the channel in Android settings. Activity recreation does not stop a connection. Removal from Recents does. Accessibility handles gestures/text; app-only capture cannot authorize full-screen coordinate input.
 
 Platform references: [Android foreground service types](https://developer.android.com/develop/background-work/services/fgs/service-types), [Android restricted settings](https://support.google.com/android/answer/12623953). OS-specific labels can vary by manufacturer.
+
+## Native Android integration policy
+
+Android capabilities belong behind the platform interface while the shared Compose
+screens retain the same labels and ordering as Windows. Existing integrations include
+MediaProjection, MediaCodec surface encoding, foreground services with actionable
+notifications, Activity Result permission requests, system settings intents, and
+AccessibilityService input. These use Android's real consent and lifecycle mechanisms.
+
+Prefer additional native APIs when they solve a measured problem. Each integration
+must preserve delivered frame rate, input latency, accessibility and connection
+reliability, with bounded battery and memory cost. Request permissions when needed,
+handle denial, and release resources on failure, cancellation and disconnect. Do not
+add broad permissions or keep background resources merely because an API is available.
+
+The current LAN protocol uses UDP broadcast requests and unicast replies; it does not
+join a multicast group. No Wi-Fi multicast lock has been added. Android documents
+that such a lock enables multicast reception and can increase battery drain. Evaluate
+native NSD/mDNS discovery and ConnectivityManager network-change callbacks as separate
+improvements, with physical-device coverage and Windows interoperability before
+shipping. Neither is implemented in 0.4.1. See [MulticastLock](https://developer.android.com/reference/android/net/wifi/WifiManager.MulticastLock).
 
 ## Next milestones
 

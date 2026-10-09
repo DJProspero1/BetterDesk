@@ -29,6 +29,7 @@ No busy remote administration dashboard, account gate, setup wizard with five pe
 5. A stopped connection/code cannot grant future access. Switching apps should preserve an active or pending connection.
 6. Responsive interaction is essential. Bound frame queues, measure delivered performance, and never call a target FPS an achieved result.
 7. Windows delivery is a single portable EXE; Android updates remain local APKs. Explain unavoidable Android restrictions inside the app.
+8. Use native Android integrations wherever they improve the experience without reducing quality. Preserve the shared Windows/Android flow. Prefer built-in system capabilities for capture, input, permissions, notifications and lifecycle; measure performance and battery impact before adding background work.
 
 ## Accessibility & Inclusion
 

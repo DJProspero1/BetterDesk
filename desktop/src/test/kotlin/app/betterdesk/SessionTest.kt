@@ -42,6 +42,20 @@ class SessionTest {
     private suspend fun until(condition: () -> Boolean) { withTimeout(12_000) { while (!condition()) delay(20) } }
     private fun session(platform: Platform) = HelpSession(platform, { listOf("127.0.0.1") }, java.net.InetAddress.getLoopbackAddress(), relayFactory = { null }).also(sessions::add)
 
+    @Test fun `canceling a local attempt never starts an Internet request`() = runBlocking(dispatcher) {
+        val platform=Platform()
+        val discovered=java.util.concurrent.atomic.AtomicBoolean(false)
+        var relayRequests=0
+        java.net.ServerSocket(0,1,java.net.InetAddress.getLoopbackAddress()).use { stalled ->
+            val viewer=HelpSession(platform,{listOf("127.0.0.1")},java.net.InetAddress.getLoopbackAddress(),
+                relayFactory={relayRequests++;null},discoverLocal={discovered.set(true);listOf(Pairing.Endpoint("127.0.0.1",stalled.localPort))}).also(sessions::add)
+            viewer.connectCode("123456789012")
+            until { discovered.get() };viewer.home();delay(250)
+            assertEquals(Stage.HOME,viewer.state.value.stage)
+            assertEquals(0,relayRequests);assertFalse(platform.keptAlive)
+        }
+    }
+
     @Test fun `unavailable Internet keeps a usable local code without granting capture`() = runBlocking(dispatcher) {
         val platform=Platform()
         val target=HelpSession(platform, { listOf("127.0.0.1") }, java.net.InetAddress.getLoopbackAddress(),

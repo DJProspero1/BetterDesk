@@ -1,5 +1,37 @@
 # Local verification, 9 October 2026
 
+## Version 0.4.1: prefer a reachable local connection
+
+Both apps retain the default local-first policy. New checks cover missing local
+peers, discovery socket errors, a discovered device whose reverse screen port is
+blocked, and an unresponsive pairing endpoint. Each falls back to the relay before
+approval. The existing nearby-peer check now deliberately omits the test override
+and verifies the production default selects direct transport. All paths preserve
+approval before capture and carry a frame and input after approval.
+
+Additional checks verify the reachability probe uses the authenticated peer IP,
+a failed probe leaves the code usable, and cancellation during local pairing cannot
+start an Internet request. All 39 enabled checks passed in the ordinary local suite;
+five device/benchmark checks remain opt-in. All nine routing integration checks also
+passed against the live Railway service.
+
+Two Android instrumentation checks passed for UDP discovery and a complete direct
+J-PAKE/TLS session, including consent-before-capture, frames, input and disconnect.
+Both endpoints ran inside the emulator using its private interface and synthetic
+capture/input. Its pre-existing firewall blocks loopback UDP, so an initial loopback
+fixture failed; the final test uses the same wildcard binding and interface discovery
+as the app. No firewall or permission bypass was applied. This is Android network-stack
+coverage, not a test between two physical devices. Reproduce with
+`adb shell am instrument -w -e class app.betterdesk.LocalRouteTest app.betterdesk.test/androidx.test.runner.AndroidJUnitRunner`.
+
+The Android viewer UI test also passed against the live Railway service with the
+local-first default enabled: it connected to the controlled Windows fixture, received
+frames, sent input through Type/Send and disconnected. The 0.4.1 portable Windows EXE
+and Android APK were built locally; no binaries were published.
+
+No physical home Wi-Fi test or new FPS measurement is claimed.
+Update both devices to 0.4.1 for the improved blocked-port fallback.
+
 ## Version 0.4: native app integration with Railway
 
 All native builds, tests, signing and packaging ran on the local Windows PC.

@@ -2,12 +2,41 @@ package app.betterdesk
 
 import app.betterdesk.core.*
 import java.net.InetAddress
+import java.net.ServerSocket
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlin.test.*
 
 class PairingTest {
-    private fun invitation() = Invitation(listOf("127.0.0.1"), 32123, "ab".repeat(32), Invitation.secret(), "Device", System.currentTimeMillis() + 60_000)
+    private val screen = ServerSocket(0, 8, InetAddress.getLoopbackAddress())
+    @org.junit.After fun cleanup() { screen.close() }
+    private fun invitation() = Invitation(listOf("127.0.0.1"), screen.localPort, "ab".repeat(32), Invitation.secret(), "Device", System.currentTimeMillis() + 60_000)
+
+    @Test fun `unreachable screen port leaves code available without an approval prompt`() {
+        val received=CountDownLatch(1)
+        val host=PairingHost("12345678", InetAddress.getLoopbackAddress(), false, { received.countDown() })
+        val closedPort=ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { it.localPort }
+        try {
+            host.start()
+            val endpoint=Pairing.Endpoint("127.0.0.1",host.port)
+            assertFails { Pairing.send(endpoint,"12345678",invitation().copy(port=closedPort)) }
+            assertEquals(1,received.count)
+            Pairing.send(endpoint,"12345678",invitation())
+            assertTrue(received.await(2,TimeUnit.SECONDS))
+        } finally { host.close() }
+    }
+
+    @Test fun `local route uses authenticated peer address instead of another advertised adapter`() {
+        val received=CountDownLatch(1)
+        var actual:Invitation?=null
+        val host=PairingHost("12345678",InetAddress.getLoopbackAddress(),false,{actual=it;received.countDown()})
+        try {
+            host.start()
+            Pairing.send(Pairing.Endpoint("127.0.0.1",host.port),"12345678",invitation().copy(hosts=listOf("10.200.200.200")))
+            assertTrue(received.await(2,TimeUnit.SECONDS))
+            assertEquals(listOf("127.0.0.1"),actual!!.hosts)
+        } finally { host.close() }
+    }
 
     @Test fun `short code securely transfers invitation and is single use`() {
         val received = CountDownLatch(1)

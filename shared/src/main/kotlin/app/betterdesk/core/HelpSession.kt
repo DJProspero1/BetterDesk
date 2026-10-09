@@ -27,7 +27,8 @@ class HelpSession(
     private val localAddresses: () -> List<String> = Invitation::localAddresses,
     private val bindAddress: java.net.InetAddress? = null,
     private val relayFactory: () -> RelayClient? = { RelayClient() },
-    private val localDiscovery: Boolean = true
+    private val localDiscovery: Boolean = true,
+    private val discoverLocal: () -> List<Pairing.Endpoint> = Pairing::discover
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val mutable = MutableStateFlow(HelpState())
@@ -149,33 +150,50 @@ class HelpSession(
                 var connection: Wire? = null
                 var invitation: Invitation? = null
                 if (hosts.isNotEmpty() && (deviceCode == null || localDiscovery)) {
-                    val listener = withContext(Dispatchers.IO) {
-                        (identity.context.serverSocketFactory.createServerSocket(0, 8, bindAddress) as SSLServerSocket).apply {
-                            enabledProtocols = supportedProtocols.filter { it == "TLSv1.3" || it == "TLSv1.2" }.toTypedArray()
-                            soTimeout = 1000
+                    var paired = false
+                    var listener: SSLServerSocket? = null
+                    try {
+                        val localListener = withContext(Dispatchers.IO) {
+                            (identity.context.serverSocketFactory.createServerSocket(0, 8, bindAddress) as SSLServerSocket).apply {
+                                listener = this // Keep cleanup ownership if cancellation wins the IO handoff.
+                                enabledProtocols = supportedProtocols.filter { it == "TLSv1.3" || it == "TLSv1.2" }.toTypedArray()
+                                soTimeout = 1000
+                            }
                         }
-                    }
-                    if (current != generation) { listener.close(); return@launch }
-                    server = listener
-                    val direct = Invitation(hosts, listener.localPort, identity.fingerprint, Invitation.secret(), safeName, System.currentTimeMillis() + Pairing.LIFETIME_MS)
-                    if (deviceCode == null) mutable.value = HelpState(Stage.WAITING, invitation = direct)
-                    val paired = deviceCode == null || withContext(Dispatchers.IO) {
-                        var success = false
-                        for (endpoint in Pairing.discover()) {
-                            ensureActive()
-                            if (runCatching { Pairing.send(endpoint, deviceCode.takeLast(8), direct) {
-                                pairingSocket = it; if (current != generation) it.close()
-                            } }.isSuccess) { success = true; break }
+                        if (current != generation) { localListener.close(); return@launch }
+                        server = localListener
+                        val direct = Invitation(hosts, localListener.localPort, identity.fingerprint, Invitation.secret(), safeName, System.currentTimeMillis() + Pairing.LIFETIME_MS)
+                        if (deviceCode == null) mutable.value = HelpState(Stage.WAITING, invitation = direct)
+                        paired = deviceCode == null || withContext(Dispatchers.IO) {
+                            val deadline = System.nanoTime() + 3_500_000_000L
+                            var success = false
+                            for (endpoint in discoverLocal()) {
+                                ensureActive()
+                                val remaining = (deadline - System.nanoTime()) / 1_000_000
+                                if (remaining <= 0) break
+                                if (runCatching { Pairing.send(endpoint, deviceCode.takeLast(8), direct, remaining) {
+                                    if (current == generation) pairingSocket = it else it.close()
+                                } }.onFailure { if (it is Exception) rememberFailure(it) }.isSuccess) { success = true; break }
+                            }
+                            if (current == generation) pairingSocket = null
+                            success
                         }
-                        pairingSocket = null
-                        success
+                        if (paired) {
+                            invitation = direct
+                            mutable.value = HelpState(Stage.WAITING, invitation = direct)
+                            connection = withContext(Dispatchers.IO) { accept(localListener, direct, current) }
+                        }
+                    } catch (e: CancellationException) { throw e }
+                    catch (e: Exception) {
+                        // Fall back only before an approval has been delivered. A decline,
+                        // cancellation or failed established session never creates a new request.
+                        if (paired || deviceCode?.length != 12) throw e
+                    } finally {
+                        runCatching { listener?.close() }; if (server === listener) server = null
+                        if (current == generation) { runCatching { pairingSocket?.close() }; pairingSocket = null }
                     }
-                    if (paired) {
-                        invitation = direct
-                        mutable.value = HelpState(Stage.WAITING, invitation = direct)
-                        connection = withContext(Dispatchers.IO) { accept(listener, direct, current) }
-                    }
-                    listener.close(); server = null
+                    ensureActive()
+                    if (current != generation) return@launch
                 }
                 if (connection == null) {
                     if (deviceCode?.length != 12) { if (current == generation) finishError("code"); return@launch }

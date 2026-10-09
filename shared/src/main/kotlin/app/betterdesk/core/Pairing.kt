@@ -25,7 +25,7 @@ object Pairing {
     const val LIFETIME_MS = 5 * 60_000L
     private val random = SecureRandom()
     private val deadlines = Executors.newSingleThreadScheduledExecutor { Thread(it, "BetterDesk pairing deadline").apply { isDaemon = true } }
-    internal fun deadline(socket: Socket) = deadlines.schedule({ runCatching { socket.close() }; Unit }, 20, TimeUnit.SECONDS)
+    internal fun deadline(socket: Socket, timeoutMillis: Long = 20_000) = deadlines.schedule({ runCatching { socket.close() }; Unit }, timeoutMillis, TimeUnit.MILLISECONDS)
     fun newCode(): String = random.nextInt(100_000_000).toString().padStart(8, '0')
     fun normalize(value: String): String = value.filterNot { it == ' ' || it == '-' }
     fun valid(value: String) = value.matches(Regex("[0-9]{8}"))
@@ -60,14 +60,15 @@ object Pairing {
         return found.toList()
     }
 
-    fun send(endpoint: Endpoint, code: String, invitation: Invitation, onSocket: (Socket) -> Unit = {}) {
+    fun send(endpoint: Endpoint, code: String, invitation: Invitation, timeoutMillis: Long = 20_000, onSocket: (Socket) -> Unit = {}) {
         require(valid(code))
+        require(timeoutMillis > 0)
         Socket().use { socket ->
             onSocket(socket)
-            val timeout = deadline(socket)
+            val timeout = deadline(socket, timeoutMillis)
             try {
-                socket.connect(InetSocketAddress(endpoint.host, endpoint.port), 1200)
-                socket.soTimeout = 5000; socket.tcpNoDelay = true
+                socket.connect(InetSocketAddress(endpoint.host, endpoint.port), minOf(1200L, timeoutMillis).toInt())
+                socket.soTimeout = minOf(5000L, timeoutMillis).toInt(); socket.tcpNoDelay = true
                 val exchange = CodeExchange(socket, code, true)
                 exchange.sendSecret(invitation.link())
                 check(exchange.receiveSecret() == "accepted")
@@ -89,6 +90,7 @@ class PairingHost(
     val port: Int get() = listener.localPort
     @Volatile private var datagram: DatagramSocket? = null
     @Volatile private var candidate: Socket? = null
+    @Volatile private var routeProbe: Socket? = null
     private val workers = Executors.newFixedThreadPool(2) { Thread(it, "BetterDesk pairing").apply { isDaemon = true } }
 
     fun start() {
@@ -125,12 +127,23 @@ class PairingHost(
                             it.soTimeout = 5000; it.tcpNoDelay = true
                             val exchange = CodeExchange(it, code, false)
                             val value = Invitation.parse(exchange.receiveSecret())
+                            // A discovered pairing port does not prove the reverse screen port
+                            // is reachable (Windows firewall / guest Wi-Fi / extra adapters).
+                            // Probe only the authenticated pairing peer, never an advertised host.
+                            require(value.relayTicket == null)
+                            Socket().use { probe ->
+                                routeProbe = probe
+                                check(!closed.get())
+                                probe.connect(InetSocketAddress(it.inetAddress, value.port), 800)
+                            }
+                            routeProbe = null
                             check(System.currentTimeMillis() < expires && !closed.get())
                             exchange.sendSecret("accepted")
-                            value
+                            value.copy(hosts = listOf(it.inetAddress.hostAddress!!))
                         }
                     }.getOrNull()
                     timeout.cancel(false)
+                    runCatching { routeProbe?.close() }; routeProbe = null
                     candidate = null
                     if (invitation != null && !closed.get()) { onInvitation(invitation); return@execute }
                     Thread.sleep(500)
@@ -143,7 +156,7 @@ class PairingHost(
 
     override fun close() {
         if (!closed.compareAndSet(false, true)) return
-        runCatching { listener.close() }; runCatching { datagram?.close() }; runCatching { candidate?.close() }
+        runCatching { listener.close() }; runCatching { datagram?.close() }; runCatching { candidate?.close() }; runCatching { routeProbe?.close() }
         workers.shutdownNow()
     }
 }

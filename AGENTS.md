@@ -1,6 +1,7 @@
 # BetterDesk contributor instructions
 
 - Read PRODUCT.md and DESIGN.md before changing UX. Windows and Android must use shared UI and identical copy/flow.
+- Prefer native Android APIs for platform capabilities. Keep the shared flow; accept an integration only when it preserves or improves responsiveness, reliability, accessibility and battery use. Scope permissions and resources to the feature's lifetime and verify cleanup on cancellation and disconnect.
 - All builds, tests, signing and packaging run locally. Never add cloud CI builds or GitHub Actions.
 - Do not start development servers unless explicitly requested. Automated test fixtures may create temporary loopback connections and must close them.
 - No unattended access, screen recording, automatic clipboard reading, telemetry, or authentication bypass. The user authorizes integration with the BetterDesk Railway relay, using end-to-end authenticated encryption and explicit local approval.
