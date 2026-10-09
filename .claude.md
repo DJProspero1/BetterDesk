@@ -147,7 +147,13 @@ These rules apply to work in this repository. Read [PRODUCT.md](PRODUCT.md) and
   target as an achieved result. Physical/OEM and restrictive-network gaps matter.
 - Document for a contributor with no chat history: setup, architecture, protocol,
   platform differences, data handling, tests, releases, troubleshooting and limits.
-  Update the relevant docs alongside behavior, dependencies or workflows.
+- Documentation must always be up to date with the implementation. Every change
+  to behavior, UI, configuration, dependencies, architecture, testing, builds or
+  deployment must update the affected documentation in the same change.
+- Documentation is part of the definition of done, not deferred follow-up work.
+  Before marking work complete, check affected guides, examples, commands, links
+  and limitations; correct or remove obsolete information. Keep historical test
+  results clearly dated and do not present them as current verification.
 - Keep commands reproducible and paths generic. Preserve the MIT source license
   and dependency notices. Check redistribution obligations before publishing;
   documentation readiness is not a completed license/security audit.
