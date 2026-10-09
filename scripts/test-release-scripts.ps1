@@ -45,12 +45,14 @@ Assert (@(Get-ChildItem -LiteralPath "$testRoot\dist").Count -eq 4) 'Rejected ju
         $global:LASTEXITCODE=0
         if ($args[0] -eq 'repo') { return '{"isPrivate":true,"nameWithOwner":"DJProspero1/BetterDesk"}' }
         if ($args[0] -eq 'api') {
-            if ($args[1] -like '*/tags/*') { return ($ctx.releases | Where-Object tag_name -eq 'v0.6.0' | ConvertTo-Json -Depth 5) }
+            if ($args[1] -like '*/releases/600') { return ($ctx.releases | Where-Object tag_name -eq 'v0.6.0' | ConvertTo-Json -Depth 5) }
             return ConvertTo-Json -InputObject @($ctx.releases) -Depth 5
         }
-        $operation=$args[1]; $ctx.events.Add($operation)
+        $operation=$args[1]
+        if ($operation -eq 'edit' -and $args -contains '--target') { return }
+        $ctx.events.Add($operation)
         switch ($operation) {
-            'create' { $ctx.releases.Add(@{tag_name='v0.6.0';draft=$true;html_url='https://example.invalid/fixture';assets=@()}) }
+            'create' { $ctx.releases.Add(@{id=600;tag_name='v0.6.0';draft=$true;html_url='https://example.invalid/fixture';assets=@()}) }
             'upload' {
                 $release=$ctx.releases | Where-Object tag_name -eq 'v0.6.0'
                 $release.assets=@(Get-ChildItem -LiteralPath "$($ctx.root)\dist" -File | ForEach-Object { @{name=$_.Name;state='uploaded'} })

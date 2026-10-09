@@ -78,6 +78,9 @@ authorized local GitHub CLI login:
 The publisher checks repository privacy, instruction parity, clean source,
 `origin/main`, the build's source revision and artifact hashes. It creates/reuses a
 draft, uploads all four files, downloads them again and compares every SHA-256.
+Draft retries update the intended source commit and notes. Draft validation uses
+the authenticated release listing and release ID; GitHub's by-tag lookup does not
+resolve an unpublished draft. Publication is then read back by that same ID.
 Only then does it publish the new latest release and delete older versioned app
 releases/assets. Git source tags/history and unrelated drafts are retained.
 Never remove the last working release before verifying its replacement. A failed

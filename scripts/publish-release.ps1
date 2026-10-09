@@ -42,6 +42,8 @@ $existing = $releases | Where-Object tag_name -eq $tag
 if ($existing -and -not $existing.draft) { throw 'This version is already published. Increment the version for a new build.' }
 if (-not $existing) {
     Invoke-Gh @('release','create',$tag,'--repo',$repo,'--draft','--target',$revision,'--title',"BetterDesk $Version",'--notes-file',$notes) | Out-Null
+} else {
+    Invoke-Gh @('release','edit',$tag,'--repo',$repo,'--target',$revision,'--notes-file',$notes) | Out-Null
 }
 # A retry may finish an incomplete draft. Published releases are never overwritten.
 $upload = @('release','upload',$tag,'--repo',$repo,'--clobber') + @($files | ForEach-Object { Join-Path $dist $_ })
@@ -54,11 +56,14 @@ foreach ($name in $files) {
     if (-not (Test-Path -LiteralPath $uploaded -PathType Leaf) -or
         (Get-FileHash -LiteralPath $uploaded).Hash -ne (Get-FileHash -LiteralPath (Join-Path $dist $name)).Hash) { throw "Uploaded asset failed readback verification: $name" }
 }
-$draft = Invoke-Gh @('api',"repos/$repo/releases/tags/$tag") | ConvertFrom-Json
+# GitHub's by-tag endpoint does not resolve an unpublished draft. Read its ID
+# from the authenticated release listing; publication keeps that same ID.
+$drafts = @(Invoke-Gh @('api',"repos/$repo/releases?per_page=100") | ConvertFrom-Json)
+$draft = $drafts | Where-Object tag_name -eq $tag
 if (-not $draft.draft -or @($draft.assets).Count -ne $files.Count -or
     @($draft.assets | Where-Object { $_.name -notin $files -or $_.state -ne 'uploaded' }).Count) { throw 'Draft assets are incomplete/unexpected; old releases have been retained.' }
 Invoke-Gh @('release','edit',$tag,'--repo',$repo,'--draft=false','--prerelease=false','--latest') | Out-Null
-$published = Invoke-Gh @('api',"repos/$repo/releases/tags/$tag") | ConvertFrom-Json
+$published = Invoke-Gh @('api',"repos/$repo/releases/$($draft.id)") | ConvertFrom-Json
 if ($published.draft -or @($published.assets).Count -ne $files.Count -or
     @($published.assets | Where-Object { $_.name -notin $files -or $_.state -ne 'uploaded' }).Count) { throw 'New release was not fully published; old releases have been retained.' }
 # Only prior versioned app releases, never unrelated drafts or Git source tags.
