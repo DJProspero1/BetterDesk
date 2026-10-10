@@ -18,7 +18,10 @@ class RtcAndroidProofTest {
     @Test fun nativeDesktopVideoInteroperation() {
         desktopInteroperation(true)
     }
-    private fun desktopInteroperation(video: Boolean) {
+    @Test fun nativeDesktopMediaInteroperation() {
+        desktopInteroperation(true, true)
+    }
+    private fun desktopInteroperation(video: Boolean, audio: Boolean = false) {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val file = java.io.File(context.cacheDir, "rtc-proof.json")
         assumeTrue("Run through RtcAndroidHostTest", file.isFile)
@@ -29,9 +32,10 @@ class RtcAndroidProofTest {
         require(config.port in 1..65535)
         require(config.pin.matches(Regex("[a-f0-9]{64}")))
         require(config.secret.matches(Regex("[A-Za-z0-9_-]{43}")))
-        require(config.video == video)
-        val protocol = if (video) 2 else 1
-        val peer = AndroidRtcPeer(context, video)
+        require(config.video == video && config.audio == audio)
+        if (audio) require(context.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_DENIED)
+        val protocol = if (audio) 3 else if (video) 2 else 1
+        val peer = AndroidRtcPeer(context, video, audio)
         try {
             (TlsIdentity.client(config.pin).socketFactory.createSocket("127.0.0.1", config.port) as SSLSocket).use { socket ->
                 socket.soTimeout = 15_000
@@ -39,9 +43,9 @@ class RtcAndroidProofTest {
                 wire.send(Message("rtcProofHello", secret = config.secret, protocol = protocol))
                 val offer = (wire.read() as Packet.Control).message
                 check(offer.type == "rtcProofOffer")
-                val authenticated = RtcSignal.decode(offer.text).validate(config.session, config.hostId, config.androidId, 1, config.expires, true, video = video)
+                val authenticated = RtcSignal.decode(offer.text).validate(config.session, config.hostId, config.androidId, 1, config.expires, true, video = video, audio = audio)
                 val answer = peer.answer(authenticated).get(15, TimeUnit.SECONDS)
-                val signal = RtcSignal(config.session, config.androidId, config.hostId, 1, config.expires, false, RtcDescription.validate(answer, video), answer, protocol)
+                val signal = RtcSignal(config.session, config.androidId, config.hostId, 1, config.expires, false, RtcDescription.validate(answer, video, audio), answer, protocol)
                 wire.send(Message("rtcProofAnswer", text = signal.encode()))
                 peer.opened.get(15, TimeUnit.SECONDS)
                 assertArrayEquals(ByteArray(RtcPeer.MAX_BYTES) { (it % 251).toByte() }, peer.receive(10_000))
@@ -54,10 +58,48 @@ class RtcAndroidProofTest {
                     }
                     RtcVideoFixture.checkCounters(peer.videoCounters().get(2, TimeUnit.SECONDS))
                 }
+                if (audio) {
+                    RtcAudioFixture.checkSample(peer.receiveAudio(5000))
+                    sendTone(peer)
+                    RtcAudioFixture.checkCounters(peer.audioCounters().get(2, TimeUnit.SECONDS))
+                    check(context.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_DENIED)
+                }
                 wire.send(Message("rtcProofDone"))
                 check((wire.read() as Packet.Control).message.type == "rtcProofDone")
             }
         } finally { peer.close(); assertTrue(peer.awaitClosed(5000)) }
+    }
+    private fun sendTone(peer: RtcPeer) {
+        assertFalse(peer.sendAudio(RtcAudioFrame(ByteArray(RtcAudioFrame.BYTES), System.nanoTime() - 150_000_000L)).get(2, TimeUnit.SECONDS))
+        var accepted = 0
+        repeat(30) { if (peer.sendAudio(RtcAudioFixture.frame(it)).get(2, TimeUnit.SECONDS)) accepted++; Thread.sleep(10) }
+        check(accepted > 0)
+    }
+
+    @Test fun nativeExternalAudioWithoutMicrophone() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        require(context.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_DENIED)
+        val first = AndroidRtcPeer(context, true, true); val second = AndroidRtcPeer(context, true, true)
+        var failure: Throwable? = null
+        try {
+            val offer = first.offer().get(15, TimeUnit.SECONDS)
+            val answer = second.answer(offer).get(15, TimeUnit.SECONDS)
+            first.acceptAnswer(answer).get(15, TimeUnit.SECONDS)
+            first.opened.get(15, TimeUnit.SECONDS); second.opened.get(15, TimeUnit.SECONDS)
+            sendTone(first); RtcAudioFixture.checkSample(second.receiveAudio(5000))
+            sendTone(second); RtcAudioFixture.checkSample(first.receiveAudio(5000))
+            RtcAudioFixture.checkCounters(first.audioCounters().get(2, TimeUnit.SECONDS))
+            RtcAudioFixture.checkCounters(second.audioCounters().get(2, TimeUnit.SECONDS))
+            assertEquals(android.content.pm.PackageManager.PERMISSION_DENIED, context.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO))
+        } catch (error: Throwable) { failure = error; throw error }
+        finally {
+            first.close(); second.close()
+            val firstClosed = first.awaitClosed(5000); val secondClosed = second.awaitClosed(5000)
+            if (!firstClosed || !secondClosed) {
+                val teardown = AssertionError("Audio teardown: first=$firstClosed (${first.teardownStage}) second=$secondClosed (${second.teardownStage}); ${first.audioFailureSummary}; ${second.audioFailureSummary}")
+                if (failure != null) failure.addSuppressed(teardown) else throw teardown
+            }
+        }
     }
 
     @Test fun nativeVideoTracksAndTeardown() {

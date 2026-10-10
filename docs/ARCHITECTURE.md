@@ -105,11 +105,20 @@ shipping. Neither is implemented in 0.7.0. See [MulticastLock](https://developer
 address required by file exchange. `Wire` implements that interface with the same
 TLS/socket framing. Setup sockets remain directly owned until authentication
 finishes, so Stop can still cancel setup. There is no transport cutover yet.
+Established reads, queued control/input writes, media and heartbeat writes can
+observe transport closure in either order. Their I/O failure ends and revokes the
+current session; it cannot replace remote Stop with a connection error. Setup and
+non-I/O protocol validation failures retain their error behavior. TLS/code
+authentication and cryptographic validation remain unchanged.
 The [opt-in native WebRTC proof](../experimental/README.md) is excluded from normal
 builds and has no production session or permission ownership. Its optional raw
 I420 bridge feeds native video tracks in both adapters, with two pending writes
 and one latest decoded synthetic sample. It does not attach platform screen
-capture, playback sound, app rendering or remote input to those tracks.
+capture, device playback sound, app rendering or remote input to those tracks.
+The optional audio/video profile injects bounded 10 ms synthetic PCM into native
+audio tracks without hardware microphone capture; decoded callbacks keep only
+aggregate peak/rate evidence. Desktop uses a headless audio module and Android
+disables hardware AudioRecord before factory creation.
 
 The [direct Internet connection plan](plans/DIRECT_CONNECTIONS.md) and
 [implementation handoff](plans/DIRECT_CONNECTIONS_HANDOFF.md) expand the proposed

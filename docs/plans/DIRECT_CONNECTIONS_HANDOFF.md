@@ -103,8 +103,8 @@ exists merely because it is described in the plan.
 | --- | --- | --- | --- |
 | M0 | In progress | Native library/binding decision and local build feasibility | Pinned desktop/Android artifact/ABI/size/hash inventory and opt-in adapters exist. Finish compilation/runtime evidence, native license/build provenance and media bridge feasibility before marking complete. |
 | M1 | Complete | Extract transport boundary, retaining current TLS behavior | `SessionTransport` extracted; `Wire` retains protocol 4/TLS framing and Stop still closes setup sockets. Both target source compilation and ordinary approval/Stop/epoch/input checks passed locally; native Windows-only integration remains untested. |
-| M2 | In progress | Authenticated WebRTC proof behind a development-only opt-in | Five desktop proof checks, Android native peers and desktop/Android interoperation passed with real JNI and synthetic data. Pinned TLS/context validation and teardown are covered. Native Windows load/runtime evidence remains required; no production route label. |
-| M3 | In progress | Screen and playback audio tracks in both directions | Opt-in bounded I420/native-video adapters exist on both targets with synthetic pixel/RTP checks. No OS screen capture/rendering, playback-audio bridge or production freshness/epoch integration yet. Physical device/performance evidence remains required. |
+| M2 | In progress | Authenticated WebRTC proof behind a development-only opt-in | Twelve Linux proof checks, Android native data/video/audio peers and three desktop/Android host checks passed with real JNI and synthetic media. Pinned TLS/context validation and teardown are covered. Native Windows load/runtime evidence remains required; no production route label. |
+| M3 | In progress | Screen and playback audio tracks in both directions | Opt-in bounded I420/native-video adapters exist on both targets with synthetic pixel/RTP checks. Bounded external synthetic PCM adapters also exist, with hardware microphone capture disabled. No OS screen capture/rendering, real playback capture or production freshness/epoch integration yet. Physical device/performance evidence remains required. |
 | M4 | Not started | Direct control/clipboard/files and safe route cutover | Direct payload in both directions, ordered input/paste, verified files, transfer backpressure, old-path rejection and deterministic Stop. No claim of all-direct while file bytes still relay. |
 | M5 | In progress | HTTPS signaling and deployable TURN fallback in sibling infra PR | Internal Cloudflare credential client and nine synthetic checks exist in the companion draft; service does not import it. Approved-session issuance, HTTPS authenticated signaling, provisioning, external UDP/TCP/TLS reachability and deployment remain incomplete. Current Railway TCP bootstrap is not sufficient. |
 | M6 | Not started | Acceptance matrix, default enablement and local release | Separate-network direct proof, forced fallback, security/lifecycle regression evidence, updated guides/notices, local EXE/APK/checksums and verified private release only after applicable checks are permitted and pass. |
@@ -221,3 +221,19 @@ until implementation and acceptance evidence justify changing its status.
   desktop/Android data (3.057 seconds) and video (2.864 seconds) interoperation.
   Exact APK hashes and scope are in verification. No actual screen capture/render,
   playback sound or input freshness/epoch integration is attached to the tracks.
+
+- The synthetic audio/video checkpoint adds bounded external PCM sources on both
+  adapters, proof signaling profile 3 and audio RTP/decoded-peak checks without
+  hardware microphone capture. Android requires a 10 ms external callback clock
+  and audio-track/source disposal before factory destruction. Expired PCM drops
+  without closing the connection; fresh audio recovery is tested. Final suite:
+  71 checks, 61 passed, ten skipped, zero failures; all twelve native proof checks
+  passed. Final APKs passed three Android-only checks (3.105 seconds) and all three
+  desktop/Android host checks: data 5.980 seconds, video 5.716 seconds, audio/video
+  9.447 seconds. Installed hashes, microphone denial and fixture cleanup were
+  verified; see the exact hashes/scope in verification. These timings include
+  fixture setup and do not measure latency or delivered media performance.
+- Existing shared Stop regressions exposed I/O races between queued input, media,
+  heartbeat writes and read EOF. Established transport I/O failures now end and
+  revoke the session consistently; setup/authentication and non-I/O protocol
+  validation retain their error behavior. Both strict Ended regressions passed.

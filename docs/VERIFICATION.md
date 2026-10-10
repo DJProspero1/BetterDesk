@@ -1,6 +1,63 @@
 # Local verification
 
-## Direct transport implementation, 10 October 2026: synthetic video checkpoint
+## Direct transport implementation, 10 October 2026: synthetic audio/video checkpoint
+
+The opt-in native proof adds external 10 ms, 48 kHz mono PCM16 sources, bounded
+queues, decoded PCM peak checks and aggregate audio RTP counters in both adapters.
+Signaling profile 3 binds audio/video/data to the same DTLS/ICE identity; older
+proof profiles reject audio. Desktop uses a headless module without physical
+sound devices. Android disables hardware AudioRecord before factory creation and
+never re-enables it. Its external callback supplies a 10 ms clock because the
+selected SDK does not pace that mode. Local audio tracks/sources are disposed
+before the factory, then the audio module and owned scheduler are released.
+Earlier unpaced/incorrect-order runs failed; the final checks below include both
+fixes and retain the original teardown deadlines. Stale PCM is dropped without
+closing the peer; future/non-increasing timestamps still fail closed. The audio
+checks reject an expired chunk, then verify fresh native audio exchange.
+
+Two existing Stop tests also exposed asynchronous write/read races in the shared
+session. Established transport I/O failures now end and revoke the current
+session consistently, including queued input/control, media and heartbeat work.
+Setup, code/TLS authentication and non-I/O protocol errors retain their behavior.
+The two regression checks require Ended and report safe exception-class/location
+metadata when it differs.
+
+Final local compilation and both proof APK packages passed. The full Linux JVM
+suite ran **71 checks: 61 passed, zero failed, ten skipped** (six existing opt-ins,
+Windows decoder integration and three dedicated Android host checks). All twelve
+native desktop proof checks passed in 3.810 seconds; all eight session checks
+passed. Android-only native data/video/audio instrumentation passed **three checks
+in 3.105 seconds** on the final APKs on the dedicated API 36.1/Android 16 emulator.
+All three desktop/Android host checks subsequently passed on those exact APKs:
+
+- Data-only: 5.980 seconds.
+- Synthetic video: 5.716 seconds, including decoded pixels and RTP counters.
+- Synthetic audio/video: 9.447 seconds, including stale-chunk rejection, fresh
+  decoded PCM/RTP in both directions, microphone denial and teardown.
+
+These fixture times include installation/setup and are not latency benchmarks.
+The installed app/test APK hashes matched the build outputs. Temporary private
+configuration and ADB forwarding rules were removed. Failed host runs now stop
+their guest instrumentation process as well as the host ADB client.
+
+Final synthetic audio/video proof APK SHA-256 values:
+
+- App: `c722de6a651ca6c209afcdb0aefbdb944dcedf1f953fd0398ef867d25a6d2fcc` (62,421,310 bytes).
+- Instrumentation: `f9411015c6e2005fe0df99d2cc5bf3acd9290f7ed9c8e4005b8f84747a09795b`.
+
+The app's `RECORD_AUDIO` permission remained denied before/after audio exchange.
+These are dedicated-emulator debug APKs, not compatible release updates. Guest
+AudioTrack playback runs without audible host output; this is synthetic decoding
+and cleanup evidence, not physical sound quality or device playback capture.
+No OS screen/camera/microphone capture, input or file routing was opened by the
+native proof. Actual capture/render integration, stereo fidelity, A/V sync,
+source/display freshness/epochs, native Windows operation/packaging, hardware
+encoding, physical/OEM devices and separate/restrictive networks remain unverified.
+Cloudflare signup/provisioning and Windows registration remain deferred by the
+owner. No production direct routing, deployment, version bump or release occurred.
+The earlier checkpoints below identify their own historical APKs.
+
+## Direct transport implementation, 10 October 2026: historical synthetic video checkpoint
 
 The opt-in proof now feeds bounded raw I420 frames into native video tracks on
 both adapters. The Linux desktop proof exchanged authenticated SDP, decoded the

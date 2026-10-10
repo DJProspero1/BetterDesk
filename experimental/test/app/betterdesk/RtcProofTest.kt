@@ -17,17 +17,20 @@ class RtcProofTest {
     @Test fun `authenticated native video tracks carry synthetic pixels and RTP in both directions`() {
         authenticatedPeers(true)
     }
+    @Test fun `authenticated native media tracks carry synthetic audio without a microphone`() {
+        authenticatedPeers(true, true)
+    }
 
-    private fun authenticatedPeers(video: Boolean) {
+    private fun authenticatedPeers(video: Boolean, audio: Boolean = false) {
         val identity = TlsIdentity.create()
         val secret = Invitation.secret()
         val session = Invitation.secret()
         val viewerId = "1".repeat(32)
         val sourceId = "2".repeat(32)
         val expires = System.currentTimeMillis() + 30_000
-        val protocol = if (video) 2 else 1
-        val serverPeer = DesktopRtcPeer(video)
-        val clientPeer = DesktopRtcPeer(video)
+        val protocol = if (audio) 3 else if (video) 2 else 1
+        val serverPeer = DesktopRtcPeer(video, audio)
+        val clientPeer = DesktopRtcPeer(video, audio)
         val executor = Executors.newSingleThreadExecutor()
         val listener = identity.context.serverSocketFactory.createServerSocket(0, 1, InetAddress.getLoopbackAddress()) as SSLServerSocket
         listener.soTimeout = 15_000
@@ -39,9 +42,9 @@ class RtcProofTest {
                     val offer = (wire.read() as Packet.Control).message
                     check(offer.type == "rtcProofOffer" && offer.protocol == protocol && offer.epoch == 1L)
                     check(TlsIdentity.constantEquals(secret, offer.secret))
-                    val authenticated = RtcSignal.decode(offer.text).validate(session, viewerId, sourceId, 1, expires, true, video = video)
+                    val authenticated = RtcSignal.decode(offer.text).validate(session, viewerId, sourceId, 1, expires, true, video = video, audio = audio)
                     val answer = serverPeer.answer(authenticated).get(12, TimeUnit.SECONDS)
-                    val signal = RtcSignal(session, sourceId, viewerId, 1, expires, false, RtcDescription.validate(answer, video), answer, protocol)
+                    val signal = RtcSignal(session, sourceId, viewerId, 1, expires, false, RtcDescription.validate(answer, video, audio), answer, protocol)
                     wire.send(Message("rtcProofAnswer", text = signal.encode(), protocol = protocol, epoch = 1))
                     serverPeer.opened.get(12, TimeUnit.SECONDS)
                     val incoming = serverPeer.receive(10_000)
@@ -55,6 +58,11 @@ class RtcProofTest {
                         }
                         assertVideoCounters(serverPeer)
                     }
+                    if (audio) {
+                        RtcAudioFixture.checkSample(serverPeer.receiveAudio(5000))
+                        sendTone(serverPeer)
+                        RtcAudioFixture.checkCounters(serverPeer.audioCounters().get(2, TimeUnit.SECONDS))
+                    }
                     // Keep authenticated setup alive until the peer confirms delivery.
                     check((wire.read() as Packet.Control).message.type == "rtcProofDone")
                 }
@@ -63,12 +71,12 @@ class RtcProofTest {
                 socket.soTimeout = 15_000
                 val wire: SessionTransport = Wire(socket)
                 val offer = clientPeer.offer().get(12, TimeUnit.SECONDS)
-                assertEquals(64, RtcDescription.validate(offer, video).length)
-                val signal = RtcSignal(session, viewerId, sourceId, 1, expires, true, RtcDescription.validate(offer, video), offer, protocol)
+                assertEquals(64, RtcDescription.validate(offer, video, audio).length)
+                val signal = RtcSignal(session, viewerId, sourceId, 1, expires, true, RtcDescription.validate(offer, video, audio), offer, protocol)
                 wire.send(Message("rtcProofOffer", text = signal.encode(), secret = secret, protocol = protocol, epoch = 1))
                 val answer = (wire.read() as Packet.Control).message
                 check(answer.type == "rtcProofAnswer" && answer.protocol == protocol && answer.epoch == 1L)
-                val authenticated = RtcSignal.decode(answer.text).validate(session, sourceId, viewerId, 1, expires, false, video = video)
+                val authenticated = RtcSignal.decode(answer.text).validate(session, sourceId, viewerId, 1, expires, false, video = video, audio = audio)
                 clientPeer.acceptAnswer(authenticated).get(12, TimeUnit.SECONDS)
                 clientPeer.opened.get(12, TimeUnit.SECONDS)
                 clientPeer.send(ByteArray(RtcPeer.MAX_BYTES) { (it % 251).toByte() }).get(5, TimeUnit.SECONDS)
@@ -82,6 +90,11 @@ class RtcProofTest {
                     repeat(3) { assertVideo(clientPeer.receiveVideo(5000), true); clientPeer.send(byteArrayOf(2)).get(2, TimeUnit.SECONDS) }
                     assertVideoCounters(clientPeer)
                 }
+                if (audio) {
+                    sendTone(clientPeer)
+                    RtcAudioFixture.checkSample(clientPeer.receiveAudio(5000))
+                    RtcAudioFixture.checkCounters(clientPeer.audioCounters().get(2, TimeUnit.SECONDS))
+                }
                 wire.send(Message("rtcProofDone"))
             }
             server.get(5, TimeUnit.SECONDS)
@@ -90,6 +103,12 @@ class RtcProofTest {
             serverPeer.close(); clientPeer.close()
             assertTrue(serverPeer.awaitClosed(5000)); assertTrue(clientPeer.awaitClosed(5000))
         }
+    }
+    private fun sendTone(peer: RtcPeer) {
+        assertFalse(peer.sendAudio(RtcAudioFrame(ByteArray(RtcAudioFrame.BYTES), System.nanoTime() - 150_000_000L)).get(2, TimeUnit.SECONDS))
+        var accepted = 0
+        repeat(30) { if (peer.sendAudio(RtcAudioFixture.frame(it)).get(2, TimeUnit.SECONDS)) accepted++; Thread.sleep(10) }
+        check(accepted > 0)
     }
 
     private fun videoFrame(reverse: Boolean): RtcVideoFrame {
@@ -134,6 +153,29 @@ class RtcProofTest {
         assertFails { frame.copyPlanes(ByteBuffer.allocate(15), 4, u, 4, v, 4) }
         assertFalse(frame.toString().contains("40"))
     }
+    @Test fun `external PCM bridge bounds and copies samples without exposing them`() {
+        val bytes = ByteArray(RtcAudioFrame.BYTES) { 42 }
+        val frame = RtcAudioFrame(bytes)
+        bytes.fill(0)
+        assertEquals(42, frame.copyBytes()[0].toInt())
+        val copy = frame.copyBytes(); copy.fill(0)
+        assertEquals(42, frame.copyBytes()[0].toInt())
+        assertFails { RtcAudioFrame(ByteArray(RtcAudioFrame.BYTES + 1)) }
+        assertFails { frame.copyInto(ByteBuffer.allocate(RtcAudioFrame.BYTES - 1)) }
+        assertFails { RtcAudioSample.read(ByteArray(3841), 16, 48000, 3, 480) }
+        assertFalse(frame.toString().contains("42"))
+    }
+    @Test fun `Stop during audio setup cancels source writes and decoded samples`() {
+        val peer = DesktopRtcPeer(true, true)
+        val executor = Executors.newSingleThreadExecutor()
+        try {
+            val read = executor.submit { peer.receiveAudio(30_000) }
+            peer.offer(); peer.close()
+            assertFailsWith<ExecutionException> { read.get(2, TimeUnit.SECONDS) }
+            assertFailsWith<ExecutionException> { peer.sendAudio(RtcAudioFixture.frame(0)).get(2, TimeUnit.SECONDS) }
+            assertTrue(peer.awaitClosed(5000))
+        } finally { peer.close(); executor.shutdownNow() }
+    }
 
     @Test fun `video SDP and signaling cannot downgrade or substitute bundled identity`() {
         val fingerprint = "a=fingerprint:sha-256 " + List(32) { "AB" }.joinToString(":")
@@ -157,6 +199,14 @@ class RtcProofTest {
         assertEquals(sdp, signal.validate(signal.session, signal.sender, signal.recipient, 1, signal.expires, true, now, video = true))
         assertFails { signal.validate(signal.session, signal.sender, signal.recipient, 1, signal.expires, true, now) }
         assertFails { signal.copy(protocol = 1).validate(signal.session, signal.sender, signal.recipient, 1, signal.expires, true, now, video = true) }
+        val media = sdp.replace("a=group:BUNDLE 0 1", "a=group:BUNDLE 0 1 2") +
+            (listOf("m=audio 9 UDP/TLS/RTP/SAVPF 111", "a=mid:2", "a=rtcp-mux") + common).joinToString("\r\n") + "\r\n"
+        assertEquals("ab".repeat(32), RtcDescription.validate(media, true, true))
+        assertFails { RtcDescription.validate(media, true) }
+        assertFails { RtcDescription.validate(media.replace("m=audio 9 UDP/TLS/RTP/SAVPF", "m=audio 9 RTP/AVP"), true, true) }
+        val mediaSignal = signal.copy(protocol = 3, sdp = media)
+        assertEquals(media, mediaSignal.validate(signal.session, signal.sender, signal.recipient, 1, signal.expires, true, now, video = true, audio = true))
+        assertFails { mediaSignal.copy(protocol = 2).validate(signal.session, signal.sender, signal.recipient, 1, signal.expires, true, now, video = true, audio = true) }
     }
 
     @Test fun `Stop during native setup rejects later writes and unblocks a waiting read`() {

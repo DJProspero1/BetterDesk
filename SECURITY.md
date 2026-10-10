@@ -59,7 +59,7 @@ Before production: independent protocol/platform audit, dependency/license revie
 
 The native proof is excluded unless the build explicitly sets
 `betterdesk.rtcProof=true`. It creates synthetic local data channels and optionally
-raw video tracks, never OS capture or input. Production still uses the
+raw video/audio tracks, never OS capture or input. Production still uses the
 code-authenticated, pinned TLS protocol above.
 Its SDP travels inside pinned TLS with a random fixture secret and context-bound
 session/identity/generation/expiry/fingerprint validation. Application queues,
@@ -67,8 +67,12 @@ packet/frame sizes, native data-channel buffering and proof lifetime are bounded
 native video codec/jitter-buffer behavior remains unmeasured. Native debug logging
 is disabled. Explicit
 video signaling version 2 binds the bundled video/data transport to the same
-fingerprint/ICE credentials; version 1 rejects video. The synthetic source opens
-no camera, microphone or MediaProjection. Video counters are aggregate only;
+fingerprint/ICE credentials; version 3 adds bounded synthetic audio with the same
+identity. Versions 1/2 reject audio; version 1 rejects video. The synthetic source opens
+no camera, microphone or MediaProjection. Android hardware AudioRecord is disabled
+before factory creation and never re-enabled; audio tests require microphone
+permission denied. Desktop custom audio uses a headless module without physical
+devices. Video/audio counters and decoded audio peaks are aggregate only;
 decoded pixels/native stats/SDP must never enter logs. No RTP input freshness or
 production media consent policy is implemented by this fixture.
 

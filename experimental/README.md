@@ -45,7 +45,7 @@ Downloaded artifacts inspected on 10 October 2026:
 | android-150.7871.01.aar | 49147033 | `0a1627b1a48c2bc17d9a40d62fc47bd45166f44a311e95917f147c402de379b0` |
 
 The Android uncompressed native libraries total about 48 MB across four ABIs.
-The synthetic-video proof APK built on 10 October is 62,095,246 bytes; the native Windows
+The final synthetic-audio/video proof APK built on 10 October is 62,421,310 bytes; the native Windows
 DLL expands to 21,750,784 bytes. Final portable EXE size remains unmeasured.
 Inspection of DLL imports found Windows system libraries, including Media Foundation,
 DXGI and D3D11; this is static evidence, not native Windows load/packaging coverage. These observed hashes identify the
@@ -71,7 +71,8 @@ down channel, peer, factory and audio-module resources.
 Each peer gathers a complete, bounded SDP once. Data-only signaling version 1
 accepts one application section. Explicit synthetic-video signaling version 2
 accepts one video section plus application, with BUNDLE, RTCP mux and matching
-SHA-256 DTLS fingerprints/ICE credentials. Both cap SDP at 16 KiB/256 lines and
+SHA-256 DTLS fingerprints/ICE credentials. Explicit synthetic-audio/video signaling version 3 adds one bundled audio section
+with the same identity and RTCP mux. All profiles cap SDP at 16 KiB/256 lines and
 32 candidates. The selected proof mode must match the authenticated envelope;
 version 1 rejects media SDP and version 2 rejects audio or unbundled/different
 identities. This is a
@@ -89,7 +90,8 @@ fingerprint as well as its ICE parameters. This tests the transport bootstrap
 boundary; it does not repeat code/J-PAKE pairing or request real capture consent.
 Never pass an SDP from an untrusted mailbox to these adapters in production.
 
-Desktop uses a dummy audio module; Android disables peer audio recording/playout.
+Data/video-only desktop peers use a dummy audio module; Android disables peer
+audio recording/playout in those profiles.
 Data-only peers create no media sources. Video peers use `CustomVideoSource` on
 desktop and an externally fed screencast `VideoSource` on Android, with explicit
 software video encoder/decoder factories. Neither opens a camera, microphone,
@@ -118,6 +120,36 @@ sequence; this is not RTP pacing or a production frame-ack protocol. Native code
 jitter-buffer behavior, hardware acceleration, delivered FPS and source/display
 timestamp mapping remain unmeasured.
 
+The audio/video profile injects copied 10 ms, 48 kHz mono PCM16 chunks (960 bytes)
+with increasing timestamps. Chunks older than 100 ms are rejected for dropping
+without closing the peer; future/non-increasing timestamps fail closed. Four pending worker writes
+and Android's four-chunk native admission queue bound input; full queues return
+false for the producer to drop. Android underflow/stale input becomes silence. The selected fork
+does not pace its external recorder loop when hardware recording is disabled;
+the callback supplies a monotonic 10 ms clock, without catch-up bursts.
+Decoded callbacks retain only the latest non-silent aggregate sample (rate,
+channels and peak), never PCM or native buffers. Audio RTP stats expose aggregate
+packet/byte counts only. Stop clears audio queues/samples and closes sources,
+tracks, modules and the owned Android scheduler. Android disposes local audio
+tracks/sources before the factory and releases the ADM after it; retaining local
+audio references through factory destruction can block native shutdown.
+
+Desktop `CustomAudioSource` disables device capture in the selected SDK. Audio
+proofs use `HeadlessAudioDeviceModule`, which drives a receive playout clock without
+opening physical devices; the dummy module did not deliver decoded audio. Android
+uses this SDK fork's `AudioBufferCallback` and playback callback, with
+`setAudioRecordEnabled(false)` **before factory/track creation**, never re-enabled.
+Inspection of the selected AAR confirms that this bypasses hardware AudioRecord
+initialization/start while allowing external buffers. Android peer recording here
+means feeding external PCM; it does not enable the hardware recorder. Tests require
+`RECORD_AUDIO` to remain denied. Native AudioTrack output runs on the dedicated
+emulator, launched without audible host output. These APIs are specific to the
+selected bindings; do not assume a default microphone source is safe.
+
+The finite synthetic tone checks decoding and RTP in both directions. It does not
+capture device playback, establish stereo fidelity or physical sound quality, measure A/V sync or
+integrate WASAPI/AudioPlaybackCapture, mute or production media ownership.
+
 ## Local commands and limits
 
 With JDK 17, SDK 36 and the infrastructure fixture available, on a local Linux host:
@@ -134,7 +166,7 @@ xvfb-run -a bash ./gradlew :desktop:test :android:compileDebugKotlin \
 Linux is a local compilation/synthetic-test workaround authorized by the owner
 on 10 October 2026. It is not a supported desktop product or Windows packaging host.
 The proof loads real Linux and Android WebRTC JNI and exchanges synthetic bytes.
-On 10 October, the final APK passed Android-only native data/video checks and interoperation
+On 10 October, the final APK passed Android-only native data/video/audio checks and interoperation
 with desktop on an API 36.1/Android 16 emulator; see the exact build hashes and
 results in [verification](../docs/VERIFICATION.md). This does not establish Windows
 native operation, physical/OEM compatibility, separate-network direct access or
@@ -155,15 +187,17 @@ xvfb-run -a bash ./gradlew :android:assembleDebug :android:assembleDebugAndroidT
 
 The harness installs without uninstalling, forwards a temporary loopback TLS port
 with ADB reverse, streams private configuration into the app's private cache,
-then deletes it. It requires the instrumentation success result and checks native
+then deletes it. A failed host run also stops its guest instrumentation process.
+It requires the instrumentation success result and checks native
 bytes in both directions. Stop closes the listener/peers and removes the ADB
 reverse rule. Use a fresh test device: these local debug APKs are not signed with
 the previous release key and must not replace an existing user's app or be
 published as updates. No signing keys are copied between machines.
-The host harness runs two checks (data-only and synthetic video), installs the
-same final APKs and checks received pixels plus aggregate RTP counters for video.
+The host harness runs three checks (data-only, synthetic video and synthetic audio/video),
+installs the same final APKs and checks received pixels, decoded PCM peaks and
+aggregate video/audio RTP counters.
 Android-only instrumentation methods are `nativeDataChannelAndTeardown` and
-`nativeVideoTracksAndTeardown`; invoke them explicitly on the dedicated test device.
+`nativeVideoTracksAndTeardown` plus `nativeExternalAudioWithoutMicrophone`; invoke them explicitly on the dedicated test device.
 The emulator must finish booting before installation. Android native logging uses
 the injected no-op logger alone: combining it with `enableLogToDebugOutput` throws
 during initialization. Native ICE callbacks enqueue SDP work only when gathering
@@ -172,7 +206,7 @@ is complete. These startup and callback fixes are covered by the final native ru
 Future media integration must retain native capture permission/service ownership.
 The synthetic raw-video bridge establishes an SDK path without OS capture. Windows
 capture conversion/hardware encoding, Android projection/rendering integration,
-production frame-age/epoch mapping and playback-only audio injection remain open.
+production frame-age/epoch mapping and real playback-only audio capture remain open.
 No default microphone source is acceptable. Do not send the current
 screen/audio TCP stream through this one reliable channel and call media migration
 complete. Files need separate bounded bulk scheduling and explicit cutover policy.

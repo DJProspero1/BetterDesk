@@ -7,8 +7,10 @@ import java.util.concurrent.*
 import java.util.concurrent.atomic.AtomicBoolean
 
 /** Development proof only: synthetic data/video, no OS capture, input or session access. */
-abstract class RtcPeer(private val videoProof: Boolean = false) : Closeable {
+abstract class RtcPeer(private val videoProof: Boolean = false, private val audioProof: Boolean = false) : Closeable {
+    init { require(!audioProof || videoProof) }
     val opened = CompletableFuture<Unit>()
+    @Volatile var failureSummary = ""; private set
     private val closed = AtomicBoolean(false)
     private val lock = Any()
     private val pending = ConcurrentHashMap.newKeySet<CompletableFuture<*>>()
@@ -16,6 +18,9 @@ abstract class RtcPeer(private val videoProof: Boolean = false) : Closeable {
     private val videoInbox = ArrayBlockingQueue<RtcVideoSample>(1)
     private val videoSlots = Semaphore(2)
     private var lastVideoTimestamp = 0L
+    private val audioSlots = Semaphore(4)
+    private val audioInbox = ArrayBlockingQueue<RtcAudioSample>(1)
+    private var lastAudioTimestamp = 0L
     protected val isClosed: Boolean get() = closed.get()
     private val worker = ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS,
         ArrayBlockingQueue(64), { runnable -> Thread(runnable, "BetterDesk RTC proof").apply { isDaemon = true } })
@@ -34,11 +39,12 @@ abstract class RtcPeer(private val videoProof: Boolean = false) : Closeable {
     protected abstract fun sendNative(bytes: ByteArray): Boolean
     protected abstract fun closeNative()
     protected open fun pushVideoNative(frame: RtcVideoFrame) { error("RTC video proof unavailable") }
+    protected open fun pushAudioNative(frame: RtcAudioFrame): Boolean = error("RTC audio proof unavailable")
 
     protected fun dispatch(block: () -> Unit) {
         synchronized(lock) {
             if (closed.get()) return
-            try { worker.execute { if (!closed.get()) try { block() } catch (_: Exception) { close() } } }
+            try { worker.execute { if (!closed.get()) try { block() } catch (error: Exception) { failed(error) } } }
             catch (_: RejectedExecutionException) { close() }
         }
     }
@@ -49,7 +55,7 @@ abstract class RtcPeer(private val videoProof: Boolean = false) : Closeable {
             if (closed.get()) return result.apply { completeExceptionally(IOException("RTC proof closed")) }
             if (!deadlineStarted) {
                 deadlineStarted = true
-                deadline.schedule({ close() }, 30, TimeUnit.SECONDS)
+                deadline.schedule({ if (!isClosed) { failureSummary = "Proof deadline"; close() } }, 30, TimeUnit.SECONDS)
             }
             pending.add(result)
             result.whenComplete { _, _ -> pending.remove(result) }
@@ -68,7 +74,7 @@ abstract class RtcPeer(private val videoProof: Boolean = false) : Closeable {
     fun answer(authenticatedOffer: String): CompletableFuture<String> = operation { result ->
         check(negotiation == Negotiation.NEW)
         negotiation = Negotiation.REMOTE_OFFER
-        RtcDescription.validate(authenticatedOffer, videoProof)
+        RtcDescription.validate(authenticatedOffer, videoProof, audioProof)
         setDescription(false, true, authenticatedOffer) { success -> dispatch {
             if (!success) close() else localDescription(false, result)
         } }
@@ -77,7 +83,7 @@ abstract class RtcPeer(private val videoProof: Boolean = false) : Closeable {
     fun acceptAnswer(authenticatedAnswer: String): CompletableFuture<Unit> = operation { result ->
         check(negotiation == Negotiation.LOCAL_OFFER && gathering?.isDone == true)
         negotiation = Negotiation.ANSWER_ACCEPTED
-        RtcDescription.validate(authenticatedAnswer, videoProof)
+        RtcDescription.validate(authenticatedAnswer, videoProof, audioProof)
         setDescription(false, false, authenticatedAnswer) { success -> dispatch {
             if (!success) close() else result.complete(Unit)
         } }
@@ -96,12 +102,18 @@ abstract class RtcPeer(private val videoProof: Boolean = false) : Closeable {
     protected fun gathered() {
         if (!gatheringComplete()) return
         val sdp = gatheredDescription() ?: return
-        RtcDescription.validate(sdp, videoProof)
+        RtcDescription.validate(sdp, videoProof, audioProof)
         gathering?.complete(sdp)
     }
 
     protected fun channelOpened() { opened.complete(Unit) }
-    protected fun channelFailed() { close() }
+    protected fun channelFailed() { if (!isClosed) { failureSummary = "Native channel closed"; close() } }
+    protected fun failed(error: Exception) {
+        if (!isClosed) {
+            failureSummary = error.javaClass.simpleName + " at " + error.stackTrace.firstOrNull { it.className.startsWith("app.betterdesk") }
+            close()
+        }
+    }
 
     /** Two pending raw frames at most; callers drop an unaccepted frame. */
     fun sendVideo(frame: RtcVideoFrame): CompletableFuture<Boolean> {
@@ -133,6 +145,37 @@ abstract class RtcPeer(private val videoProof: Boolean = false) : Closeable {
             val remaining = until - System.nanoTime()
             if (remaining <= 0) throw TimeoutException("RTC video proof receive timeout")
             videoInbox.poll(minOf(remaining, TimeUnit.MILLISECONDS.toNanos(100)), TimeUnit.NANOSECONDS)?.let {
+                if (!closed.get()) return it
+            }
+        }
+        throw IOException("RTC proof closed")
+    }
+
+    fun sendAudio(frame: RtcAudioFrame): CompletableFuture<Boolean> {
+        check(audioProof)
+        if (!audioSlots.tryAcquire()) return CompletableFuture.completedFuture(false)
+        return operation<Boolean> { result ->
+            check(opened.isDone && !opened.isCompletedExceptionally)
+            check(frame.timestampNs > lastAudioTimestamp)
+            val age = System.nanoTime() - frame.timestampNs
+            check(age >= 0)
+            lastAudioTimestamp = frame.timestampNs
+            result.complete(age <= TimeUnit.MILLISECONDS.toNanos(100) && pushAudioNative(frame))
+        }.whenComplete { _, _ -> audioSlots.release() }
+    }
+    protected fun incomingAudio(sample: RtcAudioSample) {
+        synchronized(lock) {
+            if (closed.get() || sample.peak < 1000) return // Only retain evidence of the synthetic tone.
+            audioInbox.poll(); audioInbox.offer(sample)
+        }
+    }
+    fun receiveAudio(timeoutMillis: Long): RtcAudioSample {
+        check(audioProof); require(timeoutMillis in 1..30_000)
+        val until = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMillis)
+        while (!closed.get()) {
+            val remaining = until - System.nanoTime()
+            if (remaining <= 0) throw TimeoutException("RTC audio proof receive timeout")
+            audioInbox.poll(minOf(remaining, TimeUnit.MILLISECONDS.toNanos(100)), TimeUnit.NANOSECONDS)?.let {
                 if (!closed.get()) return it
             }
         }
@@ -177,6 +220,7 @@ abstract class RtcPeer(private val videoProof: Boolean = false) : Closeable {
             pending.toList().forEach { it.completeExceptionally(error) }
             inbox.clear()
             videoInbox.clear()
+            audioInbox.clear()
             deadline.shutdownNow()
             worker.queue.clear()
             worker.execute { try { closeNative() } finally { worker.shutdown() } }

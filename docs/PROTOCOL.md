@@ -14,7 +14,9 @@ context-bound signaling envelope inside its authenticated fixture. It is exclude
 from normal builds and does not extend production protocol 4, code pairing or
 route negotiation. Proof signaling version 1 admits data only; version 2 explicitly
 admits one bundled synthetic video track and data, with matching DTLS/ICE identity.
-Neither version accepts an audio track or grants OS capture/input access.
+Version 3 explicitly adds one bundled synthetic audio section, with matching
+fingerprint/ICE credentials and RTCP mux. Versions 1/2 reject audio; no profile
+grants OS capture/input access.
 `SessionTransport` currently adapts the existing `Wire` only.
 
 ## Roles and state

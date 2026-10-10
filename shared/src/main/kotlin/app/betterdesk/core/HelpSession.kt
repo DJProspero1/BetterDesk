@@ -47,6 +47,13 @@ class HelpSession(
             it.javaClass.simpleName + " at " + it.stackTrace.firstOrNull { frame -> frame.className.startsWith("app.betterdesk") }
         }
     }
+    private fun sessionWriteFailed(error: Exception, current: Long) {
+        if (generation != current) return
+        rememberFailure(error)
+        // An asynchronous write can observe remote Stop before the reader sees EOF.
+        // Revoke the session in either order, without replacing Ended with an error.
+        if (error is java.io.IOException) stop() else finishError("connection")
+    }
     private var work: Job? = null
     @Volatile private var server: SSLServerSocket? = null
     @Volatile private var socket: SSLSocket? = null
@@ -91,7 +98,8 @@ class HelpSession(
         scope.launch(Dispatchers.IO) {
             for ((current, message) in controlQueue) {
                 try { if (current == generation) wire?.send(message) }
-                catch (_: Exception) { withContext(Dispatchers.Main) { if (current == generation) finishError("connection") } }
+                catch (e: CancellationException) { throw e }
+                catch (e: Exception) { withContext(Dispatchers.Main) { sessionWriteFailed(e, current) } }
             }
         }
         scope.launch {
@@ -115,7 +123,8 @@ class HelpSession(
                 val outgoing = input.copy(frame = mutable.value.frame)
                 try { withContext(Dispatchers.IO) {
                     if (sessionGeneration == generation && outgoing.epoch == epoch && revision == inputRevision && canInput()) wire?.send(outgoing)
-                } } catch (_: Exception) { if (sessionGeneration == generation) finishError("connection") }
+                } } catch (e: CancellationException) { throw e }
+                catch (e: Exception) { sessionWriteFailed(e, sessionGeneration) }
             }
         }
         scope.launch(Dispatchers.IO) {
@@ -493,7 +502,7 @@ class HelpSession(
                     awaitCancellation()
                 }
             } catch (e: CancellationException) { throw e }
-            catch (e: Exception) { rememberFailure(e); if (current == generation) finishError("connection") }
+            catch (e: Exception) { sessionWriteFailed(e, current) }
             finally { frames.close(); audio.close() }
         }
     }
@@ -613,7 +622,7 @@ class HelpSession(
         }
     }
 
-    private suspend fun pump(connection: SessionTransport, current: Long) = coroutineScope {
+    private suspend fun pump(connection: SessionTransport, current: Long) = try { coroutineScope {
         val heartbeat = launch(Dispatchers.IO) {
             while (isActive) {
                 delay(750)
@@ -695,6 +704,9 @@ class HelpSession(
                 }
             }
         } finally { heartbeat.cancel() }
+    } } catch (error: java.io.IOException) {
+        // Reads, acknowledgements and heartbeat writes race when either peer stops.
+        throw java.io.EOFException("Session transport closed").apply { initCause(error) }
     }
 
     private fun canInput(): Boolean {

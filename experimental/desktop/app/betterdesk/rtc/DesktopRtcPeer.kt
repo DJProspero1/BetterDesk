@@ -4,18 +4,30 @@ import dev.onvoid.webrtc.*
 import dev.onvoid.webrtc.logging.Logging
 import dev.onvoid.webrtc.media.audio.AudioDeviceModule
 import dev.onvoid.webrtc.media.audio.AudioLayer
+import dev.onvoid.webrtc.media.audio.AudioTrack
+import dev.onvoid.webrtc.media.audio.AudioTrackSink
+import dev.onvoid.webrtc.media.audio.CustomAudioSource
+import dev.onvoid.webrtc.media.audio.HeadlessAudioDeviceModule
+import dev.onvoid.webrtc.media.audio.AudioDeviceModuleBase
 import dev.onvoid.webrtc.media.video.*
 import java.nio.ByteBuffer
 
 /** Host-only ICE proof. Optional synthetic video; no OS capture or sound devices. */
-class DesktopRtcPeer(private val videoProof: Boolean = false) : RtcPeer(videoProof) {
-    private val audio = AudioDeviceModule(AudioLayer.kDummyAudio)
+class DesktopRtcPeer(private val videoProof: Boolean = false, private val audioProof: Boolean = false) : RtcPeer(videoProof, audioProof) {
+    private val audio: AudioDeviceModuleBase = if (audioProof) HeadlessAudioDeviceModule() else AudioDeviceModule(AudioLayer.kDummyAudio)
     private val factory: PeerConnectionFactory
     private val peer: RTCPeerConnection
     private val channel: RTCDataChannel
     private var videoSource: CustomVideoSource? = null
     private var localVideo: VideoTrack? = null
     private var remoteVideo: VideoTrack? = null
+    private var audioSource: CustomAudioSource? = null
+    private var localAudio: AudioTrack? = null
+    private var remoteAudio: AudioTrack? = null
+    private val audioSink = AudioTrackSink { data, bits, rate, channels, frames ->
+        if (!isClosed) try { incomingAudio(RtcAudioSample.read(data, bits, rate, channels, frames)) }
+        catch (error: Exception) { failed(error) }
+    }
     private val videoSink = VideoTrackSink { frame ->
         if (!isClosed) try {
             val buffer = frame.buffer.toI420()
@@ -57,6 +69,11 @@ class DesktopRtcPeer(private val videoProof: Boolean = false) : RtcPeer(videoPro
             videoSource = CustomVideoSource()
             localVideo = factory.createVideoTrack("betterdesk-synthetic-video", videoSource)
             peer.addTrack(localVideo, listOf("betterdesk-synthetic")).dispose()
+            if (audioProof) {
+                audioSource = CustomAudioSource()
+                localAudio = factory.createAudioTrack("betterdesk-synthetic-audio", audioSource)
+                peer.addTrack(localAudio, listOf("betterdesk-synthetic")).dispose()
+            }
         } catch (error: Throwable) { close(); throw error }
     }
 
@@ -94,9 +111,14 @@ class DesktopRtcPeer(private val videoProof: Boolean = false) : RtcPeer(videoPro
                     check(remoteVideo == null)
                     remoteVideo = track
                     track.addSink(videoSink)
+                } else if (audioProof && track is AudioTrack) {
+                    check(remoteAudio == null)
+                    remoteAudio = track
+                    track.addSink(audioSink)
                 } else track?.dispose()
             }
             check(remoteVideo != null)
+            if (audioProof) check(remoteAudio != null)
         } finally { receivers.forEach { it.dispose() } }
     }
     override fun pushVideoNative(frame: RtcVideoFrame) {
@@ -106,6 +128,27 @@ class DesktopRtcPeer(private val videoProof: Boolean = false) : RtcPeer(videoPro
             frame.copyPlanes(buffer.dataY, buffer.strideY, buffer.dataU, buffer.strideU, buffer.dataV, buffer.strideV)
             checkNotNull(videoSource).pushFrame(nativeFrame)
         } finally { nativeFrame.release() }
+    }
+    override fun pushAudioNative(frame: RtcAudioFrame): Boolean {
+        checkNotNull(audioSource).pushAudio(frame.copyBytes(), 16, RtcAudioFrame.RATE, 1, RtcAudioFrame.FRAMES)
+        return true
+    }
+    fun audioCounters() = operation<RtcAudioCounters> { result ->
+        check(audioProof)
+        peer.getStats { report -> dispatch {
+            fun count(type: RTCStatsType, key: String): Long = report.stats.values
+                .filter { it.type == type && (it.attributes["kind"] == "audio" || it.attributes["mediaType"] == "audio") }
+                .sumOf { (it.attributes[key] as? Number)?.toLong() ?: 0 }
+            result.complete(RtcAudioCounters(count(RTCStatsType.OUTBOUND_RTP, "packetsSent"), count(RTCStatsType.INBOUND_RTP, "packetsReceived"),
+                count(RTCStatsType.OUTBOUND_RTP, "bytesSent"), count(RTCStatsType.INBOUND_RTP, "bytesReceived")))
+        } }
+    }
+    private fun disposeAudio() {
+        try { remoteAudio?.removeSink(audioSink) }
+        finally { try { remoteAudio?.dispose() }
+            finally { try { localAudio?.dispose() } finally { audioSource?.dispose() } }
+        }
+        remoteAudio = null; localAudio = null; audioSource = null
     }
     /** Select aggregate RTP counters only; raw native reports contain addresses. */
     fun videoCounters() = operation<RtcVideoCounters> { result ->
@@ -132,7 +175,7 @@ class DesktopRtcPeer(private val videoProof: Boolean = false) : RtcPeer(videoPro
             try { channel.dispose() }
             finally {
                 try { peer.close() }
-                finally { try { disposeVideo() } finally { try { factory.dispose() } finally { audio.dispose() } } }
+                finally { try { disposeVideo() } finally { try { disposeAudio() } finally { try { factory.dispose() } finally { audio.dispose() } } } }
             }
         }
     }
