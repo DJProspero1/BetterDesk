@@ -1,10 +1,9 @@
 # Testing
 
-The owner paused test and audio execution for the 0.7 file/clipboard feature;
-that pause also applies to the 0.7.1 keyboard fixes.
-Do not run the commands below until tests are requested again. Compile/package
-with `scripts/build-local.ps1 -SkipTests -LowResource`; report runtime coverage
-as unverified. The 0.6 suite and measurements below are historical, not evidence
+The owner resumed tests, app launches and audio checks for direct-connection work
+on 10 October 2026. The earlier pause covered 0.7 and 0.7.1; those releases' missing
+runtime coverage remains unverified until new checks cover it. The 0.6 suite and
+measurements below are historical, not evidence
 for native Explorer paste, Android sharing, keyboard control or protocol 4.
 The pending keyboard/device matrix is documented in [KEYBOARD.md](KEYBOARD.md).
 
@@ -12,6 +11,13 @@ Run all checks locally. Use synthetic content and dedicated test devices. Native
 capture/input tests and UI tests can open windows or interact with a device;
 coordinate them with the person using it. Never capture unrelated private work
 for a screenshot. No test may bypass genuine OS consent.
+
+The [experimental WebRTC proof](../experimental/README.md) describes the explicit
+Gradle opt-in and bounded Linux compilation/synthetic-test workaround. Ordinary
+builds do not include its sources or dependencies. Linux local tests select Linux
+FFmpeg/JavaCPP test-runtime classifiers; Windows application dependencies retain
+their Windows classifiers. Passing that proof cannot establish physical-device,
+Windows capture, Android interoperation or separate-network coverage.
 
 ## Ordinary suite
 
@@ -30,8 +36,11 @@ $env:BETTERDESK_BROKER_FIXTURE = (Resolve-Path '..\BetterDesk-Infrastructure\scr
 & "$workspace\gradlew.bat" -p $workspace :desktop:test --no-daemon '-Pkotlin.incremental=false'
 ```
 
-The 0.6.0 ordinary suite contains 55 tests: 49 enabled with the fixture, and six
-opt-in device/benchmark tests. Without the fixture another nine checks skip.
+The current ordinary suite contains 56 tests: 50 enabled on Windows with the
+fixture, and six opt-in device/benchmark tests. On Linux the Windows platform
+decoder integration also skips; the portable native decoder check still runs.
+Without the fixture another nine checks skip. The WebRTC opt-in adds five proof
+checks and one dedicated-device host check.
 Coverage includes invitation bounds, J-PAKE, pinning, approval before capture,
 input validation, cancellation, route fallback, frame recovery, AVC decoding and
 shared UI. Switch/audio checks cover approval, decline, cancellation, repeated

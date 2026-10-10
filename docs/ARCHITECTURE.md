@@ -101,6 +101,13 @@ shipping. Neither is implemented in 0.7.0. See [MulticastLock](https://developer
 
 ## Next milestones
 
+`HelpSession` now uses `SessionTransport` for packet operations and the peer
+address required by file exchange. `Wire` implements that interface with the same
+TLS/socket framing. Setup sockets remain directly owned until authentication
+finishes, so Stop can still cancel setup. There is no transport cutover yet.
+The [opt-in native WebRTC proof](../experimental/README.md) is excluded from normal
+builds and has no production session or permission ownership.
+
 The [direct Internet connection plan](plans/DIRECT_CONNECTIONS.md) and
 [implementation handoff](plans/DIRECT_CONNECTIONS_HANDOFF.md) expand the proposed
 media/transport work below. They document future work; the current release still

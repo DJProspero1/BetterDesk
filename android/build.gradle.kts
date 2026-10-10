@@ -17,12 +17,19 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     sourceSets["main"].java.srcDir("../shared/src/main/kotlin")
+    if (providers.gradleProperty("betterdesk.rtcProof").map(String::toBoolean).getOrElse(false)) {
+        sourceSets["main"].java.srcDirs("../experimental/shared", "../experimental/android")
+        sourceSets["androidTest"].java.srcDir("../experimental/androidTest")
+    }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     buildFeatures { compose = true }
     packaging { resources.excludes += setOf("META-INF/versions/9/OSGI-INF/MANIFEST.MF", "META-INF/DEPENDENCIES", "META-INF/LICENSE*", "META-INF/NOTICE*") }
 }
 kotlin { jvmToolchain(17) }
 dependencies {
+    if (providers.gradleProperty("betterdesk.rtcProof").map(String::toBoolean).getOrElse(false)) {
+        implementation("io.github.webrtc-sdk:android:150.7871.01")
+    }
     implementation(compose.runtime)
     implementation(compose.foundation)
     implementation(compose.material3)

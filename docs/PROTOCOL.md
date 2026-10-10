@@ -9,6 +9,11 @@ security audit. Update both apps together. Authoritative implementations are
 [TlsIdentity.kt](../shared/src/main/kotlin/app/betterdesk/core/TlsIdentity.kt) and
 [Wire.kt](../shared/src/main/kotlin/app/betterdesk/core/Wire.kt).
 
+The [development-only native proof](../experimental/README.md) uses a separate
+context-bound signaling envelope inside its authenticated fixture. It is excluded
+from normal builds and does not extend production protocol 4, code pairing or
+route negotiation. `SessionTransport` currently adapts the existing `Wire` only.
+
 ## Roles and state
 
 The **viewer** enters a code. The **sharing device** displays that code and locally

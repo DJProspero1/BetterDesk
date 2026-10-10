@@ -1,28 +1,33 @@
 # Direct connections: agent handoff and work checklist
 
-Last updated: 10 October 2026. State: **documentation-only draft PR; implementation
-not started**. Read the [proposed design](DIRECT_CONNECTIONS.md) before coding.
+Last updated: 10 October 2026. State: **implementation in progress; draft PR**.
+Direct screen/sound/input/file routing is not enabled. Read the
+[proposed design](DIRECT_CONNECTIONS.md) and [native proof](../../experimental/README.md)
+before coding.
 
 ## Resume here
 
 The owner wants direct connections between different networks, with automatic
-relay fallback and the same simple Windows/Android flow. They asked for this draft
-PR so the feature can be developed later. This handoff does not claim that P2P is
+relay fallback and the same simple Windows/Android flow. They resumed implementation,
+tests and audio checks on 10 October 2026. This handoff does not claim that P2P is
 implemented, measured, deployed or ready to ship.
 
 1. Read [AGENTS.md](../../AGENTS.md), [PRODUCT.md](../../PRODUCT.md),
    [DESIGN.md](../../DESIGN.md) and [SECURITY.md](../../SECURITY.md).
-2. Inspect the draft PR, current branch/diff and any later comments. Fetch remote
-   state before continuing; do not reset or overwrite another person's work.
+2. Fetch origin and pull the primary checkout with `--ff-only` before inspecting
+   repository state. Work on a task worktree/branch based on `origin/main`, then
+   incorporate the PR head without overwriting another person's work. Inspect
+   current changes and reviews before continuing.
 3. Recheck baseline claims against source. This plan started from app commit
    `87f57b7b220eac3604a3b25dd35b1c16652d2491`, release 0.7.1, protocol 4. The
    sibling infrastructure source inspected was
    `6a2f50c00a531900976687ea049a5632f0fbff6b`; no infrastructure change is in this PR.
-4. Begin **M0** below: resolve the native integration/build route and record the
-   decision with evidence. Do not start by replacing HelpSession networking.
+4. Continue **M0/M2** below: finish native integration/build feasibility and proof
+   evidence before connecting the adapter to production. `SessionTransport` is
+   extracted, but `HelpSession` still owns and uses the existing TLS path.
 5. Update this checklist, decisions and coverage after each meaningful change.
    Mark completed work only when its stated exit evidence exists. Keep the PR a
-   draft until the owner resumes implementation and the appropriate checks pass.
+   draft until implementation and the appropriate acceptance checks pass.
 
 Suggested continuation prompt:
 
@@ -30,27 +35,31 @@ Suggested continuation prompt:
 > docs/plans/DIRECT_CONNECTIONS_HANDOFF.md and the linked design, inspect current
 > work, then take the first incomplete milestone. Improve the plan where evidence
 > warrants it and update its decisions and status. Preserve the shared Windows /
-> Android flow, local-build policy and active pause on tests and audio workloads.
+> Android flow and local-build policy. Tests and audio checks were resumed by the
+> owner on 10 October 2026; use synthetic content and bounded local workloads.
 > Report implemented, statically checked and still-unverified work separately.
 
 ### Active operational constraints
 
-- Tests, emulators, app launches, audio fixtures, benchmarks and live smoke checks
-  are **paused at the owner's request**, across subsequent tasks. The request to
-  prepare this PR does not resume them. Do not schedule them or run them quietly.
+- The owner explicitly resumed tests, emulators/app checks and audio checks on
+  10 October 2026. Earlier 0.7/0.7.1 missing runtime coverage is still unverified;
+  do not reinterpret old compilation evidence as a new test result.
 - No development servers without an explicit request. No deployment, provider
-  provisioning, DNS change, release, app version bump or dependency addition was
-  made for this documentation handoff.
-- Native builds remain on the owner's local machine. When later code needs a
-  build while tests remain paused, use the existing bounded command:
+  provisioning, DNS change, release or app version bump has been made. Experimental
+  dependencies are opt-in; the original handoff was documentation-only.
+- The owner authorized bounded local Linux compilation/synthetic tests as a
+  workaround because no Windows host is reachable. See the native proof command.
+  Windows packaging still needs its native toolchain. The Windows bounded command
+  for compilation/packaging without tests is:
 
   ```powershell
   .\scripts\build-local.ps1 -SkipTests -LowResource
   ```
 
   That command packages artifacts and cleans dist safely; it is not needed for
-  documentation changes. Existing native build settings use one Gradle worker
-  and a 1536 MiB heap. A future WebRTC source build needs its own bounded resource
+  documentation changes. `-LowResource` explicitly sets one Gradle worker and
+  a 1536 MiB heap; ordinary Gradle defaults are four workers/a 3 GiB heap. A future
+  WebRTC source build needs its own bounded resource
   plan and must not silently launch a large parallel build.
 - Keep source/private releases private, website waitlist-only, Windows portable
   EXE, Android package/signing continuity, and all three agent files identical.
@@ -88,9 +97,9 @@ exists merely because it is described in the plan.
 
 | ID | Status | Deliverable | Exit evidence |
 | --- | --- | --- | --- |
-| M0 | Not started | Native library/binding decision and local build feasibility | Exact source/version/artifact provenance, target/ABI list, licenses/notices, resource plan, codec/capture bridge and dependency-size estimate for Windows and Android. A locally compiling adapter when implementation resumes; runtime still unverified while paused. |
-| M1 | Not started | Extract transport boundary, retaining current TLS behavior | Small reversible refactor covering session vs transport lifetime; approval/Stop/epoch/input semantics unchanged. Relevant checks after test pause is lifted. |
-| M2 | Not started | Authenticated WebRTC proof behind a development-only opt-in | Both adapters, fingerprint binding and bounded synthetic data-channel exchange over existing TLS bootstrap; no fake production route label. Runtime proof requires explicit test resumption. |
+| M0 | In progress | Native library/binding decision and local build feasibility | Pinned desktop/Android artifact/ABI/size/hash inventory and opt-in adapters exist. Finish compilation/runtime evidence, native license/build provenance and media bridge feasibility before marking complete. |
+| M1 | Complete | Extract transport boundary, retaining current TLS behavior | `SessionTransport` extracted; `Wire` retains protocol 4/TLS framing and Stop still closes setup sockets. Both target source compilation and ordinary approval/Stop/epoch/input checks passed locally; native Windows-only integration remains untested. |
+| M2 | In progress | Authenticated WebRTC proof behind a development-only opt-in | Bounded native data-channel adapters and pinned-TLS/secret bootstrap fixture exist; no production route label. Five desktop proof checks passed with real Linux JNI. Android source/test APKs compile; Android instrumentation/interoperation pending. |
 | M3 | Not started | Screen and playback audio tracks in both directions | Capture/encode/decode/render ownership documented; no microphone, double capture or unbounded media queues. Real device frame-age/quality/CPU evidence when allowed. |
 | M4 | Not started | Direct control/clipboard/files and safe route cutover | Direct payload in both directions, ordered input/paste, verified files, transfer backpressure, old-path rejection and deterministic Stop. No claim of all-direct while file bytes still relay. |
 | M5 | Not started | HTTPS signaling and deployable TURN fallback in sibling infra PR | Reviewed authentication/schema, bounded endpoints, scoped credentials, selected provider, external UDP/TCP/TLS reachability, rollback and live validation when authorized. Current Railway TCP bootstrap is not sufficient. |
@@ -109,12 +118,12 @@ lands; do not check a milestone off for only writing its plan.
 | Engine/bindings | Prefer maintained native WebRTC | Pinned candidate comparison, local build/packaging feasibility on both targets |
 | Initial bootstrap | Existing pinned TLS for isolated proof | Explicit feature capability/version strategy; proof limitations documented |
 | Full signaling | Authenticated, end-to-end protected messages over HTTPS | API version, mailbox/WS choice, crypto/transcript review, size/rate/TTL limits |
-| Relay | Preserve legacy fallback during migration; evaluate TURN | Provider/public UDP support, costs, credential issuance/rotation and abuse controls |
+| Relay | Preserve legacy fallback; select managed Cloudflare TURN | Owner has no Cloudflare account. Account creation/key access, scoped credential issuance/rotation, quotas, billing controls and external reachability remain required. Railway public HTTP/TCP proxies do not provide the needed public relay UDP range |
 | Capture bridge | Preserve platform permission/service ownership | Codec/surface bridge, Windows hardware encoder and Android receive path |
 | Cutover | Explicit transport-generation commit inside one approved session | Exact failure/rollback state machine; file and input ordering policy |
 | Old clients | No silent schema extensions or downgrade | Deliberate compatibility behavior or clear update requirement |
 
-## Acceptance matrix, queued until tests are explicitly resumed
+## Acceptance matrix, now authorized but not yet completed
 
 Record actual OS versions, native dependency revision, network conditions, codec,
 resolution, build hashes and measured results. Never record codes, credentials,
@@ -137,7 +146,7 @@ physical hardware/network cases as untested, not passed.
 | Sound | Playback-only source, mute/denial, A/V behavior and cleanup. Run only after explicit permission to resume audio checks. |
 | Cleanup/build | Close sockets/threads/native handles/TURN allocations; remove sharing notification after Stop. Local portable EXE and same-key APK; clean dist only after successful build. |
 
-## Verification of this handoff
+## Historical verification of the original planning commit
 
 - Source and documentation reviewed for the two recorded repository revisions.
 - Reference material checked: native WebRTC build requirements, peer connections,
@@ -149,11 +158,42 @@ physical hardware/network cases as untested, not passed.
 - No builds, tests, app/emulator launches, audio checks, live probes, deployment or
   release performed for this PR. The existing 0.7.1 distribution stays as delivered.
 
-After a later implementation, replace the last two bullets with dated evidence
-that accurately describes that work, keeping historical claims clearly scoped.
+The bullets above describe only the original planning commit, not later code.
+Current implementation evidence belongs below and in the native proof guide.
 Update [architecture](../ARCHITECTURE.md), [protocol](../PROTOCOL.md),
 [security](../../SECURITY.md), [platforms](../PLATFORMS.md),
 [performance](../PERFORMANCE.md), [files/clipboard](../FILES_AND_CLIPBOARD.md),
 [verification](../VERIFICATION.md), [third-party notices](../../THIRD_PARTY.md)
 and release instructions as their behavior changes. Keep this plan labeled planned
 until implementation and acceptance evidence justify changing its status.
+
+## Implementation evidence, 10 October 2026
+
+- Owner resumed implementation, tests and audio checks; delegated TURN choice and
+  authorized a local workaround for the unavailable Windows host.
+- `SessionTransport` separates packet operations/peer addressing from concrete
+  `Wire`, with unchanged session consent and TLS protocol 4.
+- Native adapters and fixture exist only under `-Pbetterdesk.rtcProof=true`.
+  Normal builds retain the existing dependency set and transport behavior.
+- Initial local desktop source compilation passed. Initial suite: 55 checks,
+  39 passed, 10 failed, six opt-in checks skipped. Failures were Linux native
+  decoder check constructing the Windows platform on Linux, and missing Node
+  fixture dependencies. The rerun passed the three native proof checks and nine
+  broker checks (51 passed, one failed, six skipped); the remaining Windows
+  decoder-wrapper fixture was split into a portable decoder check plus an explicit
+  Windows-only integration check. Final suite: 62 checks, 54 passed, eight skipped,
+  no failures. All five native proof checks passed (4.383 seconds). Skips include
+  six existing opt-in checks, Windows platform integration and the dedicated-device
+  host proof, which is now being run separately.
+- Opt-in Android source/test compilation and both APK packages passed. A fresh API
+  36.1 Android 16 emulator booted; initial install commands timed out but the APK
+  later appeared in the package manager. Retry with four GiB RAM/default Vulkan
+  is running. The separate host run failed before native setup because the retry
+  emulator was still booting; a boot-readiness guard was added. Instrumentation and
+  desktop/Android native interoperation remain pending.
+- Sibling infrastructure ordinary suite passed all ten checks; no server source
+  was changed or deployed. Cloudflare provisioning needs a new owner account.
+- A local Windows VM was investigated, but Microsoft's official media download
+  flow returned an error and Access Denied. No Windows VM/media was installed.
+- No production signaling/route/media/input/file implementation, infrastructure
+  deployment, version bump, portable Windows build or app release yet.

@@ -50,7 +50,7 @@ class HelpSession(
     private var work: Job? = null
     @Volatile private var server: SSLServerSocket? = null
     @Volatile private var socket: SSLSocket? = null
-    @Volatile private var wire: Wire? = null
+    @Volatile private var wire: SessionTransport? = null
     private val authorized = AtomicBoolean(false)
     @Volatile private var generation = 0L
     @Volatile private var sentFrame = 0L
@@ -213,7 +213,7 @@ class HelpSession(
                 platform.keepConnectionAlive(true)
                 val identity = withContext(Dispatchers.IO) { TlsIdentity.create() }
                 val hosts = withContext(Dispatchers.IO) { runCatching { localAddresses() }.getOrDefault(emptyList()) }
-                var connection: Wire? = null
+                var connection: SessionTransport? = null
                 var invitation: Invitation? = null
                 if (hosts.isNotEmpty() && (deviceCode == null || localDiscovery)) {
                     var paired = false
@@ -324,7 +324,7 @@ class HelpSession(
         candidate.soTimeout = 8000; candidate.tcpNoDelay = true
     }
 
-    private fun accept(listener: SSLServerSocket, invitation: Invitation, current: Long): Wire {
+    private fun accept(listener: SSLServerSocket, invitation: Invitation, current: Long): SessionTransport {
         var failed = 0
         while (current == generation && System.currentTimeMillis() < invitation.expires && failed < 12) {
             val candidate = try { listener.accept() as SSLSocket } catch (_: java.net.SocketTimeoutException) { continue }
@@ -395,7 +395,7 @@ class HelpSession(
                     check(invitation.expires > System.currentTimeMillis())
                     val connection = withContext(Dispatchers.IO) {
                         val context = TlsIdentity.client(invitation.fingerprint)
-                        var connected: Wire? = null
+                        var connected: SessionTransport? = null
                         if (invitation.relayTicket != null) {
                             val client = relayFactory() ?: error("Internet unavailable")
                             relayClient = client
@@ -449,7 +449,7 @@ class HelpSession(
         }
     }
 
-    private fun startMedia(connection: Wire, current: Long, viewOnly: Boolean) {
+    private fun startMedia(connection: SessionTransport, current: Long, viewOnly: Boolean) {
         if (mediaWork?.isActive == true) return
         val media = ++mediaGeneration
         val streamEpoch = epoch
@@ -473,7 +473,7 @@ class HelpSession(
                     if (current != generation || media != mediaGeneration) return@coroutineScope
                     mutable.value = mutable.value.copy(stage = Stage.SHARING, remoteControl = control, audioAvailable = sound)
                     withContext(Dispatchers.IO) { connection.send(Message("ready", control = control, audio = sound, epoch = streamEpoch)) }
-                    socket?.inetAddress?.let { exchange.start(it, mutable.value.viaRelay) }
+                    exchange.start(connection.peerAddress, mutable.value.viaRelay)
                     launch(Dispatchers.IO) {
                         for (frame in frames) {
                             if (!authorized.get() || current != generation || media != mediaGeneration) break
@@ -613,7 +613,7 @@ class HelpSession(
         }
     }
 
-    private suspend fun pump(connection: Wire, current: Long) = coroutineScope {
+    private suspend fun pump(connection: SessionTransport, current: Long) = coroutineScope {
         val heartbeat = launch(Dispatchers.IO) {
             while (isActive) {
                 delay(750)
@@ -660,7 +660,7 @@ class HelpSession(
                                 check(viewer && !incomingReady && packet.message.epoch == epoch); incomingReady = true; incomingAudio = packet.message.audio
                                 withContext(Dispatchers.Main) {
                                     mutable.value = mutable.value.copy(remoteControl = packet.message.control, audioAvailable = packet.message.audio)
-                                    socket?.inetAddress?.let { exchange.start(it, mutable.value.viaRelay) }
+                                    exchange.start(connection.peerAddress, mutable.value.viaRelay)
                                     if (packet.message.audio && !mutable.value.muted) platform.startAudioPlayback()
                                 }
                             }

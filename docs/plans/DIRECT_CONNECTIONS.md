@@ -1,7 +1,7 @@
 # Direct Internet connections: proposed design
 
-Status: **planned, not implemented**. Prepared 10 October 2026 for a draft PR that
-the owner or another agent can continue later. Start with the
+Status: **implementation started; direct sessions are not enabled**. Prepared
+10 October 2026 and continued at the owner's request. Start with the
 [handoff and work checklist](DIRECT_CONNECTIONS_HANDOFF.md). This document describes
 the intended feature, not the capabilities of the current release.
 
@@ -85,7 +85,10 @@ flowchart LR
     R <-->|Fallback| A
 ```
 
-The native library/binding and its pinned version are **not selected**. Assess
+The [native feasibility proof](../../experimental/README.md) provisionally selects
+webrtc-java 0.19.0 for desktop and webrtc-sdk Android 150.7871.01. Both adapters are
+behind an explicit build opt-in and have no connection to production sessions.
+This is not a completed integration or a shipped direct-connection feature. Assess
 Windows JVM/JNI packaging, Android ABI support, hardware capture/codec integration,
 memory/CPU/battery footprint, maintenance, notices and supply-chain verification.
 A smaller ICE/data-channel implementation is a valid alternative only if the
@@ -93,9 +96,10 @@ proposal also accounts for media congestion control, codecs and loss recovery.
 Keep rationale and measured evidence here if a later agent improves the choice.
 
 Native WebRTC's Android source workflow requires Linux. Establish a reproducible
-local solution: a verified dependency artifact or a bounded build using Linux on
-the owner's PC, subject to the available toolchain. Do not silently move builds to
-fleet VMs, GitHub Actions or hosted CI. Do not download/build the full WebRTC tree
+local solution using inspected dependency artifacts. The owner authorized bounded
+local Linux compilation/synthetic testing on this VM on 10 October 2026 because
+no reachable Windows host is available. Windows capture/packaging coverage remains
+pending; no cloud native build is authorized. Do not download/build the full WebRTC tree
 as an incidental planning step. [Upstream Android build instructions](https://webrtc.googlesource.com/src/+/main/docs/native-code/android/)
 
 ### Separate session ownership from transport ownership
@@ -219,11 +223,18 @@ describes HTTP/TCP ingress; private-network UDP support does not establish publi
 UDP reachability. Public UDP allocation/relay support must be verified before
 selecting Railway for STUN/TURN. [Railway TCP proxy](https://docs.railway.com/networking/tcp-proxy)
 
-Evaluate a dedicated UDP-capable host running maintained TURN software (for
-example [coturn](https://github.com/coturn/coturn)) or a suitable managed TURN
-service. Provider, region, credentials, DNS and spending are **not selected or
-provisioned**. Do not reuse unrelated project secrets or repurpose fleet machines
-without an explicit hosting decision. Recheck current provider capabilities.
+The owner delegated the hosting choice on 10 October 2026. Select
+[Cloudflare Realtime TURN](https://developers.cloudflare.com/realtime/turn/)
+for the managed fallback rather than operating a new TURN host. Its documented
+service supports UDP, TCP and TLS (including TLS on 443). The documented free
+allowance is 1,000 GB, with additional egress at $0.05/GB; verify account terms and
+billing controls before provisioning. Account-scoped key access, credential
+issuance, quotas and external reachability remain **not provisioned or verified**.
+The owner has no Cloudflare account; creating one is a provisioning prerequisite.
+The dashboard login was checked, but no account, key or billable resource was created.
+The Railway relay remains the working production fallback. Do not reuse unrelated
+project secrets or repurpose fleet machines. See [credential generation](https://developers.cloudflare.com/realtime/turn/generate-credentials/)
+and [pricing FAQ](https://developers.cloudflare.com/realtime/turn/faq/).
 
 Requirements before deployment: UDP and appropriate TCP/TLS fallback listeners,
 real external reachability tests, short-lived scoped credentials, quotas and rate

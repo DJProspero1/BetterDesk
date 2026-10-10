@@ -6,7 +6,7 @@ The source is hosted in a private GitHub repository during development. All nati
 
 ## Current milestone
 
-Version 0.7.1 is an **early Internet-connected development build**, not a production remote-support release. Connections prefer a reachable local network and otherwise use the BetterDesk Railway relay. It has not been externally security-audited. Local binaries are distributed through the private repository's GitHub Releases; the website remains a waitlist. Update both devices together: this version uses session protocol 4. Keyboard fixes and transfer paths have compilation checks, not interactive or throughput verification; tests remain paused at the owner's request.
+Version 0.7.1 is an **early Internet-connected development build**, not a production remote-support release. Connections prefer a reachable local network and otherwise use the BetterDesk Railway relay. It has not been externally security-audited. Local binaries are distributed through the private repository's GitHub Releases; the website remains a waitlist. Update both devices together: this version uses session protocol 4. Keyboard fixes and transfer paths have compilation checks, not interactive or throughput verification; those runtime gaps remain unverified. The owner resumed tests for direct-connection work on 10 October; see [dated verification](docs/VERIFICATION.md).
 
 - Windows and Android have the same home screen: this device's code, another device's code, and Connect.
 - Enter the other device's twelve-digit code. Its owner explicitly approves sharing. If the connection service is unavailable, an eight-digit code is available for the local network.
@@ -76,7 +76,8 @@ Treat codes as temporary secrets. A displayed device name is a label, not a veri
 
 ## Documentation
 
-Direct Internet connections are planned, not implemented. The
+Direct Internet connection implementation has started behind a development-only
+build opt-in; it is not enabled in either app. The
 [design](docs/plans/DIRECT_CONNECTIONS.md) and
 [agent handoff](docs/plans/DIRECT_CONNECTIONS_HANDOFF.md) describe the proposed
 automatic LAN/direct/relay flow, source map, open decisions and delivery checklist.

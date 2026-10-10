@@ -1,9 +1,51 @@
 # Local verification
 
+## Direct transport implementation, 10 October 2026: local proof
+
+The owner resumed implementation, tests, app/emulator checks and audio checks for
+this work. No app version was changed or released. `SessionTransport` preserves
+production pinned TLS and protocol 4; the native proof is excluded from ordinary
+builds. See the [proof commands and dependency inventory](../experimental/README.md).
+
+Local Linux/JDK 17 compilation passed for desktop and Android with one Gradle
+worker, a 1536 MiB heap and two visible processors. Both final Android proof APKs
+packaged successfully. The full suite ran 62 checks: **54 passed, zero failures,
+eight skipped**. Five proof checks passed with real Linux WebRTC JNI in 4.383
+seconds: authenticated native binary exchange, Stop during setup, duplicate
+negotiation rejection, malformed SDP bounds and signaling context validation.
+The portable AVC decoder and all nine broker fixture checks also passed. The
+sibling infrastructure suite passed all ten checks with no server source changes.
+
+Skips were six existing native/device/benchmark opt-ins, Windows platform decoder
+integration and the dedicated Android interoperability host check. A separate
+opt-in Android host run failed at APK installation while the restarted emulator
+was still booting (1.227 seconds); it never reached native setup. A boot-readiness
+precondition was added before installation. Android runtime evidence is pending. The fresh API 36.1/Android 16 emulator reached
+boot completion; APK install commands timed out before the app later appeared in
+the package manager. It was restarted with four GiB RAM/default Vulkan for retry.
+These environment attempts are not Android native proof success.
+
+Final local proof APK SHA-256 values:
+
+- App: `6ea105eec29d15770f33c001e72f80ffe5aa0c3069ab5ac396ed173d8466bf3a`.
+- Instrumentation: `661920cbc248cd4c101d56255085e973cd45a164aa585a9421f3275b30a2d0b3`.
+
+These are fresh test-emulator debug builds, not same-key updates to the existing
+private release. Windows native load/capture/packaging, physical/OEM devices,
+separate external networks, TURN reachability, RTP screen/sound, route cutover,
+clipboard/files and delivered performance are **untested or not implemented**.
+The proof creates no screen/audio source; no new native playback-audio check was
+performed. Cloudflare TURN remains selected but needs an owner account/key and
+scoped server credential issuance. A local Windows VM was investigated; the
+Microsoft media flow returned an error/Access Denied, so no Windows media/VM was
+installed. No deployment, publication or infrastructure change occurred.
+
 ## Version 0.7.1, 10 October 2026: keyboard fixes
 
-Tests, app launches, emulator/device checks and audio workloads remain paused by
-the owner. Windows and Android are compiled/packaged locally with one Gradle worker
+At delivery of these keyboard fixes, tests, app launches, emulator/device checks
+and audio workloads were paused by the owner. The pause was lifted for the later
+direct-connection implementation; those later checks do not retroactively verify
+the delivered Windows binary. Windows and Android are compiled/packaged locally with one Gradle worker
 and a 1536 MiB heap. Artifact checks and source identity are recorded in the final
 BUILD-INFO.txt/SHA256SUMS.txt. No runtime keyboard or timing result is claimed.
 

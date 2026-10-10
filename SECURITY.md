@@ -55,6 +55,21 @@ This is an early prototype, not audited remote-support software. Report issues p
 
 Before production: independent protocol/platform audit, dependency/license review, signed updates, abuse handling, physical-device compatibility testing, denial-of-service testing, and clear release privacy/distribution policies.
 
+## Development-only direct transport proof
+
+The native proof is excluded unless the build explicitly sets
+`betterdesk.rtcProof=true`. It creates synthetic local data channels, never capture
+or input. Production still uses the code-authenticated, pinned TLS protocol above.
+Its SDP travels inside pinned TLS with a random fixture secret and context-bound
+session/identity/generation/expiry/fingerprint validation. Queues, sizes, native
+buffering and lifetime are bounded; native debug logging is disabled.
+
+This proof is not production signaling security. It has no public TURN service,
+production ICE destination policy, routing/cutover integration or independent
+native supply-chain audit. Do not accept untrusted mailbox SDP through its adapter
+or infer public Internet/physical-device coverage from a local fixture. See the
+[proof guide](experimental/README.md) and [dated verification](docs/VERIFICATION.md).
+
 ## Reporting a vulnerability
 
 While the repository is private, contact its owner through the established private
