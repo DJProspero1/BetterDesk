@@ -101,6 +101,11 @@ shipping. Neither is implemented in 0.7.0. See [MulticastLock](https://developer
 
 ## Next milestones
 
+The [direct Internet connection plan](plans/DIRECT_CONNECTIONS.md) and
+[implementation handoff](plans/DIRECT_CONNECTIONS_HANDOFF.md) expand the proposed
+media/transport work below. They document future work; the current release still
+uses direct LAN or the Railway TCP relay.
+
 1. Prove both directions on physical Windows/Android devices and improve denied-permission recovery and text-entry feedback.
 2. Improve mobile desktop control with trackpad mode, zoom and monitor selection.
 3. Evaluate a proven hardware-video/transport engine; replace JPEG streaming where justified.

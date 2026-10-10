@@ -76,12 +76,18 @@ Treat codes as temporary secrets. A displayed device name is a label, not a veri
 
 ## Documentation
 
+Direct Internet connections are planned, not implemented. The
+[design](docs/plans/DIRECT_CONNECTIONS.md) and
+[agent handoff](docs/plans/DIRECT_CONNECTIONS_HANDOFF.md) describe the proposed
+automatic LAN/direct/relay flow, source map, open decisions and delivery checklist.
+
 | Guide | Purpose |
 | --- | --- |
 | [Contributing](CONTRIBUTING.md) | Workflow, review expectations and matching agent instructions |
 | [Development](docs/DEVELOPMENT.md) | Toolchain, fresh checkout, local builds and source map |
 | [Product](PRODUCT.md) / [Design](DESIGN.md) | Shared flow, visual rules and platform consistency |
 | [Architecture](docs/ARCHITECTURE.md) / [Protocol](docs/PROTOCOL.md) | Components, state, LAN/relay pairing, encryption and wire format |
+| [Direct connections plan](docs/plans/DIRECT_CONNECTIONS.md) / [Agent handoff](docs/plans/DIRECT_CONNECTIONS_HANDOFF.md) | Proposed Internet P2P design, implementation milestones and acceptance criteria; not shipped |
 | [Platforms and troubleshooting](docs/PLATFORMS.md) | Permissions, lifecycle, saved data, capabilities and current limits |
 | [Sound and screen switching](docs/AUDIO_AND_SWITCHING.md) | Native audio, consented direction changes and limitations |
 | [Files and clipboard](docs/FILES_AND_CLIPBOARD.md) | Native copy/paste, Android Share, transfer status, protocol and limits |

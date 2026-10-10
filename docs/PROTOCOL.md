@@ -1,4 +1,4 @@
-# Connection protocol, application version 0.7.0
+# Connection protocol, application version 0.7.1
 
 This is an implementation guide, not a frozen interoperability standard or a
 security audit. Update both apps together. Authoritative implementations are
@@ -17,7 +17,7 @@ to choose. The viewer creates the ephemeral TLS identity and acts as the TLS
 server, even over an outbound relay socket. The sharing device pins that identity
 and sends screen frames. Input travels in the opposite direction.
 These media roles can reverse after local switch approval; TLS client/server roles
-stay fixed. Session wire protocol is now 3; the opaque relay API remains version 1.
+stay fixed. Session wire protocol is now 4; the opaque relay API remains version 1.
 
 ```mermaid
 sequenceDiagram
