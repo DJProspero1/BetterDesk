@@ -4,6 +4,23 @@ This records user-visible milestones. Native artifacts remain local development
 builds; dates do not imply a public release. Validation is in
 [docs/VERIFICATION.md](docs/VERIFICATION.md).
 
+## 0.7.0 - 2026-10-10
+
+- Session-scoped file and clipboard exchange, with the same Send files, compact
+  progress, Save/Decline, Cancel, Retry and Open folder flow on both platforms.
+- Windows virtual-file clipboard for Explorer copy/paste, text/images, remote
+  Ctrl+C/Ctrl+V/Ctrl+A, and file drops onto BetterDesk.
+- Android native multi-file picker, Share menu, scoped Downloads saving and explicit
+  Send clipboard. Its existing silent notification reflects transfer progress.
+- Separate pinned TLS file connections, chunk acknowledgements, same-session
+  partial retry, SHA-256 verification, strict path/size bounds and no silent overwrite.
+- Clipboard readiness barrier before remote paste, short reduced-motion-aware
+  transitions, persistent failures and bounded transfer details.
+- Protocol 3 and Android versionCode 8: update both devices. Initial bounds are
+  128 entries/1 GiB per batch and 4 MiB/s relay pacing. No throughput claim.
+- Low-resource local packaging and explicit skipped-test metadata. Tests and audio
+  checks remain paused; new interactive/native transfer behavior is unverified.
+
 ## 0.6.0 - 2026-10-09
 
 - Native device playback sound in both directions, with viewer mute; no microphone capture.

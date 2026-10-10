@@ -1,4 +1,4 @@
-# Connection protocol, application version 0.6.0
+# Connection protocol, application version 0.7.0
 
 This is an implementation guide, not a frozen interoperability standard or a
 security audit. Update both apps together. Authoritative implementations are
@@ -17,7 +17,7 @@ to choose. The viewer creates the ephemeral TLS identity and acts as the TLS
 server, even over an outbound relay socket. The sharing device pins that identity
 and sends screen frames. Input travels in the opposite direction.
 These media roles can reverse after local switch approval; TLS client/server roles
-stay fixed. Session wire protocol is now 2; the opaque relay API remains version 1.
+stay fixed. Session wire protocol is now 3; the opaque relay API remains version 1.
 
 ```mermaid
 sequenceDiagram
@@ -145,8 +145,8 @@ validate dimensions/content. Unknown packet types fail. Message decoding rejects
 unknown JSON fields; known optional properties use defaults. This requires care
 when changing the schema: there is no general backwards-compatibility negotiation.
 
-The sharing side sends `hello` with the invitation secret and `protocol=2` after
-TLS pin validation. The viewer replies `accepted` with `protocol=2`, its codec
+The sharing side sends `hello` with the invitation secret and `protocol=3` after
+TLS pin validation. The viewer replies `accepted` with `protocol=3`, its codec
 preference and audio receive capability. Missing/wrong versions fail before media.
 After actual capture permission/setup, the source sends `ready` with control/audio
 availability and the current epoch. Every frame, audio packet, input, acknowledgement
@@ -154,6 +154,26 @@ and heartbeat carries that epoch. Audio IDs are positive and monotonically incre
 per direction; epochs start at zero and advance once per completed switch.
 Normal messages are `ping`, `frameAck`, `capability` (control revoked) and `input`.
 Closing transport ends the session; there is no persistent-access token.
+
+Protocol 3 adds `exchangeClipboard` (session toggle), `exchangeText` (bounded text
+and revision in `action`), `exchangeOffer` (bounded JSON FileOffer),
+`exchangeRequest` (JSON TransferLink), `exchangeCancel`, `exchangeFailure`,
+`exchangeBarrier` and `exchangeBarrierAck`. Cancel/failure use an offered ID in
+`text`; barrier uses a request token in `text`, expected clipboard revision in
+`secret`, and acknowledgement success in `control`. These are scoped to the
+connection generation and survive a screen-direction epoch change. Control writes
+use a bounded FIFO; a paste waits for the matching clipboard readiness acknowledgement.
+
+The manifest contains only an ID, relative paths, lengths, directory flags and
+kind (`files`, `clipboard`, `image`). The link carries a batch ID, new TLS pin,
+secret, expiry, and either a same-peer LAN port or Railway ticket. Bulk transfer
+never uses a screen packet type: its separate TLS connection uses file protocol 1.
+After ID/secret authentication the receiver sends each file index and bounded resume
+offset. Sender chunks are length-prefixed, at most 65,536 bytes. Every eight chunks
+the receiver acknowledges the current offset and screen-pressure flag. A zero-length
+chunk ends a file and is followed by its 32-byte SHA-256 digest. Receiver verifies
+and acknowledges each file, then the batch. No byte can address an unoffered path.
+See [files and clipboard](FILES_AND_CLIPBOARD.md) for limits and native interoperation.
 
 `switchRequest` contains a random 43-character token in `text` and the current
 epoch. A matching `switchAccepted` requires the remote person's approval;
@@ -173,7 +193,7 @@ Dropped predictive frames trigger bounded keyframe recovery rather than unbounde
 buffering. See [PERFORMANCE.md](PERFORMANCE.md).
 
 Input is an allowlist: `tap`, `right`, `swipe`, `scrollUp`, `scrollDown`, `text`,
-`back`, `home`, `enter`, `backspace`. Coordinates must be finite and within 0..1;
+`back`, `home`, `enter`, `backspace`, `copy`, `paste`, `selectAll`. Coordinates must be finite and within 0..1;
 text is limited to 512 Kotlin string units. Input references a recent frame,
 requires fresh capture within two seconds and current control authorization, and
 is rate-limited at the source. Both platform adapters add their own restrictions.

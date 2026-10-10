@@ -3,6 +3,7 @@ package app.betterdesk.core
 import androidx.compose.ui.graphics.ImageBitmap
 
 interface RemotePlatform {
+    val exchange: ExchangePlatform? get() = null
     val isAndroid: Boolean
     val defaultName: String
     var languageTag: String?

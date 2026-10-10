@@ -82,6 +82,12 @@ The script disables Kotlin incremental compilation to avoid stale-cache behavior
 observed in this environment. `-SkipTests` is available for packaging after the
 relevant tests have already passed; never describe that invocation as a test run.
 
+When the owner explicitly suspends tests, honor that suspension and record the
+missing coverage. `./scripts/build-local.ps1 -SkipTests -LowResource` compiles and
+packages with one worker, a 1536 MiB Gradle heap and the Kotlin compiler in-process.
+It does not launch either app, an emulator, audio fixtures or tests. BUILD-INFO.txt
+records skipped tests. Local artifact creation does not establish runtime behavior.
+
 After the initial build, individual tasks can use the same junction:
 
 ```powershell

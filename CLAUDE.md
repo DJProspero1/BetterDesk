@@ -110,9 +110,15 @@ These rules apply to work in this repository. Read [PRODUCT.md](PRODUCT.md) and
   contents, audio samples or typed text. Keep secrets outside source/build outputs and use
   synthetic content for test screenshots. Aggregate local performance counters
   are allowed; telemetry and screen recording are not.
-- Do not add automatic clipboard reading, file transfer, microphone access or
-  persistent access without a new product decision. Remote input must not operate
-  BetterDesk's own approval controls or bypass OS security screens.
+- Clipboard and file exchange are approved only inside an attended connection.
+  Observe the Windows clipboard only while both devices enable it; never export
+  the pre-session clipboard automatically. Android uses explicit clipboard/share
+  actions and native document access. Copy files on request, keep bytes encrypted,
+  bound metadata/storage/queues, verify integrity, and never overwrite silently.
+  Keep transfers separate from screen/audio/input and revoke them on disconnect.
+  Microphone or persistent access still requires a new product decision. Remote
+  input must not operate BetterDesk's own approval controls or bypass OS security
+  screens. Native clipboard integration is not blanket file-system access.
 - Stop revokes input and capture promptly; do not quietly reconnect or authorize
   another session. A stored accessibility grant is not future-session consent.
 - This is an early implementation, not externally audited software. Document
@@ -150,6 +156,10 @@ These rules apply to work in this repository. Read [PRODUCT.md](PRODUCT.md) and
 
 ## Testing and documentation
 
+- Respect an explicit user pause on tests across feature requests. Do not restart
+  tests, emulators, interactive/audio fixtures or benchmark workloads without a
+  new request to do so. Compile/package separately with tests skipped, keep local
+  resource usage bounded, and report missing runtime coverage clearly.
 - Test every code change with checks relevant to its behavior. Check both native
   targets for shared changes. Run the ordinary suite and local builds before a
   delivery; add platform/transport checks where the change requires them.

@@ -1,5 +1,11 @@
 # Testing
 
+The owner paused test and audio execution for the 0.7 file/clipboard feature.
+Do not run the commands below until tests are requested again. Compile/package
+with `scripts/build-local.ps1 -SkipTests -LowResource`; report runtime coverage
+as unverified. The 0.6 suite and measurements below are historical, not evidence
+for native Explorer paste, Android sharing or the new transfer protocol.
+
 Run all checks locally. Use synthetic content and dedicated test devices. Native
 capture/input tests and UI tests can open windows or interact with a device;
 coordinate them with the person using it. Never capture unrelated private work

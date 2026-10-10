@@ -26,6 +26,22 @@ This is an early prototype, not audited remote-support software. Report issues p
   a render-endpoint WASAPI loopback stream. Neither opens the microphone. No audio
   is recorded to disk or included in logs. Audio packet size and queues are bounded.
 - This version has no trusted-device/unattended mode. A stored Android accessibility grant does not authorize any future session.
+- Session protocol 3 includes approved file/clipboard exchange. Only new Windows
+  clipboard content is observed automatically, while both devices enable it;
+  Android uses explicit foreground actions. File manifests identify user-selected
+  handles, never arbitrary remote paths. A paste barrier acknowledges the expected
+  clipboard revision before forwarding paste input.
+- Bulk transfers use a different ephemeral pinned TLS connection, authenticated
+  with a secret sent inside the approved screen connection. LAN destinations are
+  restricted to the existing peer; Railway routing still comes from validated
+  configuration. Paths, entry counts, bytes, images and pending offers are bounded.
+  SHA-256 checks gate completion. Disconnect closes file sockets and invalidates
+  native clipboard capabilities; no automatic file execution or silent overwrite.
+  Private transfer cache can contain file bytes until teardown; interrupted cleanup
+  or open Explorer handles can leave remnants. See [files and clipboard](docs/FILES_AND_CLIPBOARD.md).
+- The new OLE/Android file paths have not undergone runtime/security testing in
+  0.7.0 because tests were paused by the owner. Compilation is not an assurance of
+  correct shell interoperation, cancellation, throughput or adversarial robustness.
 
 Before production: independent protocol/platform audit, dependency/license review, signed updates, abuse handling, physical-device compatibility testing, denial-of-service testing, and clear release privacy/distribution policies.
 

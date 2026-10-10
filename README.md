@@ -6,7 +6,7 @@ The source is hosted in a private GitHub repository during development. All nati
 
 ## Current milestone
 
-Version 0.6 is an **early Internet-connected development build**, not a production remote-support release. Connections prefer a reachable local network and otherwise use the BetterDesk Railway relay. It has not been externally security-audited. Verified local binaries are distributed through the private repository's GitHub Releases; the website remains a waitlist. Update both devices together: the screen/audio protocol changed in this version.
+Version 0.7 is an **early Internet-connected development build**, not a production remote-support release. Connections prefer a reachable local network and otherwise use the BetterDesk Railway relay. It has not been externally security-audited. Local binaries are distributed through the private repository's GitHub Releases; the website remains a waitlist. Update both devices together: this version uses session protocol 3. The new transfer paths have compilation checks, not interactive or throughput verification; tests remain paused at the owner's request.
 
 - Windows and Android have the same home screen: this device's code, another device's code, and Connect.
 - Enter the other device's twelve-digit code. Its owner explicitly approves sharing. If the connection service is unavailable, an eight-digit code is available for the local network.
@@ -16,6 +16,7 @@ Version 0.6 is an **early Internet-connected development build**, not a producti
 - Viewing enters native full-screen mode on both platforms. **Exit full screen** stays visible without opening Controls. The remote image fits the display without cropping; **Controls** opens input, sound and disconnect actions as an overlay. The app header is absent during viewing, including after Android rotation.
 - Either device can request **Switch screens**. The other device approves before the old capture/input stops and the direction reverses. No new code is needed. Native Android sharing permission still applies. Decline or cancel keeps the current direction.
 - Device playback audio travels through the same encrypted connection. Windows uses native WASAPI loopback; Android 10+ uses playback capture from apps that allow it. The microphone is never captured. **Mute** affects the viewer's sound; denied/unsupported capture keeps the screen connection working. See [sound and switching](docs/AUDIO_AND_SWITCHING.md).
+- **Send files** works in either direction with inline Save/Decline, progress, Cancel and receiver Retry. Windows integrates Explorer copy/paste and file drops; Android integrates its file picker, Downloads and Share menu. Clipboard on/off is session-scoped; Android needs explicit Send clipboard. File bytes use separate pinned TLS connections with integrity checks, bounded memory and pacing. See [files and clipboard](docs/FILES_AND_CLIPBOARD.md) for the 1 GiB/128-entry limits and platform differences.
 - One connection/monitor icon appears in the app, Android launcher and notification, and Windows EXE/taskbar. Regenerate assets locally with `scripts/generate-icons.ps1`.
 - Direct TLS connection with certificate pinning, a random 256-bit invitation secret, five-minute invitation expiry, one recipient, and no persistent identity or permanent access.
 - Native Windows Desktop Duplication capture, with a compatible GDI fallback. Streaming keeps bounded queues and uses an acknowledgement window of four frames locally or twelve through the relay. See [performance measurements](docs/PERFORMANCE.md) for measured results and limits; 60 FPS is not guaranteed.
@@ -36,8 +37,8 @@ Create ignored `local.properties` with `sdk.dir=C:/path/to/Android/Sdk`.
 
 Outputs:
 
-- **Windows: `dist/BetterDesk-Windows-0.6.0.exe`**. Double-click. No installer, ZIP extraction or separate Java installation.
-- **Android: `dist/BetterDesk-Android-0.6.0-debug.apk`**. Install as an update over the previous APK; the same local debug signing key is used.
+- **Windows: `dist/BetterDesk-Windows-0.7.0.exe`**. Double-click. No installer, ZIP extraction or separate Java installation.
+- **Android: `dist/BetterDesk-Android-0.7.0-debug.apk`**. Install as an update over the previous APK; the same local debug signing key is used.
 - Local checks: `desktop/build/reports/tests/test/index.html`.
 - Rendered UI checks: `desktop/build/screenshots/`.
 
@@ -61,7 +62,7 @@ Treat codes as temporary secrets. A displayed device name is a label, not a veri
 
 ## Known limits
 
-- No unattended access, saved screen/audio recordings, file transfer, automatic clipboard sync or microphone capture. Android still requires its `RECORD_AUDIO` permission for playback capture; its permission prompt may mention the microphone.
+- No unattended access, saved screen/audio recordings or microphone capture. Clipboard/file exchange ends with the approved session. Android cannot automatically read another app's clipboard in the background. Android still requires its `RECORD_AUDIO` permission for playback capture; its permission prompt may mention the microphone.
 - Broadcast discovery needs a shared reachable IPv4 LAN. Guest Wi-Fi, client isolation, VPNs and firewalls can block it; a twelve-digit code then falls back to the Internet relay. An eight-digit fallback code only works locally.
 - Internet sessions use a TCP relay in EU West. Restrictive networks may block its external TCP port. There is no UDP/TURN, HTTPS-tunnel fallback, direct Internet peer-to-peer negotiation or automatic network handover. Relay restart stops active sessions. Sessions are capped at two hours or 2 GiB, whichever comes first.
 - Automatic reconnect is not implemented. On network interruption, sharing stops and a new code is required. Switching apps alone should not close the session; force stop and manufacturer-specific battery restrictions may still terminate it.
@@ -82,6 +83,7 @@ Treat codes as temporary secrets. A displayed device name is a label, not a veri
 | [Architecture](docs/ARCHITECTURE.md) / [Protocol](docs/PROTOCOL.md) | Components, state, LAN/relay pairing, encryption and wire format |
 | [Platforms and troubleshooting](docs/PLATFORMS.md) | Permissions, lifecycle, saved data, capabilities and current limits |
 | [Sound and screen switching](docs/AUDIO_AND_SWITCHING.md) | Native audio, consented direction changes and limitations |
+| [Files and clipboard](docs/FILES_AND_CLIPBOARD.md) | Native copy/paste, Android Share, transfer status, protocol and limits |
 | [Testing](docs/TESTING.md) / [Verification](docs/VERIFICATION.md) | Reproducible checks and dated evidence with coverage gaps |
 | [Performance](docs/PERFORMANCE.md) | Measurement method, actual results and remaining bottlenecks |
 | [Local releases](docs/RELEASING.md) / [Changelog](CHANGELOG.md) | Versioning, portable EXE/APK delivery and milestones |

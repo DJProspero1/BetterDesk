@@ -43,6 +43,18 @@ class ControlService : AccessibilityService() {
             "scrollDown" -> gesture(Path().apply { moveTo(metrics.widthPixels * .5f, metrics.heightPixels * .7f); lineTo(metrics.widthPixels * .5f, metrics.heightPixels * .35f) }, 300)
             "back" -> performGlobalAction(GLOBAL_ACTION_BACK)
             "home" -> performGlobalAction(GLOBAL_ACTION_HOME)
+            "copy", "paste", "selectAll" -> {
+                val node = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: return
+                if (node.isPassword) return
+                when (input.action) {
+                    "copy" -> node.performAction(AccessibilityNodeInfo.ACTION_COPY)
+                    "paste" -> if (node.isEditable) node.performAction(AccessibilityNodeInfo.ACTION_PASTE)
+                    "selectAll" -> node.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, Bundle().apply {
+                        putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, 0)
+                        putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, node.text?.length ?: 0)
+                    })
+                }
+            }
             "text", "backspace" -> {
                 val node = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: return
                 if (!node.isEditable) return

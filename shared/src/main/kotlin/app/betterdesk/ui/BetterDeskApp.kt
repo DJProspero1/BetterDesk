@@ -1,6 +1,7 @@
 package app.betterdesk.ui
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.focusable
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -25,6 +26,7 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -90,6 +92,7 @@ fun BetterDeskApp(session: HelpSession, onFullScreenChange: (Boolean) -> Unit = 
             }
                 Box(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 32.dp), contentAlignment = Alignment.Center) {
                     Column(Modifier.widthIn(max = 440.dp).fillMaxWidth(), horizontalAlignment = Alignment.Start) {
+                        if (state.stage != Stage.SHARING) ExchangeNotice(session, portuguese)
                         when (state.stage) {
                             Stage.HOME -> {
                                 Text(t("This device", "Este dispositivo"), fontSize = 17.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -119,7 +122,7 @@ fun BetterDeskApp(session: HelpSession, onFullScreenChange: (Boolean) -> Unit = 
                                 Primary(t("Connect", "Ligar"), Pairing.validDeviceCode(deviceCode) && deviceCode != state.deviceCode) { session.connectCode(deviceCode) }
                             }
                             Stage.INVITATION -> {
-                                Heading(t("Allow ${state.peer} to connect?", "Permitir a ligação de ${state.peer}?"), t("They can see your screen, hear device sound and control this device. Your microphone stays off.", "A pessoa poderá ver o ecrã, ouvir o som do dispositivo e controlá-lo. O microfone fica desligado."))
+                                Heading(t("Allow ${state.peer} to connect?", "Permitir a ligação de ${state.peer}?"), t("Share your screen, device sound and control. You can also copy text and send files. Your microphone stays off.", "Partilhe o ecrã, o som do dispositivo e o controlo. Também pode copiar texto e enviar ficheiros. O microfone fica desligado."))
                                 Primary(t("Allow connection", "Permitir ligação")) { session.allowHelp() }
                                 TextButton(onClick = { session.home() }) { Text(t("Decline", "Recusar")) }
                             }
@@ -168,6 +171,7 @@ fun BetterDeskApp(session: HelpSession, onFullScreenChange: (Boolean) -> Unit = 
                                 Heading(t("Connected to ${state.peer}", "Ligado a ${state.peer}"), if (state.remoteControl) t("Your screen is shared. They can tap and type. Stay with your device.", "O ecrã está partilhado. A pessoa pode tocar e escrever. Fique junto do dispositivo.") else t("Your screen is shared. Only you can tap and type.", "O ecrã está partilhado. Só o utilizador pode tocar e escrever."))
                                 Primary(t("Disconnect", "Desligar")) { session.stop() }
                                 SessionSwitch(session, state, portuguese)
+                                ExchangePanel(session, portuguese, controls = true, modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp))
                                 Text(if (state.audioAvailable) t("Device sound is shared", "O som do dispositivo está partilhado") else t("Device sound is unavailable", "O som do dispositivo está indisponível"), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Spacer(Modifier.height(16.dp))
                                 Text(t("You can continue using your device.", "Pode continuar a utilizar o dispositivo."), color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -247,6 +251,7 @@ fun BetterDeskApp(session: HelpSession, onFullScreenChange: (Boolean) -> Unit = 
     val duration = if (session.platform.reduceMotion) 0 else 180
     val inputEnabled = state.remoteControl && fresh && state.switchState.isEmpty()
     val focusRequester = remember { FocusRequester() }
+    val screenFocus = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
     LaunchedEffect(inputOpen) { if (inputOpen) focusRequester.requestFocus() }
@@ -259,12 +264,22 @@ fun BetterDeskApp(session: HelpSession, onFullScreenChange: (Boolean) -> Unit = 
                 val ratio = image.width.toFloat() / image.height
                 val width = minOf(maxWidth, maxHeight * ratio)
                 val height = width / ratio
-                Image(image, t("Shared screen", "Ecrã partilhado"), Modifier.size(width, height).testTag("remote-image").drawWithContent {
+                Image(image, t("Shared screen", "Ecrã partilhado"), Modifier.size(width, height).testTag("remote-image")
+                    .focusRequester(screenFocus).onPreviewKeyEvent { event ->
+                        if (event.type == KeyEventType.KeyDown && event.isCtrlPressed && inputEnabled) {
+                            when (event.key) {
+                                Key.C -> { session.input("copy"); true }
+                                Key.V -> { session.paste(); true }
+                                Key.A -> { session.input("selectAll"); true }
+                                else -> false
+                            }
+                        } else false
+                    }.focusable().drawWithContent {
                     drawContent()
                     session.performance.presented(state.frame)
                 }
                     .pointerInput(session) {
-                        detectTapGestures(onTap = { session.input("tap", (it.x / size.width).coerceIn(0f, 1f), (it.y / size.height).coerceIn(0f, 1f)) }, onLongPress = { session.input("right", (it.x / size.width).coerceIn(0f, 1f), (it.y / size.height).coerceIn(0f, 1f)) })
+                        detectTapGestures(onTap = { if (!session.platform.isAndroid) screenFocus.requestFocus(); session.input("tap", (it.x / size.width).coerceIn(0f, 1f), (it.y / size.height).coerceIn(0f, 1f)) }, onLongPress = { session.input("right", (it.x / size.width).coerceIn(0f, 1f), (it.y / size.height).coerceIn(0f, 1f)) })
                     }.pointerInput(session) {
                         var start = Offset.Zero; var end = Offset.Zero
                         detectDragGestures(onDragStart = { start = it; end = it }, onDragEnd = {
@@ -274,9 +289,13 @@ fun BetterDeskApp(session: HelpSession, onFullScreenChange: (Boolean) -> Unit = 
             }
         }
         if (!controlsOpen && state.switchState.isEmpty()) {
-            Row(Modifier.align(Alignment.BottomEnd).safeDrawingPadding().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.align(Alignment.BottomEnd).safeDrawingPadding().padding(12.dp).widthIn(max = 440.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                ExchangePanel(session, pt, controls = false)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilledTonalButton(onClick = session.exchange::pickFiles, modifier = Modifier.heightIn(min = 48.dp)) { Text(t("Send files", "Enviar ficheiros")) }
                 FilledTonalButton(onClick = session::requestSwitch, modifier = Modifier.heightIn(min = 48.dp)) { Text(t("Switch screens", "Trocar ecrãs")) }
                 FilledTonalButton(onClick = { controlsOpen = true }, modifier = Modifier.heightIn(min = 48.dp)) { Text(t("Controls", "Controlos")) }
+            }
             }
         }
         AnimatedVisibility(controlsOpen || state.switchState.isNotEmpty(),
@@ -291,10 +310,13 @@ fun BetterDeskApp(session: HelpSession, onFullScreenChange: (Boolean) -> Unit = 
             TextButton(onClick = { session.stop() }) { Text(t("Disconnect", "Desligar")) }
         }
         if (state.switchState.isNotEmpty()) SessionSwitch(session, state, pt)
+        ExchangePanel(session, pt, controls = true, modifier = Modifier.padding(horizontal = 8.dp))
         if (!inputOpen) FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
             if (state.switchState.isEmpty()) TextButton(onClick = session::requestSwitch) { Text(t("Switch screens", "Trocar ecrãs")) }
             TextButton(onClick = session::toggleSound, enabled = state.audioAvailable) { Text(if (!state.audioAvailable) t("Sound unavailable", "Som indisponível") else if (state.muted) t("Unmute", "Ligar som") else t("Mute", "Silenciar")) }
             TextButton(onClick = { inputOpen = !inputOpen }, enabled = inputEnabled) { Text(t("Type", "Escrever")) }
+            TextButton(onClick = { session.input("copy") }, enabled = inputEnabled) { Text(t("Copy selection", "Copiar seleção")) }
+            TextButton(onClick = session::paste, enabled = inputEnabled) { Text(t("Paste", "Colar")) }
             TextButton(onClick = { session.input("scrollUp", .5f, .5f) }, enabled = inputEnabled) { Text(t("Scroll up", "Subir")) }
             TextButton(onClick = { session.input("scrollDown", .5f, .5f) }, enabled = inputEnabled) { Text(t("Scroll down", "Descer")) }
             TextButton(onClick = { session.input("back") }, enabled = inputEnabled) { Text(t("Back / Esc", "Voltar / Esc")) }

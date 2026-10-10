@@ -35,6 +35,11 @@ class HelpSession(
     private val mutable = MutableStateFlow(HelpState())
     val state = mutable.asStateFlow()
     val performance = FramePerformance()
+    val exchange = SessionExchange(platform.exchange, relayFactory, {
+        // Compare current acknowledgement pressure, not a stale lifetime FPS average.
+        if (viewer) mutable.value.frameAt > 0 && System.nanoTime() - mutable.value.frameAt > 1_250_000_000 && lastReceivedFrame > 0
+        else capturedFrame > sentFrame + 2 || frameWindow.congested()
+    }, ::sendControl)
     internal var failureSummary = ""; private set
     private fun rememberFailure(error: Exception) {
         failureSummary = generateSequence<Throwable>(error) { it.cause }.take(4).joinToString("; ") {
@@ -60,6 +65,7 @@ class HelpSession(
     @Volatile private var relayClient: RelayClient? = null
     private var relayCancellation: String? = null
     private val inputQueue = Channel<Pair<Long, Message>>(32)
+    private val controlQueue = Channel<Pair<Long, Message>>(64)
     private val playbackQueue = Channel<Pair<Long, Packet.Audio>>(3, BufferOverflow.DROP_OLDEST)
     @Volatile private var viewer = false
     @Volatile private var epoch = 0L
@@ -77,6 +83,12 @@ class HelpSession(
     private var remotelyStopped = false
 
     init {
+        scope.launch(Dispatchers.IO) {
+            for ((current, message) in controlQueue) {
+                try { if (current == generation) wire?.send(message) }
+                catch (_: Exception) { withContext(Dispatchers.Main) { if (current == generation) finishError("connection") } }
+            }
+        }
         scope.launch(Dispatchers.IO) {
             for ((sessionGeneration, input) in inputQueue) {
                 if (sessionGeneration == generation && input.epoch == epoch && viewer && mutable.value.switchState.isEmpty()) runCatching { wire?.send(input) }
@@ -262,7 +274,7 @@ class HelpSession(
                         tls.startHandshake()
                         val connected = Wire(tls)
                         val hello = (connected.read() as? Packet.Control)?.message
-                        check(System.currentTimeMillis() < remote.expires && hello?.type == "hello" && hello.protocol == 2 && TlsIdentity.constantEquals(hello.secret, remote.secret))
+                        check(System.currentTimeMillis() < remote.expires && hello?.type == "hello" && hello.protocol == 3 && TlsIdentity.constantEquals(hello.secret, remote.secret))
                         tls.soTimeout = 15000
                         connected
                     }
@@ -272,7 +284,7 @@ class HelpSession(
                 wire = connection
                 viewer = true
                 withContext(Dispatchers.IO) {
-                    connection.send(Message("accepted", text = safeName, videoCodec = platform.preferredIncomingCodec, audio = platform.receivesAudio, protocol = 2))
+                    connection.send(Message("accepted", text = safeName, videoCodec = platform.preferredIncomingCodec, audio = platform.receivesAudio, protocol = 3))
                 }
                 mutable.value = HelpState(Stage.CONNECTING, invitation = invitation, viaRelay = invitation?.relayTicket != null)
                 pump(connection, current)
@@ -298,7 +310,7 @@ class HelpSession(
                 candidate.startHandshake()
                 val connection = Wire(candidate)
                 val hello = (connection.read() as? Packet.Control)?.message
-                if (System.currentTimeMillis() >= invitation.expires || hello?.type != "hello" || hello.protocol != 2 || !TlsIdentity.constantEquals(hello.secret, invitation.secret)) error("Invalid invitation")
+                if (System.currentTimeMillis() >= invitation.expires || hello?.type != "hello" || hello.protocol != 3 || !TlsIdentity.constantEquals(hello.secret, invitation.secret)) error("Invalid invitation")
                 candidate.soTimeout = 15_000
                 return connection
             } catch (_: Exception) { candidate.close(); socket = null; failed++ }
@@ -373,9 +385,9 @@ class HelpSession(
                             configureTls(candidate)
                             candidate.startHandshake()
                             connected = Wire(candidate)
-                            connected.send(Message("hello", secret = invitation.secret, protocol = 2))
+                            connected.send(Message("hello", secret = invitation.secret, protocol = 3))
                             val accepted = (connected.read() as? Packet.Control)?.message
-                            check(accepted?.type == "accepted" && accepted.protocol == 2)
+                            check(accepted?.type == "accepted" && accepted.protocol == 3)
                             platform.selectOutgoingCodec(accepted!!.videoCodec)
                             peerAudio = accepted.audio
                             candidate.soTimeout = 15000
@@ -388,9 +400,9 @@ class HelpSession(
                                 candidate.connect(InetSocketAddress(host, invitation.port), 1500)
                                 candidate.startHandshake()
                                 connected = Wire(candidate)
-                                connected.send(Message("hello", secret = invitation.secret, protocol = 2))
+                                connected.send(Message("hello", secret = invitation.secret, protocol = 3))
                                 val accepted = (connected.read() as? Packet.Control)?.message
-                                check(accepted?.type == "accepted" && accepted.protocol == 2)
+                                check(accepted?.type == "accepted" && accepted.protocol == 3)
                                 platform.selectOutgoingCodec(accepted!!.videoCodec)
                                 peerAudio = accepted.audio
                                 candidate.soTimeout = 15_000
@@ -437,6 +449,7 @@ class HelpSession(
                     if (current != generation || media != mediaGeneration) return@coroutineScope
                     mutable.value = mutable.value.copy(stage = Stage.SHARING, remoteControl = control, audioAvailable = sound)
                     withContext(Dispatchers.IO) { connection.send(Message("ready", control = control, audio = sound, epoch = streamEpoch)) }
+                    socket?.inetAddress?.let { exchange.start(it, mutable.value.viaRelay) }
                     launch(Dispatchers.IO) {
                         for (frame in frames) {
                             if (!authorized.get() || current != generation || media != mediaGeneration) break
@@ -462,12 +475,8 @@ class HelpSession(
     }
 
     private fun sendControl(message: Message) {
-        val current = generation
-        val connection = wire ?: return
-        scope.launch(Dispatchers.IO) {
-            try { if (current == generation) connection.send(message) }
-            catch (e: Exception) { withContext(Dispatchers.Main) { if (current == generation) finishError("connection") } }
-        }
+        if (wire == null) return
+        if (!controlQueue.trySend(generation to message).isSuccess) scope.launch { finishError("connection") }
     }
 
     fun toggleSound() {
@@ -612,6 +621,8 @@ class HelpSession(
                             if (!mutable.value.muted) playbackQueue.trySend(current to packet)
                         }
                         is Packet.Control -> when (packet.message.type) {
+                            "exchangeClipboard", "exchangeText", "exchangeOffer", "exchangeRequest", "exchangeCancel", "exchangeFailure", "exchangeBarrier", "exchangeBarrierAck" ->
+                                withContext(Dispatchers.Main) { if (current == generation) exchange.handle(packet.message) }
                             "switchRequest", "switchCancel", "switchAccepted", "switchStopped" -> withContext(Dispatchers.Main) { switchMessage(packet.message, current) }
                             "ping" -> if (viewer && packet.message.epoch == epoch && packet.message.frame > 0 && packet.message.frame == lastReceivedFrame) {
                                 withContext(Dispatchers.Main) {
@@ -623,6 +634,7 @@ class HelpSession(
                                 check(viewer && !incomingReady && packet.message.epoch == epoch); incomingReady = true; incomingAudio = packet.message.audio
                                 withContext(Dispatchers.Main) {
                                     mutable.value = mutable.value.copy(remoteControl = packet.message.control, audioAvailable = packet.message.audio)
+                                    socket?.inetAddress?.let { exchange.start(it, mutable.value.viaRelay) }
                                     if (packet.message.audio && !mutable.value.muted) platform.startAudioPlayback()
                                 }
                             }
@@ -655,12 +667,14 @@ class HelpSession(
         val message = Message("input", action = action, x = x, y = y, endX = endX, endY = endY, text = text, frame = state.frame, epoch = epoch)
         if (message.isValidInput()) inputQueue.trySend(generation to message)
     }
+    fun paste() { exchange.beforePaste { input("paste") } }
 
     fun stop() { stopTransport(); mutable.value = HelpState(Stage.ENDED) }
     fun home() { stopTransport(); mutable.value = HelpState() }
     private fun finishError(key: String) { stopTransport(); mutable.value = HelpState(Stage.ERROR, error = key) }
     private fun stopTransport(preserveConnection: Boolean = false) {
         authorized.set(false); generation++; mediaGeneration++; permissionPending = false
+        exchange.stop()
         switchTimeout?.cancel(); switchTimeout = null; switchToken = null
         locallyStopped = false; remotelyStopped = false
         mediaWork?.cancel(); mediaWork = null
@@ -684,5 +698,5 @@ class HelpSession(
         socket = null; server = null; wire = null
         work?.cancel(); work = null; sentFrame = 0; sentAt = 0; capturedFrame = 0; frameWindow.clear(); performance.reset()
     }
-    fun dispose() { stopTransport(); inputQueue.close(); playbackQueue.close(); scope.cancel() }
+    fun dispose() { stopTransport(); exchange.dispose(); inputQueue.close(); controlQueue.close(); playbackQueue.close(); scope.cancel() }
 }

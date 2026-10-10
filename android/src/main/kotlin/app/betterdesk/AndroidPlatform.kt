@@ -19,6 +19,7 @@ import java.lang.ref.WeakReference
 import kotlin.coroutines.resume
 
 class AndroidPlatform(private val context: Context) : RemotePlatform {
+    override val exchange = AndroidExchange(context)
     override val receivesAudio = true
     override val reduceMotion: Boolean get() = android.provider.Settings.Global.getFloat(context.contentResolver, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
     private val audioPlayer = AndroidAudioPlayer()

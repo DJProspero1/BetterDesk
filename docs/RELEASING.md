@@ -16,13 +16,19 @@ Update version references together:
 - `scripts/build-local.ps1` and `scripts/package-portable.ps1`: artifact/version defaults.
 - `README.md`, this guide and [CHANGELOG.md](../CHANGELOG.md): delivery names/history.
 
-Version 0.6.0 uses Android versionCode 7. There is not yet a single version manifest;
+Version 0.7.0 uses Android versionCode 8. There is not yet a single version manifest;
 search for the previous version before committing. Keep the Android application ID
 and the signing key stable for updates. Update [VERIFICATION.md](VERIFICATION.md)
 with actual coverage and limits, not intended tests. Check instruction-file parity
 and preserve generated icons if their source changed.
 
 ## Build and inspect
+
+For 0.7.0 the owner paused tests and audio workloads. Use `-SkipTests -LowResource`
+for authorized local packaging, and clearly record unverified runtime coverage.
+Do not launch native apps, devices or tests just to fill the ordinary checklist
+while that instruction remains active. Release notes must distinguish compilation,
+artifact checksum readback and actual end-to-end verification.
 
 1. Follow [DEVELOPMENT.md](DEVELOPMENT.md), including the real broker fixture.
 2. Run `.\scripts\build-local.ps1`. It tests, compiles and packages locally.
@@ -37,14 +43,14 @@ Local outputs for this milestone:
 
 | File under `dist/` | Meaning |
 | --- | --- |
-| `BetterDesk-Windows-0.6.0.exe` | Unsigned x64 portable EXE, including app and Java runtime |
-| `BetterDesk-Android-0.6.0-debug.apk` | Local debug-signed Android APK |
+| `BetterDesk-Windows-0.7.0.exe` | Unsigned x64 portable EXE, including app and Java runtime |
+| `BetterDesk-Android-0.7.0-debug.apk` | Local debug-signed Android APK |
 | `SHA256SUMS.txt` | SHA-256 of those final artifacts |
 | `BUILD-INFO.txt` | UTC build time, source Git revision, dirty state and packaging notes |
 
 ```powershell
-Get-FileHash .\dist\BetterDesk-Windows-0.6.0.exe -Algorithm SHA256
-Get-FileHash .\dist\BetterDesk-Android-0.6.0-debug.apk -Algorithm SHA256
+Get-FileHash .\dist\BetterDesk-Windows-0.7.0.exe -Algorithm SHA256
+Get-FileHash .\dist\BetterDesk-Android-0.7.0-debug.apk -Algorithm SHA256
 Get-Content .\dist\SHA256SUMS.txt
 git rev-parse HEAD
 git status --short
@@ -72,7 +78,7 @@ authorized local GitHub CLI login:
 
 ```powershell
 .\scripts\test-release-scripts.ps1
-.\scripts\publish-release.ps1 -Version 0.6.0 -NotesFile .\desktop\build\release-notes.md
+.\scripts\publish-release.ps1 -Version 0.7.0 -NotesFile .\desktop\build\release-notes.md
 ```
 
 The publisher checks repository privacy, instruction parity, clean source,

@@ -1,4 +1,24 @@
-# Local verification, 9 October 2026
+# Local verification
+
+## Version 0.7, 10 October 2026: files and clipboard
+
+The owner explicitly paused tests and audio workloads. No app, emulator, native
+audio fixture, throughput benchmark or automated test was launched for this change.
+Both `:desktop:compileKotlin` and `:android:compileDebugKotlin` compiled locally
+with one worker and a 1536 MiB Gradle heap. Final local packaging and artifact
+checks are recorded in the distribution's BUILD-INFO.txt and SHA256SUMS.txt.
+
+New shared transfer/clipboard code, Windows OLE virtual-file paste, Android document
+selection/Share/Downloads, transfer cancellation/retry and silent notification
+updates remain **runtime unverified**. No latency, transfer throughput, visual QA
+or 60 FPS claim follows from compilation. Existing dated 0.6 measurements below
+remain historical evidence and do not verify the 0.7 binaries.
+
+Before treating the feature as production-ready, explicitly authorize and run
+targeted checks of bidirectional Explorer paste, folders, clipboard feedback loops,
+changed sources, interrupted resume, disk/provider errors, cancel/stop races, and
+screen responsiveness during local/relay transfers on physical devices. Include
+Android rotation/background/permission behavior and notification removal.
 
 ## Version 0.6: sound, screen switching and private release delivery
 

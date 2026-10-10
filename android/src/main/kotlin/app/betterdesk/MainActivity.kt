@@ -18,6 +18,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import app.betterdesk.core.HelpSession
 import app.betterdesk.ui.BetterDeskApp
 import app.betterdesk.ui.BetterDeskTheme
+import kotlinx.coroutines.*
 
 object Runtime {
     var platform: AndroidPlatform? = null
@@ -25,6 +26,10 @@ object Runtime {
 }
 
 class MainActivity : ComponentActivity() {
+    private val fileResult = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        Runtime.platform?.exchange?.result(result.resultCode, result.data)
+    }
+    private val shareScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var pendingProjection: Intent? = null
     private val sharingPermissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         // A user's notification choice never silently grants screen capture.
@@ -56,7 +61,9 @@ class MainActivity : ComponentActivity() {
             } else projection.launch(request)
         }
         val session = Runtime.session ?: HelpSession(platform).also { Runtime.session = it }
-        intent?.dataString?.let(session::acceptInvitation)
+        platform.exchange.attach(this, fileResult::launch)
+        if (intent?.action == Intent.ACTION_VIEW && intent?.data?.scheme == "betterdesk") intent?.dataString?.let(session::acceptInvitation)
+        if (savedInstanceState == null) receiveSharedIntent(intent)
         setContent { BetterDeskTheme { BetterDeskApp(session, ::setFullScreen) } }
     }
 
@@ -70,7 +77,33 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        intent.dataString?.let { Runtime.session?.acceptInvitation(it) }
+        if (intent.action == Intent.ACTION_VIEW && intent.data?.scheme == "betterdesk") intent.dataString?.let { Runtime.session?.acceptInvitation(it) }
+        receiveSharedIntent(intent)
+    }
+
+    private fun receiveSharedIntent(intent: Intent?) {
+        if (intent?.action !in setOf(Intent.ACTION_SEND, Intent.ACTION_SEND_MULTIPLE)) return
+        val session = Runtime.session ?: return
+        val connection = session.exchange.sessionToken
+        if (!session.exchange.state.value.connected) { session.exchange.notice("connectFirst"); return }
+        @Suppress("DEPRECATION")
+        val uris = if (intent!!.action == Intent.ACTION_SEND_MULTIPLE) intent.getParcelableArrayListExtra<android.net.Uri>(Intent.EXTRA_STREAM).orEmpty()
+        else listOfNotNull(intent.getParcelableExtra<android.net.Uri>(Intent.EXTRA_STREAM))
+        shareScope.launch {
+            try {
+                if (uris.isNotEmpty()) {
+                    val files = withContext(Dispatchers.IO) { Runtime.platform!!.exchange.describe(uris) }
+                    session.exchange.offer(files, expectedSession = connection)
+                } else intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()?.let {
+                    if (session.exchange.sessionToken == connection && session.exchange.state.value.connected) {
+                        session.exchange.shareText(it, expectedSession = connection)
+                    }
+                }
+            } catch (_: CancellationException) { }
+            catch (_: Exception) { session.exchange.notice("selectionFailed") }
+        }
+        // A rotation must not resend an already-consumed share.
+        intent.action = Intent.ACTION_MAIN
     }
 
     override fun onResume() {
@@ -81,6 +114,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         Runtime.platform?.detach(this)
+        Runtime.platform?.exchange?.detach(this)
+        shareScope.cancel()
         // Switching apps or pressing Back must not revoke a pending/active connection.
         // Explicit Stop, expiry and removal from Recents own connection teardown.
         super.onDestroy()

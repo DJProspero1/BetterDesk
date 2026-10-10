@@ -23,6 +23,7 @@ class FrameWindow(private var capacity: Int = 2) {
         return true
     }
     @Synchronized fun acknowledge(id: Long) { if (pending.remove(id)) available.trySend(Unit) }
+    @Synchronized fun congested(): Boolean = pending.size >= capacity
     @Synchronized fun clear() { pending.clear(); available.trySend(Unit) }
     @Synchronized fun setCapacity(value: Int) { require(value in 2..12); capacity = value; pending.clear(); available.trySend(Unit) }
 }

@@ -34,6 +34,7 @@ No busy remote administration dashboard, account gate, setup wizard with five pe
 10. Save an explicit language choice across rotation, app switches, restarts and updates. Use a flag button with an accessible language name, not a platform-dependent flag emoji.
 11. Keep Exit full screen directly visible. Either device can request Switch screens, with clear approval on the other device and fresh OS capture permission where required.
 12. Share supported device sound alongside the screen, with a viewer mute control. Never capture the microphone. Use short, purposeful motion that respects reduced-motion settings.
+13. Exchange files and clipboard content within the approved connection. Use familiar Windows copy/paste and Android Share/file-picker integrations, with the same Send files action and compact status. Transfer progress must not resize the screen or interrupt control. Cancellation, retry, completion and errors remain clear; no silent replacement of existing files.
 
 ## Accessibility & Inclusion
 

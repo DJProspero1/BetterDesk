@@ -1,6 +1,6 @@
 # Platform behavior, permissions and troubleshooting
 
-This describes version 0.6.0. The shared interface is the product contract; native
+This describes version 0.7.0. The shared interface is the product contract; native
 differences exist where the OS requires them. The verified environments are
 Windows 11 x64 and an Android API 36 emulator. Declared minimum Android API 26 is
 not a claim of complete vendor/version coverage.
@@ -96,10 +96,11 @@ During sharing, notification ID 1/channel `screen` includes Disconnect. The earl
 availability notification ID 2/channel `connection` is removed when capture starts.
 Teardown explicitly removes notifications. If notification permission/channel is
 disabled, Android controls what appears in the drawer; explain that before promising
-a visible notice. Current notification text follows the **system locale**, while
-the in-app preference follows the selected flag; aligning notification localization
-with that preference remains a known gap. OS consent dialogs also follow system
-localization and remain native.
+a visible notice. Notifications use the saved in-app language when they are created,
+with system locale as fallback. The existing notification also shows coarse file
+transfer progress without sound or filenames. Stopping the service cancels its
+transfer observer before removing the notification. OS consent dialogs follow
+system localization and remain native.
 
 ## Local data and privacy
 
@@ -110,6 +111,9 @@ localization and remain native.
 | Windows extracted runtime/app | `%LOCALAPPDATA%/BetterDesk/portable/<content-hash>/`; previous caches remain until manually removed while stopped |
 | Codes, keys, invitations, tickets | Ephemeral process/connection state; not stored as future access credentials |
 | Screen/audio/input content | Live endpoint memory and encrypted transport; no app recording/history/telemetry |
+| File transfer cache | Windows LocalAppData/BetterDesk/transfers or private Android cache; partial/verified files kept for same-session retry and cleaned on teardown when handles permit |
+| Saved received files | Unique Downloads/BetterDesk batch folders, or the Android 8/9 document-provider destination selected by the user; never removed as cache |
+| Clipboard | Windows observes new changes only during an enabled session; Android uses foreground Send clipboard/native Share. Session-origin clipboard contents are cleared when still owned and OS access permits |
 | Local development outputs | Ignored `build/` and `dist/`; tests can save synthetic screenshots and timing reports |
 
 Android backup is disabled in the manifest. OS-managed accessibility/notification
@@ -140,7 +144,7 @@ public distribution; this implementation guide is not a provider-retention promi
 | Old Windows taskbar icon | Check whether an old process or pinned shortcut targets the previous EXE. Test the current portable EXE/window before changing Windows caches. |
 | Low FPS or lag | Compare LAN and relay, source refresh rate, motion, codec and bandwidth. Windows JPEG is bandwidth-heavy; see measured limits in PERFORMANCE.md. |
 | No device sound | Check viewer mute/output volume and source playback volume. Android needs API 29+, audio permission and an app that allows capture; calls/protected content may remain silent. Windows captures the default multimedia output. See AUDIO_AND_SWITCHING.md. |
-| Switch ends the session | Both devices need 0.6.0. A failed new capture or denied OS prompt ends the handoff safely; reconnect normally. |
+| Switch ends the session | Both devices need 0.7.0. A failed new capture or denied OS prompt ends the handoff safely; reconnect normally. |
 
 Report reproducible failures using [CONTRIBUTING.md](../CONTRIBUTING.md), with
 redacted metadata rather than session codes or private screenshots.

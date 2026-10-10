@@ -2,7 +2,7 @@
 
 Version 0.6.0 adds device playback audio and an attended direction switch on the
 existing encrypted connection. Both endpoints must use this version's media
-protocol (version 2); update Windows and Android together. The Railway broker API
+protocol (version 2, retained in version 3 for 0.7.0); update Windows and Android together. The Railway broker API
 stays version 1 because it forwards opaque bytes.
 
 ## Sound

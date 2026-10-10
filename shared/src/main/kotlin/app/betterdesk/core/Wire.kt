@@ -90,5 +90,5 @@ class Wire(private val socket: Socket) : Closeable {
 fun Message.isValidInput(): Boolean {
     if (type != "input" || frame <= 0 || text.length > 512) return false
     if (listOf(x, y, endX, endY).any { !it.isFinite() || it !in 0f..1f }) return false
-    return action in setOf("tap", "right", "swipe", "scrollUp", "scrollDown", "text", "back", "home", "enter", "backspace")
+    return action in setOf("tap", "right", "swipe", "scrollUp", "scrollDown", "text", "back", "home", "enter", "backspace", "copy", "paste", "selectAll")
 }

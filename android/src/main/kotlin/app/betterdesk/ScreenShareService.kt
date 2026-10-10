@@ -30,6 +30,7 @@ object CaptureBridge {
 }
 
 class ScreenShareService : Service() {
+    private var transferNotice: kotlinx.coroutines.Job? = null
     private var playbackCapture: PlaybackAudioCapture? = null
     private var projection: MediaProjection? = null
     private var display: VirtualDisplay? = null
@@ -59,12 +60,16 @@ class ScreenShareService : Service() {
         notifications.createNotificationChannel(NotificationChannel("screen", "Screen sharing", NotificationManager.IMPORTANCE_LOW))
         val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val stop = PendingIntent.getService(this, 1, Intent(this, ScreenShareService::class.java).setAction("STOP"), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        val notification = NotificationCompat.Builder(this, "screen")
+        val pt = (Runtime.platform?.languageTag ?: resources.configuration.locales[0].language) == "pt"
+        val baseText = if (pt) "O ecrã está a ser partilhado" else "Your screen is being shared"
+        val builder = NotificationCompat.Builder(this, "screen")
             .setSmallIcon(app.betterdesk.R.drawable.ic_connection).setContentTitle("BetterDesk")
-            .setContentText(if (resources.configuration.locales[0].language == "pt") "O ecrã está a ser partilhado" else "Your screen is being shared")
+            .setContentText(baseText).setSilent(true).setOnlyAlertOnce(true)
             .setContentIntent(open).setOngoing(true)
-            .addAction(0, if (resources.configuration.locales[0].language == "pt") "Desligar" else "Disconnect", stop).build()
+            .addAction(0, if (pt) "Desligar" else "Disconnect", stop)
+        val notification = builder.build()
         if (Build.VERSION.SDK_INT >= 29) startForeground(1, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION) else startForeground(1, notification)
+        transferNotice?.cancel(); transferNotice = observeTransfers(this, 1, builder, baseText)
         try {
             @Suppress("DEPRECATION") val data = intent.getParcelableExtra<Intent>("projection") ?: error("Missing consent")
             val manager = getSystemService(MediaProjectionManager::class.java)
@@ -204,6 +209,7 @@ class ScreenShareService : Service() {
     }
 
     override fun onDestroy() {
+        transferNotice?.cancel(); transferNotice = null
         val wasActive = CaptureBridge.active
         CaptureBridge.active = false
         CaptureBridge.startAudio = null; CaptureBridge.stopAudio = null

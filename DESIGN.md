@@ -28,7 +28,7 @@ The language button is the exception to visible text labels: show the current En
 
 ## Local and Internet connections
 
-Both devices expose a short-lived code on opening the app. Entering a code requests that device's screen; the owner approves. Invitation data remains internal, authenticated using the code and transferred without a user-facing link. Clipboard copying only occurs following an explicit button press.
+Both devices expose a short-lived code on opening the app. Entering a code requests that device's screen; the owner approves. Invitation data remains internal, authenticated using the code and transferred without a user-facing link. Code copying requires an explicit button press. During an approved connection, Windows observes new clipboard copies while Clipboard is on at both ends; Android uses Send clipboard and its Share menu.
 
 Show “Getting a code…” while registering. A failed Internet registration can still expose a local code with a short local-network-only message. Transport selection is automatic and never adds a role or network setup screen.
 
@@ -51,3 +51,24 @@ or new role-selection screen appears during the handoff.
 Control overlays fade/slide into place in 180 ms and leave in 135 ms, without
 moving the remote image or delaying interaction. Native reduced-motion settings
 make these transitions immediate. Avoid decorative motion in the stream itself.
+
+## Files and clipboard
+
+Send files is directly available while viewing and sharing. Existing session approval
+mentions files and copied text. Clipboard on/off is visible in Controls; Android
+adds Send clipboard. Windows also accepts Explorer file drops and native clipboard
+paste. No file manager, upload link or separate account is introduced.
+
+Transfer status overlays the remote image above the bottom actions. A single compact
+row shows a truncated filename (or file count), a literal phase and Cancel. Receive
+offers expose Save files and Decline inline. Active transfers show bytes and rate;
+completion lasts six seconds, while a failed transfer remains until addressed.
+Transfers expands a bounded, scrollable history. Save completion exposes Open folder.
+These states are shared, translated into English and European Portuguese, and
+announced politely by screen readers without announcing each byte update.
+
+Use 180 ms fades/short vertical movement and restrained progress interpolation.
+Reduced motion removes transitions and the indeterminate animation. Do not animate
+the remote image, move it to make room, add sound, or rely on color alone. Android
+reuses its current silent foreground notification for coarse transfer progress;
+filenames are not placed in notifications and the notification is removed on Stop.

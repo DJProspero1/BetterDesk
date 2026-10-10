@@ -51,7 +51,7 @@ The viewer negotiates the codec inside the pinned TLS handshake. Android can pro
 
 ## Sound and direction changes
 
-Session protocol 2 negotiates playback audio alongside video. Native WASAPI
+Session protocol 3 retains the playback audio negotiation introduced in protocol 2. Native WASAPI
 loopback and Android AudioPlaybackCapture produce fixed 20 ms stereo PCM packets;
 native output runs away from the socket reader. Separate bounded queues prevent
 audio from accumulating indefinitely. Audio and video share the encrypted TCP
@@ -72,6 +72,14 @@ Platform references: [Android foreground service types](https://developer.androi
 
 ## Native Android integration policy
 
+SessionExchange adds a separate state flow for files and clipboard, keeping byte
+progress updates out of the screen frame model. Its platform boundary covers native
+clipboard/file selection/save integration. TransferTransport creates separately
+pinned TLS channels, with bounded chunks and integrity checks, using the same LAN
+peer or fresh opaque Railway rooms. The original control socket carries only bounded
+offers, requests, cancellation and clipboard barriers. See
+[files and clipboard](FILES_AND_CLIPBOARD.md) for the complete flow and limits.
+
 Android capabilities belong behind the platform interface while the shared Compose
 screens retain the same labels and ordering as Windows. Existing integrations include
 MediaProjection, MediaCodec surface encoding, foreground services with actionable
@@ -89,7 +97,7 @@ join a multicast group. No Wi-Fi multicast lock has been added. Android document
 that such a lock enables multicast reception and can increase battery drain. Evaluate
 native NSD/mDNS discovery and ConnectivityManager network-change callbacks as separate
 improvements, with physical-device coverage and Windows interoperability before
-shipping. Neither is implemented in 0.6.0. See [MulticastLock](https://developer.android.com/reference/android/net/wifi/WifiManager.MulticastLock).
+shipping. Neither is implemented in 0.7.0. See [MulticastLock](https://developer.android.com/reference/android/net/wifi/WifiManager.MulticastLock).
 
 ## Next milestones
 

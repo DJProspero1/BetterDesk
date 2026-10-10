@@ -14,6 +14,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 class DesktopPlatform : RemotePlatform {
+    override val exchange = DesktopExchange()
     override val receivesAudio = true
     override val reduceMotion: Boolean get() = runCatching { java.awt.Toolkit.getDefaultToolkit().getDesktopProperty("win.clientAreaAnimation") == false }.getOrDefault(false)
     @Volatile private var audioCapture: WasapiAudio? = null
@@ -121,6 +122,12 @@ class DesktopPlatform : RemotePlatform {
             "backspace" -> press(KeyEvent.VK_BACK_SPACE)
             "back" -> press(KeyEvent.VK_ESCAPE)
             "home" -> press(KeyEvent.VK_HOME)
+            "copy", "paste", "selectAll" -> {
+                try {
+                    r.keyPress(KeyEvent.VK_CONTROL)
+                    press(when (input.action) { "copy" -> KeyEvent.VK_C; "paste" -> KeyEvent.VK_V; else -> KeyEvent.VK_A })
+                } finally { r.keyRelease(KeyEvent.VK_CONTROL) }
+            }
             "text" -> input.text.forEach { char ->
                 if (active.get() && !isOurForeground()) {
                     unicode(char, false); unicode(char, true)
