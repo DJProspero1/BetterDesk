@@ -29,5 +29,7 @@ interface RemotePlatform {
     suspend fun startSharing(onFrame: (Packet.Frame) -> Unit, onStopped: () -> Unit): Boolean
     fun stopSharing()
     fun applyInput(input: Message)
+    /** False means unavailable/rejected, not an acknowledgement of OS execution. */
+    fun submitInput(input: Message): Boolean { applyInput(input); return true }
     fun decode(frame: Packet.Frame): ImageBitmap?
 }

@@ -1,4 +1,10 @@
-# Files and clipboard, 0.7.0
+# Files and clipboard, 0.7.1
+
+Version 0.7.1 puts remote paste in the same FIFO as typing and editing keys, so
+later input cannot overtake clipboard readiness. Failure clears pending input;
+focus release or a screen-switch request cancels waiting paste. See
+[keyboard control](KEYBOARD.md). Transfer behavior introduced in 0.7.0 remains
+runtime unverified while the owner's test pause is active.
 
 This is an early development feature. Both native targets are compiled locally;
 interactive Explorer/Android transfers and throughput have **not** been exercised

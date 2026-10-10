@@ -35,6 +35,7 @@ No busy remote administration dashboard, account gate, setup wizard with five pe
 11. Keep Exit full screen directly visible. Either device can request Switch screens, with clear approval on the other device and fresh OS capture permission where required.
 12. Share supported device sound alongside the screen, with a viewer mute control. Never capture the microphone. Use short, purposeful motion that respects reduced-motion settings.
 13. Exchange files and clipboard content within the approved connection. Use familiar Windows copy/paste and Android Share/file-picker integrations, with the same Send files action and compact status. Transfer progress must not resize the screen or interrupt control. Cancellation, retry, completion and errors remain clear; no silent replacement of existing files.
+14. A physical keyboard types into the focused remote field from either viewer. Use native layouts/composition, preserve input order and provide a visible way to release keyboard focus. Local app fields remain local. Native OS limits are explicit; never silently claim a rejected key worked.
 
 ## Accessibility & Inclusion
 

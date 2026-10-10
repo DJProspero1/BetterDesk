@@ -99,6 +99,7 @@ class AndroidPlatform(private val context: Context) : RemotePlatform {
     }
 
     override fun applyInput(input: Message) { if (CaptureBridge.active) ControlService.instance?.apply(input) }
+    override fun submitInput(input: Message): Boolean = CaptureBridge.active && ControlService.instance?.apply(input) == true
 
     override fun decode(frame: Packet.Frame): ImageBitmap? = runCatching {
         val dimensions = BitmapFactory.Options().apply { inJustDecodeBounds = true }

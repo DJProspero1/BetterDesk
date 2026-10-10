@@ -24,6 +24,15 @@ Use the shared monitor with two connection arrows on the app header, Android lau
 
 All controls have text labels and native focus/disabled states. No modal permissions imitation: genuine OS prompts appear only when needed. Missing platform capabilities remain explicit. No fabricated connection codes, preview sessions, or fake remote screens.
 
+Tapping the remote image enables physical typing on either platform without opening
+the phone's software keyboard. A compact Keyboard on · Release control fades in
+below the top edge, with Ctrl+Shift+Space on desktop. Release moves focus to the
+always-visible full-screen control. Composition appears briefly beside the status;
+the native editor handles accents/layouts. Controls → Type remains available for
+software keyboards, with Send, Enter, Delete and Tab. Local fields never forward
+remote shortcuts. Rejected input and queue/paste failures use short inline notices.
+See [keyboard control](docs/KEYBOARD.md) for platform and verification limits.
+
 The language button is the exception to visible text labels: show the current English/Portuguese flag, with an accessible label naming the current language and switch action. Store explicit choice through native Android SharedPreferences or Windows user preferences; only first launch uses the system language. Draw flags locally so Windows cannot replace them with letter emoji.
 
 ## Local and Internet connections

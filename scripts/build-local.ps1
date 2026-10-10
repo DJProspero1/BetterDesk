@@ -23,7 +23,7 @@ try {
     if ($LowResource) { $resourceArguments = @('--no-parallel', '--max-workers=1', '-Dorg.gradle.jvmargs=-Xmx1536m -Dfile.encoding=UTF-8', '-Pkotlin.compiler.execution.strategy=in-process') }
     & (Join-Path $aliasPath 'gradlew.bat') -p $aliasPath @tasks --no-daemon '-Pkotlin.incremental=false' @resourceArguments
     if ($LASTEXITCODE -ne 0) { throw "Local build failed with exit code $LASTEXITCODE" }
-    $version = '0.7.0'
+    $version = '0.7.1'
     $dist = Join-Path $repoRoot ('desktop\build\distribution-stage-' + [guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $dist -Force | Out-Null
     Copy-Item -LiteralPath (Join-Path $repoRoot 'android\build\outputs\apk\debug\android-debug.apk') -Destination (Join-Path $dist "BetterDesk-Android-$version-debug.apk") -Force

@@ -25,7 +25,7 @@ compose.desktop {
         mainClass = "app.betterdesk.desktop.MainKt"
         nativeDistributions {
             packageName = "BetterDesk"
-            packageVersion = "0.7.0"
+            packageVersion = "0.7.1"
             description = "Simple attended help for Windows and Android"
             vendor = "BetterDesk contributors"
             modules("java.desktop", "java.prefs", "java.naming", "java.logging", "jdk.crypto.ec", "jdk.unsupported")

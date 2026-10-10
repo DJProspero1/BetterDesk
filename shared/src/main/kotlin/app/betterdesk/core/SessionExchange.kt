@@ -34,7 +34,7 @@ class SessionExchange(private val platform: ExchangePlatform?, private val relay
     private var clipboardOffer: String? = null
     private var publishedClipboard = ""
     private var receivedClipboard = ""
-    private val pasteWaiters = HashMap<String, () -> Unit>()
+    private val pasteWaiters = HashMap<String, CompletableDeferred<Boolean>>()
     private val clipboardImages = HashSet<String>()
     private val saveJobs = HashMap<String, Job>()
     private val rootLock = Any()
@@ -112,23 +112,25 @@ class SessionExchange(private val platform: ExchangePlatform?, private val relay
             }
     }
 
-    fun beforePaste(action: () -> Unit) {
-        if (!mutable.value.connected || platform == null) return
-        if (!mutable.value.clipboard || !mutable.value.peerClipboard) { action(); return }
-        if (pasteWaiters.isNotEmpty()) return
+    suspend fun preparePaste(): Boolean {
+        if (!mutable.value.connected) return false
+        if (platform == null || !mutable.value.clipboard || !mutable.value.peerClipboard) return true
         val current = generation
-        scope.launch {
-            try {
+        val token = UUID.randomUUID().toString()
+        return try {
+            val ready = withTimeoutOrNull(15_000) {
                 val value = withContext(Dispatchers.IO) { platform.readClipboard() }
-                if (current != generation) return@launch
-                if (value != null && !publishClipboard(value)) return@launch
-                val token = UUID.randomUUID().toString()
-                pasteWaiters[token] = action
+                if (current != generation || (value != null && !publishClipboard(value))) return@withTimeoutOrNull false
+                val result = CompletableDeferred<Boolean>()
+                pasteWaiters[token] = result
                 send(Message("exchangeBarrier", text = token, secret = if (value != null) publishedClipboard else ""))
-                delay(15_000)
-                if (pasteWaiters.remove(token) != null && current == generation) notice("clipboardFailed")
-            } catch (_: Exception) { if (current == generation) notice("clipboardFailed") }
-        }
+                result.await() && current == generation
+            } == true
+            if (!ready && current == generation) notice("clipboardFailed")
+            ready
+        } catch (cancelled: CancellationException) { throw cancelled }
+        catch (_: Exception) { if (current == generation) notice("clipboardFailed"); false }
+        finally { pasteWaiters.remove(token) }
     }
 
     fun pickFiles() {
@@ -195,7 +197,7 @@ class SessionExchange(private val platform: ExchangePlatform?, private val relay
                     } finally { if (current == generation) barriersInFlight-- }
                 }
             }
-            "exchangeBarrierAck" -> pasteWaiters.remove(message.text)?.let { if (message.control) it() else notice("clipboardFailed") }
+            "exchangeBarrierAck" -> pasteWaiters.remove(message.text)?.complete(message.control)
             "exchangeClipboard" -> {
                 mutable.update { it.copy(peerClipboard = message.control) }
                 watchClipboard()
@@ -402,7 +404,8 @@ class SessionExchange(private val platform: ExchangePlatform?, private val relay
         stopping.forEach { it.cancel() }; jobs.clear(); saveJobs.clear()
         platform?.sessionEnded()
         downloads.values.forEach { it.completeExceptionally(java.io.IOException("Disconnected")) }; downloads.clear()
-        sources.clear(); clipboardOffer = null; publishedClipboard = ""; receivedClipboard = ""; incomingReserved = 0; peerAddress = null; noticeJob?.cancel(); pasteWaiters.clear(); clipboardImages.clear()
+        sources.clear(); clipboardOffer = null; publishedClipboard = ""; receivedClipboard = ""; incomingReserved = 0; peerAddress = null; noticeJob?.cancel()
+        pasteWaiters.values.forEach { it.complete(false) }; pasteWaiters.clear(); clipboardImages.clear()
         messagesAt = System.nanoTime(); messagesInWindow = 0; barriersInFlight = 0
         val cleanup = synchronized(rootLock) { root.also { root = null } }
         if (cleanup != null) scope.launch(Dispatchers.IO) {

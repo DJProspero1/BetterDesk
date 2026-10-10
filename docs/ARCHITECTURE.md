@@ -43,7 +43,7 @@ delivered, transport failures end that attempt; they do not create a second requ
 
 ## Threading and lifecycle
 
-UI actions use the main dispatcher; decoded images publish through thread-safe StateFlow updates from IO. Blocking sockets use IO threads. One reader owns each socket; writes are serialized. Heartbeats keep the connection alive during platform permission prompts. Screen frames have a four-frame capture queue and an acknowledgement window of four frames locally or twelve through the relay. A full window waits up to 16 ms for an acknowledgement before dropping a frame. Windows capture permits up to 120 updates per second; Android AVC requests 60 FPS. Actual throughput is measured separately. Input has a bounded queue and generation checks. Every stopped session increments the generation to invalidate queued work.
+UI actions use the main dispatcher; decoded images publish through thread-safe StateFlow updates from IO. Blocking sockets use IO threads. One reader owns each socket; writes are serialized. Heartbeats keep the connection alive during platform permission prompts. Screen frames have a four-frame capture queue and an acknowledgement window of four frames locally or twelve through the relay. A full window waits up to 16 ms for an acknowledgement before dropping a frame. Windows capture permits up to 120 updates per second; Android AVC requests 60 FPS. Actual throughput is measured separately. Input has a 128-entry FIFO with generation, epoch and freshness checks. Paste suspends that worker until clipboard readiness, preserving keystroke order while the socket reader continues. Focus release cancels queued work; every stopped session increments the generation. See [keyboard control](KEYBOARD.md).
 
 Desktop Duplication emits new desktop content only. Authenticated heartbeats therefore distinguish an unchanged, healthy capture from a stalled worker, without repeatedly transmitting the same image. A missing capture-worker heartbeat expires input after two seconds. Session counters measure decoded frames and distinct frame IDs submitted for Compose drawing; redraws of the same image do not inflate the result.
 
@@ -51,7 +51,7 @@ The viewer negotiates the codec inside the pinned TLS handshake. Android can pro
 
 ## Sound and direction changes
 
-Session protocol 3 retains the playback audio negotiation introduced in protocol 2. Native WASAPI
+Session protocol 4 retains the playback audio negotiation introduced in protocol 2. Native WASAPI
 loopback and Android AudioPlaybackCapture produce fixed 20 ms stereo PCM packets;
 native output runs away from the socket reader. Separate bounded queues prevent
 audio from accumulating indefinitely. Audio and video share the encrypted TCP

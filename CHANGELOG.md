@@ -4,6 +4,19 @@ This records user-visible milestones. Native artifacts remain local development
 builds; dates do not imply a public release. Validation is in
 [docs/VERIFICATION.md](docs/VERIFICATION.md).
 
+## 0.7.1 - 2026-10-10
+
+- Physical keyboard input in the shared Windows/Android viewer, including native
+  text composition, accents, editing/navigation keys, selection and shortcuts.
+- Visible keyboard focus/release; Ctrl+Shift+Space returns to app controls. Type/Send
+  stays available for phone software keyboards; drafts no longer use saved instance state.
+- Android 13+ native accessibility editor integration with no extra keyboard setup;
+  legacy editing restores the cursor and respects Unicode code points/selections.
+- Removed the 20 ms input-discard interval. Ordered, bounded typing/paste with
+  readiness barriers, cancellation and explicit overflow/failure notices.
+- Protocol 4, Android versionCode 9. Update both devices. Tests/audio remain paused;
+  local compilation and artifact checks do not verify real keyboard/device behavior.
+
 ## 0.7.0 - 2026-10-10
 
 - Session-scoped file and clipboard exchange, with the same Send files, compact

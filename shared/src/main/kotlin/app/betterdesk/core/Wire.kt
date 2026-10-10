@@ -13,7 +13,8 @@ data class Message(
     val type: String, val text: String = "", val secret: String = "", val action: String = "",
     val x: Float = 0f, val y: Float = 0f, val endX: Float = 0f, val endY: Float = 0f,
     val frame: Long = 0, val control: Boolean = false, val videoCodec: String = "jpeg",
-    val epoch: Long = 0, val audio: Boolean = false, val protocol: Int = 0
+    val epoch: Long = 0, val audio: Boolean = false, val protocol: Int = 0,
+    val key: String = "", val modifiers: Int = 0
 )
 
 sealed interface Packet {
@@ -90,5 +91,9 @@ class Wire(private val socket: Socket) : Closeable {
 fun Message.isValidInput(): Boolean {
     if (type != "input" || frame <= 0 || text.length > 512) return false
     if (listOf(x, y, endX, endY).any { !it.isFinite() || it !in 0f..1f }) return false
-    return action in setOf("tap", "right", "swipe", "scrollUp", "scrollDown", "text", "back", "home", "enter", "backspace", "copy", "paste", "selectAll")
+    if (modifiers !in 0..7) return false
+    if (action == "key") return key in RemoteKeys.allowed && text.isEmpty()
+    if (key.isNotEmpty() || (modifiers != 0 && action != "paste")) return false
+    return action in setOf("tap", "right", "swipe", "scrollUp", "scrollDown", "text", "back", "home", "enter", "backspace", "copy", "cut", "paste", "selectAll") &&
+        (action != "text" || (text.isNotEmpty() && text.isWellFormedInputText()))
 }

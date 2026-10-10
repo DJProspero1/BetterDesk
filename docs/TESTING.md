@@ -1,10 +1,12 @@
 # Testing
 
-The owner paused test and audio execution for the 0.7 file/clipboard feature.
+The owner paused test and audio execution for the 0.7 file/clipboard feature;
+that pause also applies to the 0.7.1 keyboard fixes.
 Do not run the commands below until tests are requested again. Compile/package
 with `scripts/build-local.ps1 -SkipTests -LowResource`; report runtime coverage
 as unverified. The 0.6 suite and measurements below are historical, not evidence
-for native Explorer paste, Android sharing or the new transfer protocol.
+for native Explorer paste, Android sharing, keyboard control or protocol 4.
+The pending keyboard/device matrix is documented in [KEYBOARD.md](KEYBOARD.md).
 
 Run all checks locally. Use synthetic content and dedicated test devices. Native
 capture/input tests and UI tests can open windows or interact with a device;

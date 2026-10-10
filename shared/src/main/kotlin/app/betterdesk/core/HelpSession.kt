@@ -19,7 +19,8 @@ data class HelpState(
     val error: String = "", val peer: String = "", val frameAt: Long = 0,
     val deviceCode: String = "", val codeExpires: Long = 0, val permissionReturned: Boolean = false,
     val codeLoading: Boolean = false, val viaRelay: Boolean = false,
-    val switchState: String = "", val audioAvailable: Boolean = false, val muted: Boolean = false
+    val switchState: String = "", val audioAvailable: Boolean = false, val muted: Boolean = false,
+    val inputNotice: String = ""
 )
 
 /** One attended session. A transport handshake never authorizes capture or input. */
@@ -64,7 +65,9 @@ class HelpSession(
     @Volatile private var relaySocket: java.net.Socket? = null
     @Volatile private var relayClient: RelayClient? = null
     private var relayCancellation: String? = null
-    private val inputQueue = Channel<Pair<Long, Message>>(32)
+    private val inputQueue = Channel<Triple<Long, Long, Message>>(128)
+    @Volatile private var inputRevision = 0L
+    private var pendingPaste: Deferred<Boolean>? = null
     private val controlQueue = Channel<Pair<Long, Message>>(64)
     private val playbackQueue = Channel<Pair<Long, Packet.Audio>>(3, BufferOverflow.DROP_OLDEST)
     @Volatile private var viewer = false
@@ -75,6 +78,8 @@ class HelpSession(
     private var lastReceivedFrame = 0L
     private var lastReceivedAudio = 0L
     private var lastInput = 0L
+    private var inputsInWindow = 0
+    private var inputNoticeJob: Job? = null
     private var mediaWork: Job? = null
     private var peerAudio = false
     private var switchToken: String? = null
@@ -89,9 +94,28 @@ class HelpSession(
                 catch (_: Exception) { withContext(Dispatchers.Main) { if (current == generation) finishError("connection") } }
             }
         }
-        scope.launch(Dispatchers.IO) {
-            for ((sessionGeneration, input) in inputQueue) {
-                if (sessionGeneration == generation && input.epoch == epoch && viewer && mutable.value.switchState.isEmpty()) runCatching { wire?.send(input) }
+        scope.launch {
+            for ((sessionGeneration, queuedAt, input) in inputQueue) {
+                if (sessionGeneration != generation || input.epoch != epoch || !canInput()) continue
+                if (System.nanoTime() - queuedAt > 2_000_000_000) { cancelPendingInput("busy"); continue }
+                val revision = inputRevision
+                if (input.action == "paste") {
+                    val preparation = scope.async { exchange.preparePaste() }
+                    pendingPaste = preparation
+                    val ready = try { preparation.await() } catch (_: CancellationException) { false }
+                        finally { if (pendingPaste === preparation) pendingPaste = null }
+                    if (!ready) {
+                        if (sessionGeneration == generation && input.epoch == epoch && revision == inputRevision && canInput()) cancelPendingInput("paste")
+                        continue
+                    }
+                }
+                if (sessionGeneration != generation || input.epoch != epoch || revision != inputRevision || !canInput()) continue
+                // A paste barrier may wait for clipboard bytes. Subsequent keystrokes stay
+                // behind it and refer to the current screen only after readiness is confirmed.
+                val outgoing = input.copy(frame = mutable.value.frame)
+                try { withContext(Dispatchers.IO) {
+                    if (sessionGeneration == generation && outgoing.epoch == epoch && revision == inputRevision && canInput()) wire?.send(outgoing)
+                } } catch (_: Exception) { if (sessionGeneration == generation) finishError("connection") }
             }
         }
         scope.launch(Dispatchers.IO) {
@@ -274,7 +298,7 @@ class HelpSession(
                         tls.startHandshake()
                         val connected = Wire(tls)
                         val hello = (connected.read() as? Packet.Control)?.message
-                        check(System.currentTimeMillis() < remote.expires && hello?.type == "hello" && hello.protocol == 3 && TlsIdentity.constantEquals(hello.secret, remote.secret))
+                        check(System.currentTimeMillis() < remote.expires && hello?.type == "hello" && hello.protocol == 4 && TlsIdentity.constantEquals(hello.secret, remote.secret))
                         tls.soTimeout = 15000
                         connected
                     }
@@ -284,7 +308,7 @@ class HelpSession(
                 wire = connection
                 viewer = true
                 withContext(Dispatchers.IO) {
-                    connection.send(Message("accepted", text = safeName, videoCodec = platform.preferredIncomingCodec, audio = platform.receivesAudio, protocol = 3))
+                    connection.send(Message("accepted", text = safeName, videoCodec = platform.preferredIncomingCodec, audio = platform.receivesAudio, protocol = 4))
                 }
                 mutable.value = HelpState(Stage.CONNECTING, invitation = invitation, viaRelay = invitation?.relayTicket != null)
                 pump(connection, current)
@@ -310,7 +334,7 @@ class HelpSession(
                 candidate.startHandshake()
                 val connection = Wire(candidate)
                 val hello = (connection.read() as? Packet.Control)?.message
-                if (System.currentTimeMillis() >= invitation.expires || hello?.type != "hello" || hello.protocol != 3 || !TlsIdentity.constantEquals(hello.secret, invitation.secret)) error("Invalid invitation")
+                if (System.currentTimeMillis() >= invitation.expires || hello?.type != "hello" || hello.protocol != 4 || !TlsIdentity.constantEquals(hello.secret, invitation.secret)) error("Invalid invitation")
                 candidate.soTimeout = 15_000
                 return connection
             } catch (_: Exception) { candidate.close(); socket = null; failed++ }
@@ -385,9 +409,9 @@ class HelpSession(
                             configureTls(candidate)
                             candidate.startHandshake()
                             connected = Wire(candidate)
-                            connected.send(Message("hello", secret = invitation.secret, protocol = 3))
+                            connected.send(Message("hello", secret = invitation.secret, protocol = 4))
                             val accepted = (connected.read() as? Packet.Control)?.message
-                            check(accepted?.type == "accepted" && accepted.protocol == 3)
+                            check(accepted?.type == "accepted" && accepted.protocol == 4)
                             platform.selectOutgoingCodec(accepted!!.videoCodec)
                             peerAudio = accepted.audio
                             candidate.soTimeout = 15000
@@ -400,9 +424,9 @@ class HelpSession(
                                 candidate.connect(InetSocketAddress(host, invitation.port), 1500)
                                 candidate.startHandshake()
                                 connected = Wire(candidate)
-                                connected.send(Message("hello", secret = invitation.secret, protocol = 3))
+                                connected.send(Message("hello", secret = invitation.secret, protocol = 4))
                                 val accepted = (connected.read() as? Packet.Control)?.message
-                                check(accepted?.type == "accepted" && accepted.protocol == 3)
+                                check(accepted?.type == "accepted" && accepted.protocol == 4)
                                 platform.selectOutgoingCodec(accepted!!.videoCodec)
                                 peerAudio = accepted.audio
                                 candidate.soTimeout = 15_000
@@ -488,6 +512,7 @@ class HelpSession(
 
     fun requestSwitch() {
         if (mutable.value.stage !in setOf(Stage.SHARING, Stage.VIEWING) || switchToken != null) return
+        cancelPendingInput()
         val token = Invitation.secret()
         switchToken = token
         mutable.value = mutable.value.copy(switchState = "sent")
@@ -568,6 +593,7 @@ class HelpSession(
                     sendControl(Message("switchCancel", text = message.text, epoch = message.epoch)); return
                 }
                 switchToken = message.text
+                cancelPendingInput()
                 mutable.value = mutable.value.copy(switchState = "incoming")
                 armSwitchTimeout(message.text)
             }
@@ -643,14 +669,24 @@ class HelpSession(
                                 check(viewer && incomingReady && !packet.message.control)
                                 withContext(Dispatchers.Main) { mutable.value = mutable.value.copy(remoteControl = false) }
                             }
+                            "inputUnavailable" -> withContext(Dispatchers.Main) {
+                                if (current == generation && viewer && packet.message.epoch == epoch) showInputNotice("unavailable")
+                            }
                             "input" -> {
                                 val message = packet.message
                                 val now = System.nanoTime()
                                 if (message.epoch != epoch || viewer) continue
                                 if (authorized.get() && mutable.value.switchState.isEmpty() && mutable.value.remoteControl && platform.controlAvailable() && message.isValidInput()
-                                    && message.frame <= sentFrame && message.frame >= sentFrame - 60 && now - sentAt < 2_000_000_000 && now - lastInput > 20_000_000) {
-                                    lastInput = now
-                                    withContext(Dispatchers.Main) { if (authorized.get() && current == generation && message.epoch == epoch && mutable.value.switchState.isEmpty()) platform.applyInput(message) }
+                                    && message.frame <= sentFrame && message.frame >= sentFrame - 60 && now - sentAt < 2_000_000_000) {
+                                    if (now - lastInput >= 1_000_000_000) { lastInput = now; inputsInWindow = 0 }
+                                    check(++inputsInWindow <= 256) { "Input rate exceeded" }
+                                    withContext(Dispatchers.Main) {
+                                        if (authorized.get() && current == generation && message.epoch == epoch && mutable.value.switchState.isEmpty()) {
+                                            val submitted = platform.submitInput(message)
+                                            if (!submitted && message.action !in setOf("tap", "right", "swipe", "scrollUp", "scrollDown"))
+                                                sendControl(Message("inputUnavailable", epoch = epoch))
+                                        }
+                                    }
                                 }
                             }
                             else -> error("Unexpected message")
@@ -661,19 +697,41 @@ class HelpSession(
         } finally { heartbeat.cancel() }
     }
 
-    fun input(action: String, x: Float = 0f, y: Float = 0f, endX: Float = x, endY: Float = y, text: String = "") {
+    private fun canInput(): Boolean {
         val state = mutable.value
-        if (state.stage != Stage.VIEWING || state.switchState.isNotEmpty() || !state.remoteControl || System.nanoTime() - state.frameAt > 2_000_000_000) return
-        val message = Message("input", action = action, x = x, y = y, endX = endX, endY = endY, text = text, frame = state.frame, epoch = epoch)
-        if (message.isValidInput()) inputQueue.trySend(generation to message)
+        return state.stage == Stage.VIEWING && state.switchState.isEmpty() && state.remoteControl && System.nanoTime() - state.frameAt <= 2_000_000_000
     }
-    fun paste() { exchange.beforePaste { input("paste") } }
+    fun input(action: String, x: Float = 0f, y: Float = 0f, endX: Float = x, endY: Float = y, text: String = "", key: String = "", modifiers: Int = 0): Boolean {
+        if (!canInput()) return false
+        val message = Message("input", action = action, x = x, y = y, endX = endX, endY = endY, text = text, frame = mutable.value.frame, epoch = epoch, key = key, modifiers = modifiers)
+        if (!message.isValidInput()) return false
+        if (!inputQueue.trySend(Triple(generation, System.nanoTime(), message)).isSuccess) { cancelPendingInput("busy"); return false }
+        return true
+    }
+    fun typeText(text: String) {
+        for (part in inputTextChunks(text.replace("\r\n", "\n").replace('\r', '\n'))) if (!input("text", text = part)) break
+    }
+    fun key(key: String, modifiers: Int = 0) { input("key", key = key, modifiers = modifiers) }
+    fun paste(modifiers: Int = 0) { input("paste", modifiers = modifiers) }
+    fun releaseKeyboard() { cancelPendingInput() }
+    private fun cancelPendingInput(notice: String = "") {
+        inputRevision++
+        pendingPaste?.cancel(); pendingPaste = null
+        while (inputQueue.tryReceive().isSuccess) Unit
+        if (notice.isNotEmpty()) showInputNotice(notice)
+    }
+    private fun showInputNotice(notice: String) {
+        inputNoticeJob?.cancel()
+        mutable.update { it.copy(inputNotice = notice) }
+        inputNoticeJob = scope.launch { delay(5000); mutable.update { it.copy(inputNotice = "") } }
+    }
 
     fun stop() { stopTransport(); mutable.value = HelpState(Stage.ENDED) }
     fun home() { stopTransport(); mutable.value = HelpState() }
     private fun finishError(key: String) { stopTransport(); mutable.value = HelpState(Stage.ERROR, error = key) }
     private fun stopTransport(preserveConnection: Boolean = false) {
         authorized.set(false); generation++; mediaGeneration++; permissionPending = false
+        cancelPendingInput(); inputNoticeJob?.cancel(); inputNoticeJob = null
         exchange.stop()
         switchTimeout?.cancel(); switchTimeout = null; switchToken = null
         locallyStopped = false; remotelyStopped = false

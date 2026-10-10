@@ -6,7 +6,7 @@ The source is hosted in a private GitHub repository during development. All nati
 
 ## Current milestone
 
-Version 0.7 is an **early Internet-connected development build**, not a production remote-support release. Connections prefer a reachable local network and otherwise use the BetterDesk Railway relay. It has not been externally security-audited. Local binaries are distributed through the private repository's GitHub Releases; the website remains a waitlist. Update both devices together: this version uses session protocol 3. The new transfer paths have compilation checks, not interactive or throughput verification; tests remain paused at the owner's request.
+Version 0.7.1 is an **early Internet-connected development build**, not a production remote-support release. Connections prefer a reachable local network and otherwise use the BetterDesk Railway relay. It has not been externally security-audited. Local binaries are distributed through the private repository's GitHub Releases; the website remains a waitlist. Update both devices together: this version uses session protocol 4. Keyboard fixes and transfer paths have compilation checks, not interactive or throughput verification; tests remain paused at the owner's request.
 
 - Windows and Android have the same home screen: this device's code, another device's code, and Connect.
 - Enter the other device's twelve-digit code. Its owner explicitly approves sharing. If the connection service is unavailable, an eight-digit code is available for the local network.
@@ -22,6 +22,7 @@ Version 0.7 is an **early Internet-connected development build**, not a producti
 - Native Windows Desktop Duplication capture, with a compatible GDI fallback. Streaming keeps bounded queues and uses an acknowledgement window of four frames locally or twelve through the relay. See [performance measurements](docs/PERFORMANCE.md) for measured results and limits; 60 FPS is not guaranteed.
 - Android uses genuine MediaProjection approval and an optional accessibility service.
 - Screen sharing stays view-only when control is unavailable.
+- Click/tap the remote field to use a physical keyboard on either viewer. Native text input preserves layouts and composition; editing keys and shortcuts share an ordered path. **Keyboard on · Release** or Ctrl+Shift+Space returns focus to local controls. Android 13+ uses its native accessibility editor; older Android uses a bounded text/selection fallback. See [keyboard control](docs/KEYBOARD.md) for OS limitations and unverified coverage.
 - Android asks for notification permission and shows a sharing notification with **Disconnect**. It disappears when sharing ends; the availability notification is removed when capture takes over. Switching apps preserves the session. Control-permission screens explain the steps, including restricted-settings recovery.
 - Stop closes the transport and capture. Reusing a closed invitation does not reopen access.
 
@@ -37,8 +38,8 @@ Create ignored `local.properties` with `sdk.dir=C:/path/to/Android/Sdk`.
 
 Outputs:
 
-- **Windows: `dist/BetterDesk-Windows-0.7.0.exe`**. Double-click. No installer, ZIP extraction or separate Java installation.
-- **Android: `dist/BetterDesk-Android-0.7.0-debug.apk`**. Install as an update over the previous APK; the same local debug signing key is used.
+- **Windows: `dist/BetterDesk-Windows-0.7.1.exe`**. Double-click. No installer, ZIP extraction or separate Java installation.
+- **Android: `dist/BetterDesk-Android-0.7.1-debug.apk`**. Install as an update over the previous APK; the same local debug signing key is used.
 - Local checks: `desktop/build/reports/tests/test/index.html`.
 - Rendered UI checks: `desktop/build/screenshots/`.
 
@@ -84,6 +85,7 @@ Treat codes as temporary secrets. A displayed device name is a label, not a veri
 | [Platforms and troubleshooting](docs/PLATFORMS.md) | Permissions, lifecycle, saved data, capabilities and current limits |
 | [Sound and screen switching](docs/AUDIO_AND_SWITCHING.md) | Native audio, consented direction changes and limitations |
 | [Files and clipboard](docs/FILES_AND_CLIPBOARD.md) | Native copy/paste, Android Share, transfer status, protocol and limits |
+| [Keyboard control](docs/KEYBOARD.md) | Physical keyboards, native Android typing, ordering, focus and editing limits |
 | [Testing](docs/TESTING.md) / [Verification](docs/VERIFICATION.md) | Reproducible checks and dated evidence with coverage gaps |
 | [Performance](docs/PERFORMANCE.md) | Measurement method, actual results and remaining bottlenecks |
 | [Local releases](docs/RELEASING.md) / [Changelog](CHANGELOG.md) | Versioning, portable EXE/APK delivery and milestones |

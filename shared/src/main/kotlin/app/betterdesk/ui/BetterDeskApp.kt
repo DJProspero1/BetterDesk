@@ -1,7 +1,6 @@
 package app.betterdesk.ui
 
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.focusable
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -26,13 +25,16 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -244,7 +246,7 @@ fun BetterDeskApp(session: HelpSession, onFullScreenChange: (Boolean) -> Unit = 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable internal fun RemoteViewer(session: HelpSession, state: HelpState, pt: Boolean, modifier: Modifier, fullScreen: Boolean, onFullScreenChange: (Boolean) -> Unit) {
     fun t(en: String, portuguese: String) = if (pt) portuguese else en
-    var typed by rememberSaveable { mutableStateOf("") }
+    var typed by remember(session) { mutableStateOf("") }
     var inputOpen by rememberSaveable { mutableStateOf(false) }
     var controlsOpen by rememberSaveable { mutableStateOf(false) }
     var fresh by remember { mutableStateOf(true) }
@@ -252,34 +254,33 @@ fun BetterDeskApp(session: HelpSession, onFullScreenChange: (Boolean) -> Unit = 
     val inputEnabled = state.remoteControl && fresh && state.switchState.isEmpty()
     val focusRequester = remember { FocusRequester() }
     val screenFocus = remember { FocusRequester() }
+    val exitFocus = remember { FocusRequester() }
+    var keyboardFocused by remember { mutableStateOf(false) }
+    var composition by remember { mutableStateOf("") }
     val focusManager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
+    val windowFocused = LocalWindowInfo.current.isWindowFocused
+    fun releaseKeyboard() { session.releaseKeyboard(); focusManager.clearFocus(); keyboard?.hide(); exitFocus.requestFocus() }
     LaunchedEffect(inputOpen) { if (inputOpen) focusRequester.requestFocus() }
+    LaunchedEffect(inputEnabled, windowFocused) { if ((!inputEnabled || !windowFocused) && keyboardFocused) releaseKeyboard() }
     LaunchedEffect(state.frameAt) {
         fresh = true; delay(2000); fresh = false
     }
     Box(modifier.background(Color.Black).then(if (fullScreen) Modifier else Modifier.safeDrawingPadding()).testTag("remote-viewport")) {
+        RemoteKeyboard(session, inputEnabled, screenFocus, Modifier.size(1.dp),
+            onFocus = { keyboardFocused = it }, onComposition = { composition = it }, release = ::releaseKeyboard)
         BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             state.image?.let { image ->
                 val ratio = image.width.toFloat() / image.height
                 val width = minOf(maxWidth, maxHeight * ratio)
                 val height = width / ratio
                 Image(image, t("Shared screen", "Ecrã partilhado"), Modifier.size(width, height).testTag("remote-image")
-                    .focusRequester(screenFocus).onPreviewKeyEvent { event ->
-                        if (event.type == KeyEventType.KeyDown && event.isCtrlPressed && inputEnabled) {
-                            when (event.key) {
-                                Key.C -> { session.input("copy"); true }
-                                Key.V -> { session.paste(); true }
-                                Key.A -> { session.input("selectAll"); true }
-                                else -> false
-                            }
-                        } else false
-                    }.focusable().drawWithContent {
+                    .drawWithContent {
                     drawContent()
                     session.performance.presented(state.frame)
                 }
-                    .pointerInput(session) {
-                        detectTapGestures(onTap = { if (!session.platform.isAndroid) screenFocus.requestFocus(); session.input("tap", (it.x / size.width).coerceIn(0f, 1f), (it.y / size.height).coerceIn(0f, 1f)) }, onLongPress = { session.input("right", (it.x / size.width).coerceIn(0f, 1f), (it.y / size.height).coerceIn(0f, 1f)) })
+                    .pointerInput(session, inputEnabled) {
+                        detectTapGestures(onTap = { if (inputEnabled) { inputOpen = false; screenFocus.requestFocus() }; session.input("tap", (it.x / size.width).coerceIn(0f, 1f), (it.y / size.height).coerceIn(0f, 1f)) }, onLongPress = { if (inputEnabled) screenFocus.requestFocus(); session.input("right", (it.x / size.width).coerceIn(0f, 1f), (it.y / size.height).coerceIn(0f, 1f)) })
                     }.pointerInput(session) {
                         var start = Offset.Zero; var end = Offset.Zero
                         detectDragGestures(onDragStart = { start = it; end = it }, onDragEnd = {
@@ -306,7 +307,7 @@ fun BetterDeskApp(session: HelpSession, onFullScreenChange: (Boolean) -> Unit = 
         Column(Modifier.verticalScroll(rememberScrollState()).padding(8.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(if (!fresh) t("Waiting for the screen…", "A aguardar o ecrã…") else if (state.remoteControl) t("You can control this screen", "Pode controlar este ecrã") else t("Viewing only", "Apenas visualização"), Modifier.weight(1f).padding(horizontal = 8.dp), fontSize = 14.sp)
-            TextButton(onClick = { controlsOpen = false; inputOpen = false; focusManager.clearFocus(); keyboard?.hide() }) { Text(t("Hide", "Ocultar")) }
+            TextButton(onClick = { controlsOpen = false; inputOpen = false; keyboard?.hide(); if (inputEnabled) screenFocus.requestFocus() }) { Text(t("Hide", "Ocultar")) }
             TextButton(onClick = { session.stop() }) { Text(t("Disconnect", "Desligar")) }
         }
         if (state.switchState.isNotEmpty()) SessionSwitch(session, state, pt)
@@ -316,25 +317,47 @@ fun BetterDeskApp(session: HelpSession, onFullScreenChange: (Boolean) -> Unit = 
             TextButton(onClick = session::toggleSound, enabled = state.audioAvailable) { Text(if (!state.audioAvailable) t("Sound unavailable", "Som indisponível") else if (state.muted) t("Unmute", "Ligar som") else t("Mute", "Silenciar")) }
             TextButton(onClick = { inputOpen = !inputOpen }, enabled = inputEnabled) { Text(t("Type", "Escrever")) }
             TextButton(onClick = { session.input("copy") }, enabled = inputEnabled) { Text(t("Copy selection", "Copiar seleção")) }
-            TextButton(onClick = session::paste, enabled = inputEnabled) { Text(t("Paste", "Colar")) }
+            TextButton(onClick = { session.paste() }, enabled = inputEnabled) { Text(t("Paste", "Colar")) }
             TextButton(onClick = { session.input("scrollUp", .5f, .5f) }, enabled = inputEnabled) { Text(t("Scroll up", "Subir")) }
             TextButton(onClick = { session.input("scrollDown", .5f, .5f) }, enabled = inputEnabled) { Text(t("Scroll down", "Descer")) }
             TextButton(onClick = { session.input("back") }, enabled = inputEnabled) { Text(t("Back / Esc", "Voltar / Esc")) }
             TextButton(onClick = { session.input("home") }, enabled = inputEnabled) { Text(t("Home", "Início")) }
         }
         if (inputOpen) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(typed, { typed = it.take(512) }, Modifier.weight(1f).focusRequester(focusRequester), label = { Text(t("Text to type", "Texto a escrever")) }, keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None), maxLines = 3)
-                TextButton(onClick = { session.input("text", text = typed); typed = "" }, enabled = typed.isNotEmpty() && inputEnabled) { Text(t("Send", "Enviar")) }
+            Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
+                OutlinedTextField(typed, { typed = it.take(512).let { value -> if (value.lastOrNull()?.isHighSurrogate() == true) value.dropLast(1) else value } }, Modifier.fillMaxWidth().focusRequester(focusRequester), label = { Text(t("Text to type", "Texto a escrever")) }, keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None), maxLines = 3)
+                FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = { session.typeText(typed); typed = ""; focusRequester.requestFocus() }, enabled = typed.isNotEmpty() && inputEnabled) { Text(t("Send", "Enviar")) }
                 TextButton(onClick = { session.input("enter") }, enabled = inputEnabled) { Text(t("Enter", "Enter")) }
+                TextButton(onClick = { session.key("Backspace") }, enabled = inputEnabled) { Text(t("Delete", "Apagar")) }
+                TextButton(onClick = { session.key("Tab") }, enabled = inputEnabled) { Text(t("Tab", "Tab")) }
+                }
             }
         }
         }
         }
         }
         // Always discoverable, including before Controls is opened and while typing.
-        FilledTonalButton(onClick = { onFullScreenChange(!fullScreen) }, modifier = Modifier.align(Alignment.TopEnd).safeDrawingPadding().padding(8.dp).heightIn(min = 48.dp)) {
+        FilledTonalButton(onClick = { onFullScreenChange(!fullScreen) }, modifier = Modifier.align(Alignment.TopEnd).safeDrawingPadding().padding(8.dp).heightIn(min = 48.dp).focusRequester(exitFocus)) {
             Text(if (fullScreen) t("Exit full screen", "Sair do ecrã inteiro") else t("Full screen", "Ecrã inteiro"))
+        }
+        Column(Modifier.align(Alignment.TopStart).safeDrawingPadding().padding(top = 64.dp, start = 8.dp, end = 8.dp).widthIn(max = 360.dp)) {
+            AnimatedVisibility(keyboardFocused, enter = fadeIn(tween(duration)), exit = fadeOut(tween(duration * 3 / 4))) {
+                Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surface) {
+                    Column(Modifier.padding(horizontal = 8.dp)) {
+                        TextButton(onClick = ::releaseKeyboard) { Text(t("Keyboard on · Release", "Teclado ligado · Libertar")) }
+                        if (!session.platform.isAndroid) Text("Ctrl + Shift + Space", Modifier.padding(start = 8.dp, bottom = 8.dp), fontSize = 12.sp)
+                        if (composition.isNotEmpty()) Text(composition, Modifier.padding(8.dp))
+                    }
+                }
+            }
+            if (state.inputNotice.isNotEmpty()) Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surface) {
+                Text(when (state.inputNotice) {
+                    "paste" -> t("Paste failed. Please try again.", "Não foi possível colar. Tente novamente.")
+                    "busy" -> t("Typing paused. Please try again.", "Escrita em pausa. Tente novamente.")
+                    else -> t("This field or key is unavailable. Try the device's keyboard.", "Este campo ou tecla não está disponível. Use o teclado do dispositivo.")
+                }, Modifier.padding(12.dp).semantics { liveRegion = LiveRegionMode.Polite }, fontSize = 14.sp)
+            }
         }
     }
 }

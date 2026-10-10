@@ -26,11 +26,20 @@ This is an early prototype, not audited remote-support software. Report issues p
   a render-endpoint WASAPI loopback stream. Neither opens the microphone. No audio
   is recorded to disk or included in logs. Audio packet size and queues are bounded.
 - This version has no trusted-device/unattended mode. A stored Android accessibility grant does not authorize any future session.
-- Session protocol 3 includes approved file/clipboard exchange. Only new Windows
+- Session protocol 4 retains approved file/clipboard exchange. Only new Windows
   clipboard content is observed automatically, while both devices enable it;
   Android uses explicit foreground actions. File manifests identify user-selected
   handles, never arbitrary remote paths. A paste barrier acknowledges the expected
   clipboard revision before forwarding paste input.
+- Keyboard text and symbolic keys use bounded ordered input, explicit modifier
+  allowlists and fresh-frame/session/epoch checks. A 256-input/second ceiling
+  fails excessive streams instead of discarding normal bursts. Paste blocks later
+  keystrokes until readiness; timeout/overflow clears pending input with a notice.
+  Focus release cancels pending typing. Chords never leave remote keys held.
+  Android 13+ uses only an accessibility input connection matching the refreshed
+  foreground package; existing protected-screen checks still apply. Older Android
+  rejects password/unknown-selection rewrites. Native submission is asynchronous,
+  so OS focus races remain possible; see [keyboard control](docs/KEYBOARD.md).
 - Bulk transfers use a different ephemeral pinned TLS connection, authenticated
   with a secret sent inside the approved screen connection. LAN destinations are
   restricted to the existing peer; Railway routing still comes from validated
@@ -40,7 +49,8 @@ This is an early prototype, not audited remote-support software. Report issues p
   Private transfer cache can contain file bytes until teardown; interrupted cleanup
   or open Explorer handles can leave remnants. See [files and clipboard](docs/FILES_AND_CLIPBOARD.md).
 - The new OLE/Android file paths have not undergone runtime/security testing in
-  0.7.0 because tests were paused by the owner. Compilation is not an assurance of
+  0.7.0 or 0.7.1 because tests were paused by the owner. The 0.7.1 keyboard paths
+  likewise remain runtime unverified. Compilation is not an assurance of
   correct shell interoperation, cancellation, throughput or adversarial robustness.
 
 Before production: independent protocol/platform audit, dependency/license review, signed updates, abuse handling, physical-device compatibility testing, denial-of-service testing, and clear release privacy/distribution policies.

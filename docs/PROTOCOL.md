@@ -145,8 +145,8 @@ validate dimensions/content. Unknown packet types fail. Message decoding rejects
 unknown JSON fields; known optional properties use defaults. This requires care
 when changing the schema: there is no general backwards-compatibility negotiation.
 
-The sharing side sends `hello` with the invitation secret and `protocol=3` after
-TLS pin validation. The viewer replies `accepted` with `protocol=3`, its codec
+The sharing side sends `hello` with the invitation secret and `protocol=4` after
+TLS pin validation. The viewer replies `accepted` with `protocol=4`, its codec
 preference and audio receive capability. Missing/wrong versions fail before media.
 After actual capture permission/setup, the source sends `ready` with control/audio
 availability and the current epoch. Every frame, audio packet, input, acknowledgement
@@ -192,10 +192,27 @@ four frames; acknowledgement windows hold four locally or twelve over the relay.
 Dropped predictive frames trigger bounded keyframe recovery rather than unbounded
 buffering. See [PERFORMANCE.md](PERFORMANCE.md).
 
+Protocol 4 adds Message fields `key` (symbolic name, default empty) and `modifiers`
+(Shift=1, Ctrl=2, Alt=4, default 0), plus `inputUnavailable` feedback carrying the
+current epoch. Update both devices; strict decoding rejects older schemas.
+
 Input is an allowlist: `tap`, `right`, `swipe`, `scrollUp`, `scrollDown`, `text`,
-`back`, `home`, `enter`, `backspace`, `copy`, `paste`, `selectAll`. Coordinates must be finite and within 0..1;
-text is limited to 512 Kotlin string units. Input references a recent frame,
-requires fresh capture within two seconds and current control authorization, and
-is rate-limited at the source. Both platform adapters add their own restrictions.
+`back`, `home`, `enter`, `backspace`, `copy`, `cut`, `paste`, `selectAll`, `key`.
+Key names are A–Z, 0–9, F1–F12, Enter, Tab, Backspace, Delete, Escape, Left/Right,
+Up/Down, Home/End, PageUp/PageDown, Insert and Space. Unknown keys/modifier bits fail
+closed. Only `key` and `paste` accept modifiers. Coordinates must be finite and
+within 0..1; text is at most 512 UTF-16 units with valid surrogate pairs and no
+control characters except tab/newlines. The viewer splits committed batches of
+at most 8192 units without splitting surrogate pairs.
+
+Input references a recent frame, requires fresh capture within two seconds and
+current control authorization. The previous 20 ms per-input discard is removed;
+more than 256 valid inputs in a one-second receive window closes the session.
+A bounded 128-entry outgoing FIFO preserves text/key/paste order. Clipboard
+readiness may wait up to 15 seconds; subsequent commands stay behind paste and
+ordinary queued commands expire after two seconds. Overflow/failure clears pending
+input and reports a notice. Focus release, switch requests and disconnect cancel
+pending typing/paste. Every send rechecks authorization, generation and epoch.
+Both platform adapters add restrictions described in [keyboard control](KEYBOARD.md).
 An OS action already dispatched can finish after disconnect; disconnect is not
 an undo operation.

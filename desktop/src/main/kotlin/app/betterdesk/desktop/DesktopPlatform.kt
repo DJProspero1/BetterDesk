@@ -95,15 +95,16 @@ class DesktopPlatform : RemotePlatform {
         return pid.value == Kernel32.INSTANCE.GetCurrentProcessId()
     }
 
-    override fun applyInput(input: Message) {
-        if (!active.get() || !input.isValidInput()) return
-        val r = robot ?: return
+    override fun applyInput(input: Message) { submitInput(input) }
+    override fun submitInput(input: Message): Boolean {
+        if (!active.get() || !input.isValidInput()) return false
+        val r = robot ?: return false
         val x = bounds.x + (input.x * (bounds.width - 1)).toInt()
         val y = bounds.y + (input.y * (bounds.height - 1)).toInt()
         if (input.action in setOf("tap", "right", "swipe", "scrollUp", "scrollDown")) {
             // A helper cannot press this app's own consent/stop controls.
-            if (Window.getWindows().any { it.isVisible && it.bounds.contains(x, y) }) return
-        } else if (isOurForeground()) return
+            if (Window.getWindows().any { it.isVisible && it.bounds.contains(x, y) }) return false
+        } else if (isOurForeground()) return false
         when (input.action) {
             "tap", "right" -> {
                 r.mouseMove(x, y)
@@ -113,7 +114,7 @@ class DesktopPlatform : RemotePlatform {
             "swipe" -> {
                 val endX = bounds.x + (input.endX * (bounds.width - 1)).toInt()
                 val endY = bounds.y + (input.endY * (bounds.height - 1)).toInt()
-                if (Window.getWindows().any { it.isVisible && it.bounds.intersectsLine(x.toDouble(), y.toDouble(), endX.toDouble(), endY.toDouble()) }) return
+                if (Window.getWindows().any { it.isVisible && it.bounds.intersectsLine(x.toDouble(), y.toDouble(), endX.toDouble(), endY.toDouble()) }) return false
                 r.mouseMove(x, y)
                 try { r.mousePress(InputEvent.BUTTON1_DOWN_MASK); r.mouseMove(endX, endY) } finally { r.mouseRelease(InputEvent.BUTTON1_DOWN_MASK) }
             }
@@ -122,18 +123,41 @@ class DesktopPlatform : RemotePlatform {
             "backspace" -> press(KeyEvent.VK_BACK_SPACE)
             "back" -> press(KeyEvent.VK_ESCAPE)
             "home" -> press(KeyEvent.VK_HOME)
-            "copy", "paste", "selectAll" -> {
-                try {
-                    r.keyPress(KeyEvent.VK_CONTROL)
-                    press(when (input.action) { "copy" -> KeyEvent.VK_C; "paste" -> KeyEvent.VK_V; else -> KeyEvent.VK_A })
-                } finally { r.keyRelease(KeyEvent.VK_CONTROL) }
-            }
+            "copy", "cut", "paste", "selectAll" -> chord(when (input.action) { "copy" -> KeyEvent.VK_C; "cut" -> KeyEvent.VK_X; "paste" -> KeyEvent.VK_V; else -> KeyEvent.VK_A }, app.betterdesk.core.RemoteKeys.CTRL or input.modifiers)
+            "key" -> chord(desktopKey(input.key) ?: return false, input.modifiers)
             "text" -> input.text.forEach { char ->
                 if (active.get() && !isOurForeground()) {
-                    unicode(char, false); unicode(char, true)
+                    when (char) {
+                        '\n' -> press(KeyEvent.VK_ENTER)
+                        '\r' -> Unit // CRLF is one Enter.
+                        '\t' -> press(KeyEvent.VK_TAB)
+                        else -> { unicode(char, false); unicode(char, true) }
+                    }
                 }
             }
         }
+        return true
+    }
+
+    private fun chord(key: Int, modifiers: Int) {
+        val r = robot ?: return
+        val held = ArrayList<Int>(3)
+        try {
+            for ((mask, code) in listOf(1 to KeyEvent.VK_SHIFT, 2 to KeyEvent.VK_CONTROL, 4 to KeyEvent.VK_ALT)) {
+                if (modifiers and mask != 0) { r.keyPress(code); held += code }
+            }
+            if (active.get() && !isOurForeground()) press(key)
+        } finally { held.asReversed().forEach { r.keyRelease(it) } }
+    }
+
+    private fun desktopKey(key: String): Int? = when {
+        key.length == 1 && key[0] in 'A'..'Z' -> KeyEvent.VK_A + (key[0] - 'A')
+        key.length == 1 && key[0] in '0'..'9' -> KeyEvent.VK_0 + (key[0] - '0')
+        key.matches(Regex("F([1-9]|1[0-2])")) -> KeyEvent.VK_F1 + key.drop(1).toInt() - 1
+        else -> mapOf("Enter" to KeyEvent.VK_ENTER, "Tab" to KeyEvent.VK_TAB, "Backspace" to KeyEvent.VK_BACK_SPACE,
+            "Delete" to KeyEvent.VK_DELETE, "Escape" to KeyEvent.VK_ESCAPE, "Left" to KeyEvent.VK_LEFT, "Right" to KeyEvent.VK_RIGHT,
+            "Up" to KeyEvent.VK_UP, "Down" to KeyEvent.VK_DOWN, "Home" to KeyEvent.VK_HOME, "End" to KeyEvent.VK_END,
+            "PageUp" to KeyEvent.VK_PAGE_UP, "PageDown" to KeyEvent.VK_PAGE_DOWN, "Insert" to KeyEvent.VK_INSERT, "Space" to KeyEvent.VK_SPACE)[key]
     }
 
     private fun press(key: Int) { try { robot?.keyPress(key) } finally { robot?.keyRelease(key) } }

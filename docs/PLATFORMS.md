@@ -1,6 +1,6 @@
 # Platform behavior, permissions and troubleshooting
 
-This describes version 0.7.0. The shared interface is the product contract; native
+This describes version 0.7.1. The shared interface is the product contract; native
 differences exist where the OS requires them. The verified environments are
 Windows 11 x64 and an Android API 36 emulator. Declared minimum Android API 26 is
 not a claim of complete vendor/version coverage.
@@ -83,8 +83,13 @@ Android control requires unlocked full-display capture and an active accessibili
 service. BetterDesk permits global Home/Back to leave its own screen, while taps,
 text and gestures on its own approval controls remain blocked. Settings,
 permission-controller and system-UI screens remain blocked. App-only capture cannot safely authorize whole-display coordinates.
-Text targets the focused editable accessibility node; custom renderers, games,
-some password fields and unsupported widgets can reject it. Protected content may
+Android 13+ uses the native accessibility input connection when its editor package
+matches the active window, without a separate keyboard grant. Older versions or
+missing editors use focused accessibility-node text/selection operations; the
+fallback rejects masked/password fields and restores the caret after edits.
+Both viewers accept physical keyboards with shared focus and input ordering.
+Custom renderers, games and unsupported widgets can reject actions. See
+[keyboard control](KEYBOARD.md). Protected content may
 appear blank. Screen lock/revoked projection stops sharing.
 
 Switching apps, returning and activity rotation preserve the process-held session.
@@ -138,13 +143,14 @@ public distribution; this implementation guide is not a provider-retention promi
 | Internet connects nowhere | HTTPS and the configured Railway outgoing TCP endpoint must be reachable. There is no port-443 tunnel or manual port-forwarding setup. |
 | Large borders in landscape | Fit preserves the remote aspect ratio; a portrait source cannot fill a landscape screen without cropping. Controls must not reserve permanent space. |
 | Phone sees screen but cannot control | Check view-only status, accessibility, focused editable node, full-display sharing and blocked system screens. Do not bypass the permission boundary. |
+| Physical keyboard does nothing | Update both devices to 0.7.1, then tap the remote field. Keyboard on shows remote focus. Local Type/code fields keep input local; Ctrl+Shift+Space releases focus. Custom/protected editors can reject input. See KEYBOARD.md. |
 | Phone session ends after network change | Seamless Wi-Fi/mobile handover and reconnect are not implemented. Start a fresh attended session. |
 | Android update is rejected | Another signing key or lower versionCode cannot replace the installed APK. Use the original key; uninstalling loses app data and must not be an automatic fix. |
 | Language resets | Update without clearing data; check the same Windows user/Android app installation. Native notification language is currently separate. |
 | Old Windows taskbar icon | Check whether an old process or pinned shortcut targets the previous EXE. Test the current portable EXE/window before changing Windows caches. |
 | Low FPS or lag | Compare LAN and relay, source refresh rate, motion, codec and bandwidth. Windows JPEG is bandwidth-heavy; see measured limits in PERFORMANCE.md. |
 | No device sound | Check viewer mute/output volume and source playback volume. Android needs API 29+, audio permission and an app that allows capture; calls/protected content may remain silent. Windows captures the default multimedia output. See AUDIO_AND_SWITCHING.md. |
-| Switch ends the session | Both devices need 0.7.0. A failed new capture or denied OS prompt ends the handoff safely; reconnect normally. |
+| Switch ends the session | Both devices need 0.7.1. A failed new capture or denied OS prompt ends the handoff safely; reconnect normally. |
 
 Report reproducible failures using [CONTRIBUTING.md](../CONTRIBUTING.md), with
 redacted metadata rather than session codes or private screenshots.

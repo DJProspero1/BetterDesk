@@ -1,5 +1,21 @@
 # Local verification
 
+## Version 0.7.1, 10 October 2026: keyboard fixes
+
+Tests, app launches, emulator/device checks and audio workloads remain paused by
+the owner. Windows and Android are compiled/packaged locally with one Gradle worker
+and a 1536 MiB heap. Artifact checks and source identity are recorded in the final
+BUILD-INFO.txt/SHA256SUMS.txt. No runtime keyboard or timing result is claimed.
+
+Source review found the viewer only forwarded Ctrl+C/V/A, the receiver silently
+discarded inputs less than 20 ms apart, and Android node edits omitted cursor
+restoration. The fix adds shared native text/keyboard focus, ordered typing/paste,
+Android 13+ accessibility input connections and safer legacy editing. Read the
+[keyboard guide](KEYBOARD.md) for the exact scope and deferred device matrix.
+IME/layout/OEM compatibility, shortcut delivery, gesture/focus timing, paste races
+and physical-device behavior remain **runtime unverified**. Historical Type/Send
+checks below are not proof of direct physical-keyboard forwarding.
+
 ## Version 0.7, 10 October 2026: files and clipboard
 
 The owner explicitly paused tests and audio workloads. No app, emulator, native
