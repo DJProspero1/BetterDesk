@@ -26,7 +26,9 @@ for this release because the owner paused tests. Compilation is not runtime proo
   observation is prohibited by Android; a remote Copy action in another Android
   app does not automatically send that clipboard back to Windows. Use native Share
   or return to BetterDesk and Send clipboard. Unsupported clipboard images can be
-  sent/saved as files. Sharing to BetterDesk while disconnected asks you to connect
+  sent/saved as files. Unsupported file/image clipboard formats never acknowledge
+  readiness for a remote paste of stale content; their inline Save action remains
+  available. Sharing to BetterDesk while disconnected asks you to connect
   first; it does not queue a transfer to an unknown future device.
 
 Save files writes a new batch folder in `Downloads/BetterDesk` on Windows and

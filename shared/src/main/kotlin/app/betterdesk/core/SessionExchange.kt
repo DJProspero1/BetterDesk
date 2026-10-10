@@ -222,7 +222,10 @@ class SessionExchange(private val platform: ExchangePlatform?, private val relay
                 }
                 incomingReserved += offer.bytes
                 add(TransferItem(offer, incoming = true))
-                if (offer.kind != "files") receivedClipboard = offer.id
+                if (offer.kind != "files") receivedClipboard = if (
+                    (offer.kind == "clipboard" && platform.virtualFileClipboard) ||
+                    (offer.kind == "image" && platform.automaticClipboard)
+                ) offer.id else ""
                 if (offer.kind == "clipboard" && platform.virtualFileClipboard) {
                     if (!platform.putFiles(offer) { requestDownload(offer.id) }) { receivedClipboard = ""; notice("clipboardFailed") }
                 } else if (offer.kind == "image" && platform.automaticClipboard) { clipboardImages.add(offer.id); receive(offer.id, clipboardImage = true) }
@@ -338,13 +341,18 @@ class SessionExchange(private val platform: ExchangePlatform?, private val relay
         val current = generation
         val offer = item(id)?.takeIf { it.incoming && !it.active }?.offer ?: return
         requestDownload(id).whenComplete { directory, error ->
-            if (current != generation || error != null || platform == null) { clipboardImages.remove(id); return@whenComplete }
+            if (current != generation || error != null || platform == null) {
+                clipboardImages.remove(id)
+                if (receivedClipboard == id) receivedClipboard = ""
+                return@whenComplete
+            }
             saveJobs[id] = scope.launch {
                 try {
                     if (clipboardImage) {
                         if (mutable.value.clipboard && mutable.value.peerClipboard) {
                             val bytes = withContext(Dispatchers.IO) { File(directory, "Screenshot.png").readBytes() }
-                            if (platform.putImage(bytes)) { platform.clipboardReady(); notice("clipboardReceived") } else notice("clipboardFailed")
+                            if (platform.putImage(bytes)) { platform.clipboardReady(); notice("clipboardReceived") }
+                            else { if (receivedClipboard == id) receivedClipboard = ""; notice("clipboardFailed") }
                         }
                     } else {
                         update(id) { it.copy(phase = TransferPhase.SAVING) }
@@ -355,7 +363,10 @@ class SessionExchange(private val platform: ExchangePlatform?, private val relay
                         }
                     }
                 } catch (_: CancellationException) { }
-                catch (_: Exception) { if (current == generation) { update(id) { it.copy(phase = TransferPhase.FAILED, error = "saveFailed") } } }
+                catch (_: Exception) { if (current == generation) {
+                    if (receivedClipboard == id) receivedClipboard = ""
+                    update(id) { it.copy(phase = TransferPhase.FAILED, error = "saveFailed") }
+                } }
                 finally { clipboardImages.remove(id); saveJobs.remove(id) }
             }
         }
