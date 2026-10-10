@@ -99,7 +99,7 @@ exists merely because it is described in the plan.
 | --- | --- | --- | --- |
 | M0 | In progress | Native library/binding decision and local build feasibility | Pinned desktop/Android artifact/ABI/size/hash inventory and opt-in adapters exist. Finish compilation/runtime evidence, native license/build provenance and media bridge feasibility before marking complete. |
 | M1 | Complete | Extract transport boundary, retaining current TLS behavior | `SessionTransport` extracted; `Wire` retains protocol 4/TLS framing and Stop still closes setup sockets. Both target source compilation and ordinary approval/Stop/epoch/input checks passed locally; native Windows-only integration remains untested. |
-| M2 | In progress | Authenticated WebRTC proof behind a development-only opt-in | Bounded native data-channel adapters and pinned-TLS/secret bootstrap fixture exist; no production route label. Five desktop proof checks passed with real Linux JNI. Android source/test APKs compile; Android instrumentation/interoperation pending. |
+| M2 | In progress | Authenticated WebRTC proof behind a development-only opt-in | Five desktop proof checks, Android native peers and desktop/Android interoperation passed with real JNI and synthetic data. Pinned TLS/context validation and teardown are covered. Native Windows load/runtime evidence remains required; no production route label. |
 | M3 | Not started | Screen and playback audio tracks in both directions | Capture/encode/decode/render ownership documented; no microphone, double capture or unbounded media queues. Real device frame-age/quality/CPU evidence when allowed. |
 | M4 | Not started | Direct control/clipboard/files and safe route cutover | Direct payload in both directions, ordered input/paste, verified files, transfer backpressure, old-path rejection and deterministic Stop. No claim of all-direct while file bytes still relay. |
 | M5 | Not started | HTTPS signaling and deployable TURN fallback in sibling infra PR | Reviewed authentication/schema, bounded endpoints, scoped credentials, selected provider, external UDP/TCP/TLS reachability, rollback and live validation when authorized. Current Railway TCP bootstrap is not sufficient. |
@@ -184,16 +184,24 @@ until implementation and acceptance evidence justify changing its status.
   Windows-only integration check. Final suite: 62 checks, 54 passed, eight skipped,
   no failures. All five native proof checks passed (4.383 seconds). Skips include
   six existing opt-in checks, Windows platform integration and the dedicated-device
-  host proof, which is now being run separately.
+  host proof. The latter passed separately after the final fixes below.
 - Opt-in Android source/test compilation and both APK packages passed. A fresh API
   36.1 Android 16 emulator booted; initial install commands timed out but the APK
   later appeared in the package manager. Retry with four GiB RAM/default Vulkan
-  is running. The separate host run failed before native setup because the retry
-  emulator was still booting; a boot-readiness guard was added. Instrumentation and
-  desktop/Android native interoperation remain pending.
+  completed boot. A boot-readiness guard was added. Native Android initialization
+  then exposed conflicting injected/native logging setup, which was fixed without
+  enabling debug logs. Both adapters now process gathering callbacks only at
+  COMPLETE. The full suite passed again; final APKs passed Android native peers
+  (0.355 seconds) and desktop/Android native interoperation (4.833 seconds), including
+  authenticated setup, synthetic bytes and teardown. Exact APK hashes are in
+  [verification](../VERIFICATION.md).
 - Sibling infrastructure ordinary suite passed all ten checks; no server source
   was changed or deployed. Cloudflare provisioning needs a new owner account.
 - A local Windows VM was investigated, but Microsoft's official media download
-  flow returned an error and Access Denied. No Windows VM/media was installed.
+  retail flow returned an error and Access Denied. The official Enterprise
+  evaluation route is available but requires owner contact/company registration,
+  which remains pending. No Windows VM/media was installed.
+- GitHub Codex review was requested on PR #1 but did not run because account review
+  usage limits were exhausted. No review approval or passing remote checks exist.
 - No production signaling/route/media/input/file implementation, infrastructure
   deployment, version bump, portable Windows build or app release yet.

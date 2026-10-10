@@ -18,7 +18,9 @@ class DesktopRtcPeer : RtcPeer() {
         factory = try { PeerConnectionFactory(audio) } catch (error: Throwable) { audio.dispose(); throw error }
         peer = try { factory.createPeerConnection(RTCConfiguration(), object : PeerConnectionObserver {
             override fun onIceCandidate(candidate: RTCIceCandidate) = Unit
-            override fun onIceGatheringChange(state: RTCIceGatheringState) { dispatch { gathered() } }
+            override fun onIceGatheringChange(state: RTCIceGatheringState) {
+                if (state == RTCIceGatheringState.COMPLETE) dispatch { gathered() }
+            }
             override fun onDataChannel(channel: RTCDataChannel) { dispatch {
                 try { channel.close() } finally { channel.dispose(); channelFailed() }
             } }

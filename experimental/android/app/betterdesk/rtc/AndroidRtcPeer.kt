@@ -17,7 +17,6 @@ class AndroidRtcPeer(context: Context) : RtcPeer() {
                     .setEnableInternalTracer(false)
                     .setInjectableLogger({ _, _, _ -> }, Logging.Severity.LS_NONE)
                     .createInitializationOptions())
-                Logging.enableLogToDebugOutput(Logging.Severity.LS_NONE)
                 initialized = true
             }
         }
@@ -28,7 +27,9 @@ class AndroidRtcPeer(context: Context) : RtcPeer() {
                 if (state == PeerConnection.IceConnectionState.FAILED || state == PeerConnection.IceConnectionState.CLOSED) channelFailed()
             }
             override fun onIceConnectionReceivingChange(receiving: Boolean) = Unit
-            override fun onIceGatheringChange(state: PeerConnection.IceGatheringState) { dispatch { gathered() } }
+            override fun onIceGatheringChange(state: PeerConnection.IceGatheringState) {
+                if (state == PeerConnection.IceGatheringState.COMPLETE) dispatch { gathered() }
+            }
             override fun onIceCandidate(candidate: IceCandidate) = Unit
             override fun onIceCandidatesRemoved(candidates: Array<out IceCandidate>) = Unit
             override fun onAddStream(stream: MediaStream) = Unit

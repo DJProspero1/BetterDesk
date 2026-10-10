@@ -45,7 +45,7 @@ Downloaded artifacts inspected on 10 October 2026:
 | android-150.7871.01.aar | 49147033 | `0a1627b1a48c2bc17d9a40d62fc47bd45166f44a311e95917f147c402de379b0` |
 
 The Android uncompressed native libraries total about 48 MB across four ABIs.
-The local proof APK built on 10 October is 62,080,171 bytes; the native Windows
+The final local proof APK built on 10 October is 62,080,147 bytes; the native Windows
 DLL expands to 21,750,784 bytes. Final portable EXE size remains unmeasured.
 Inspection of DLL imports found Windows system libraries, including Media Foundation,
 DXGI and D3D11; this is static evidence, not native Windows load/packaging coverage. These observed hashes identify the
@@ -103,10 +103,12 @@ xvfb-run -a bash ./gradlew :desktop:test :android:compileDebugKotlin \
 
 Linux is a local compilation/synthetic-test workaround authorized by the owner
 on 10 October 2026. It is not a supported desktop product or Windows packaging host.
-The proof test loads real Linux WebRTC JNI and exchanges synthetic bytes; it does
-not establish Windows native operation, Android runtime compatibility, physical
-device coverage, separate-network direct access or delivered media performance.
-The Android adapter still requires device instrumentation/interoperation coverage.
+The proof loads real Linux and Android WebRTC JNI and exchanges synthetic bytes.
+On 10 October, the final APK passed the Android-only native test and interoperation
+with desktop on an API 36.1/Android 16 emulator; see the exact build hashes and
+results in [verification](../docs/VERIFICATION.md). This does not establish Windows
+native operation, physical/OEM compatibility, separate-network direct access or
+delivered media performance.
 `RtcAndroidProofTest` is included in the test APK only with the same Gradle opt-in;
 run it explicitly with the native Android instrumentation runner on a dedicated
 disposable emulator/device. For the desktop/Android fixture, build both final APKs
@@ -128,6 +130,10 @@ bytes in both directions. Stop closes the listener/peers and removes the ADB
 reverse rule. Use a fresh test device: these local debug APKs are not signed with
 the previous release key and must not replace an existing user's app or be
 published as updates. No signing keys are copied between machines.
+The emulator must finish booting before installation. Android native logging uses
+the injected no-op logger alone: combining it with `enableLogToDebugOutput` throws
+during initialization. Native ICE callbacks enqueue SDP work only when gathering
+is complete. These startup and callback fixes are covered by the final native runs.
 
 Future media integration must retain native capture permission/service ownership.
 Desktop has custom video/audio sources, but the raw/encoded video bridge, Windows

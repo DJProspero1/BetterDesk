@@ -15,19 +15,28 @@ seconds: authenticated native binary exchange, Stop during setup, duplicate
 negotiation rejection, malformed SDP bounds and signaling context validation.
 The portable AVC decoder and all nine broker fixture checks also passed. The
 sibling infrastructure suite passed all ten checks with no server source changes.
+Normal desktop/Android runtime dependency graphs were checked separately without
+the proof property: neither contains WebRTC artifacts.
 
 Skips were six existing native/device/benchmark opt-ins, Windows platform decoder
-integration and the dedicated Android interoperability host check. A separate
-opt-in Android host run failed at APK installation while the restarted emulator
-was still booting (1.227 seconds); it never reached native setup. A boot-readiness
-precondition was added before installation. Android runtime evidence is pending. The fresh API 36.1/Android 16 emulator reached
-boot completion; APK install commands timed out before the app later appeared in
-the package manager. It was restarted with four GiB RAM/default Vulkan for retry.
-These environment attempts are not Android native proof success.
+integration and the dedicated Android interoperability host check. The latter
+was then run separately on a dedicated API 36.1/Android 16 emulator with four GiB
+RAM and two cores. **Desktop/Android native interoperability passed in 4.833
+seconds**, including pinned-TLS bootstrap, context-bound SDP, 16 KiB binary data,
+reverse UTF-8 data, instrumentation success and native teardown. The Android-only
+native peer test also passed in 0.355 seconds. Both used the exact final APKs below.
+
+Earlier attempts failed during slow emulator startup/installation, then Android
+initialization rejected enabling native debug output while an injectable logger
+was installed. A boot-readiness guard and bounded installation timeout were added;
+the conflicting logging call was removed, retaining the no-op logger. ICE gathering
+callbacks now enqueue description work only at COMPLETE. The full 62-check suite
+and both Android native checks passed after these fixes. These are synthetic local
+data-channel checks, not physical-device, screen-sharing or audio evidence.
 
 Final local proof APK SHA-256 values:
 
-- App: `6ea105eec29d15770f33c001e72f80ffe5aa0c3069ab5ac396ed173d8466bf3a`.
+- App: `b6ed31a6ff2604a0f8bc3314c260c5d2765187ec85cc35d59bb8eac7b7769999`.
 - Instrumentation: `661920cbc248cd4c101d56255085e973cd45a164aa585a9421f3275b30a2d0b3`.
 
 These are fresh test-emulator debug builds, not same-key updates to the existing
@@ -36,9 +45,12 @@ separate external networks, TURN reachability, RTP screen/sound, route cutover,
 clipboard/files and delivered performance are **untested or not implemented**.
 The proof creates no screen/audio source; no new native playback-audio check was
 performed. Cloudflare TURN remains selected but needs an owner account/key and
-scoped server credential issuance. A local Windows VM was investigated; the
-Microsoft media flow returned an error/Access Denied, so no Windows media/VM was
-installed. No deployment, publication or infrastructure change occurred.
+scoped server credential issuance. A local Windows VM was investigated: the retail
+media flow returned an error/Access Denied; the official Enterprise evaluation
+route requires owner registration with contact/company details. Registration is
+pending, and no Windows media/VM was installed. The requested GitHub Codex review
+could not run because the account's review usage limit was exhausted; no automated
+approval is claimed. No deployment, publication or infrastructure change occurred.
 
 ## Version 0.7.1, 10 October 2026: keyboard fixes
 
