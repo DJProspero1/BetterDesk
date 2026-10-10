@@ -1,6 +1,41 @@
 # Local verification
 
-## Direct transport implementation, 10 October 2026: local proof
+## Direct transport implementation, 10 October 2026: synthetic video checkpoint
+
+The opt-in proof now feeds bounded raw I420 frames into native video tracks on
+both adapters. The Linux desktop proof exchanged authenticated SDP, decoded the
+known 96 × 64 grayscale quadrants in both directions, and confirmed at least three
+encoded/decoded frames and nonzero RTP bytes on each peer. Stop, plane/stride
+bounds and bundled fingerprint/ICE/version substitution checks also passed.
+
+Final local compilation and both APK packages passed. The full JVM suite ran
+**67 checks: 58 passed, zero failures, nine skipped** (six existing opt-ins, Windows
+decoder integration and two dedicated Android host checks). All nine focused native
+proof checks passed. The two host checks were subsequently run separately against
+the final APKs on an API 36.1/Android 16 emulator (four GiB RAM, two cores):
+
+- Android-only data/video instrumentation: **two passed in 0.441 seconds**.
+- Desktop/Android native data interoperability: **passed in 3.057 seconds**.
+- Desktop/Android native video interoperability: **passed in 2.864 seconds**,
+  including authenticated TLS bootstrap, synthetic pixels/RTP in both directions
+  and teardown. The app's `RECORD_AUDIO` permission remained denied.
+
+Final synthetic-video proof APK SHA-256 values:
+
+- App: `eeb7a0d2e8a2f2940f38f65547dbb9c5b55528f1c43bf7ccc43b75136a5b3e75`.
+- Instrumentation: `b5f5a7289c9b186dd140e0d794f5260334e4dee957cdd11e478b9355bbc2e30f`.
+
+These are dedicated-emulator debug APKs, not compatible release updates. Temporary
+private fixture configuration and ADB forwarding rules were removed after each
+host check. No OS screen/camera/microphone capture or input was opened, and no audio
+track was created. This proves an SDK video path, not actual screen/render/input
+integration, source/display freshness mapping, native Windows operation, hardware
+encoding, physical/OEM compatibility, separate networks, delivered FPS or latency.
+The owner chose to defer Windows evaluation registration and Cloudflare signup;
+other local work continues. No production routing, version, deployment or release
+changed. The earlier data-only checkpoint below identifies its own APKs.
+
+## Direct transport implementation, 10 October 2026: initial data-only checkpoint
 
 The owner resumed implementation, tests, app/emulator checks and audio checks for
 this work. No app version was changed or released. `SessionTransport` preserves

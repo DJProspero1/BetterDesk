@@ -106,7 +106,10 @@ address required by file exchange. `Wire` implements that interface with the sam
 TLS/socket framing. Setup sockets remain directly owned until authentication
 finishes, so Stop can still cancel setup. There is no transport cutover yet.
 The [opt-in native WebRTC proof](../experimental/README.md) is excluded from normal
-builds and has no production session or permission ownership.
+builds and has no production session or permission ownership. Its optional raw
+I420 bridge feeds native video tracks in both adapters, with two pending writes
+and one latest decoded synthetic sample. It does not attach platform screen
+capture, playback sound, app rendering or remote input to those tracks.
 
 The [direct Internet connection plan](plans/DIRECT_CONNECTIONS.md) and
 [implementation handoff](plans/DIRECT_CONNECTIONS_HANDOFF.md) expand the proposed

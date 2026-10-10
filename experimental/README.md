@@ -45,7 +45,7 @@ Downloaded artifacts inspected on 10 October 2026:
 | android-150.7871.01.aar | 49147033 | `0a1627b1a48c2bc17d9a40d62fc47bd45166f44a311e95917f147c402de379b0` |
 
 The Android uncompressed native libraries total about 48 MB across four ABIs.
-The final local proof APK built on 10 October is 62,080,147 bytes; the native Windows
+The synthetic-video proof APK built on 10 October is 62,095,246 bytes; the native Windows
 DLL expands to 21,750,784 bytes. Final portable EXE size remains unmeasured.
 Inspection of DLL imports found Windows system libraries, including Media Foundation,
 DXGI and D3D11; this is static evidence, not native Windows load/packaging coverage. These observed hashes identify the
@@ -68,8 +68,13 @@ before return. Native callbacks enqueue operations rather than making synchronou
 calls back into WebRTC. Close rejects outstanding work, unblocks readers and tears
 down channel, peer, factory and audio-module resources.
 
-Each peer gathers a complete, bounded SDP once. The proof accepts one application
-media section, at most 32 candidates and one SHA-256 DTLS fingerprint. This is a
+Each peer gathers a complete, bounded SDP once. Data-only signaling version 1
+accepts one application section. Explicit synthetic-video signaling version 2
+accepts one video section plus application, with BUNDLE, RTCP mux and matching
+SHA-256 DTLS fingerprints/ICE credentials. Both cap SDP at 16 KiB/256 lines and
+32 candidates. The selected proof mode must match the authenticated envelope;
+version 1 rejects media SDP and version 2 rejects audio or unbundled/different
+identities. This is a
 pre-native-parser bound, **not a production ICE destination policy**. SDP contains
 network addresses and credentials and must never be logged or saved. Native debug
 logging/tracing is disabled. There are no STUN/TURN requests or external signaling
@@ -84,9 +89,34 @@ fingerprint as well as its ICE parameters. This tests the transport bootstrap
 boundary; it does not repeat code/J-PAKE pairing or request real capture consent.
 Never pass an SDP from an untrusted mailbox to these adapters in production.
 
-Desktop uses a dummy audio module. Android creates no media sources/tracks and
-disables peer audio recording/playout. Neither proof opens a camera, microphone,
-MediaProjection, accessibility service or a real desktop capture.
+Desktop uses a dummy audio module; Android disables peer audio recording/playout.
+Data-only peers create no media sources. Video peers use `CustomVideoSource` on
+desktop and an externally fed screencast `VideoSource` on Android, with explicit
+software video encoder/decoder factories. Neither opens a camera, microphone,
+MediaProjection, accessibility service or a real desktop capture. Android's source
+started/stopped callbacks describe the synthetic producer, never OS permission.
+
+The raw bridge copies bounded I420 planes (even dimensions, at most 640 × 360) and
+holds at most two pending frame writes. A full admission budget returns false for
+the caller to drop that frame. Accepted frames require increasing timestamps and
+age under two seconds; failures close the proof. Native frame references are
+released after each push. Decoded callbacks read four synthetic luminance samples
+while the native buffer is valid and retain only the latest small sample. They
+never retain a native decoded buffer or write pixels to disk. This is not a render
+pipeline or input freshness/epoch implementation.
+
+The video fixture sends 96 × 64 grayscale quadrants in both directions, checks
+decoded dimensions/orientation/luminance with a bounded lossy tolerance, and
+requires nonzero RTP bytes and at least three encoded/decoded frames at each peer.
+It preserves the authenticated TLS bootstrap/data checks. Native stats expose only
+aggregate video counters; raw reports contain network addresses and must not be
+logged. Stop clears pending samples/writes and releases tracks, sources and sinks.
+Desktop receiver wrappers are disposed explicitly; Android's peer owns cached
+receivers and tracks, so teardown must avoid double-disposal.
+The fixture acknowledges each checked frame only to coordinate its finite sample
+sequence; this is not RTP pacing or a production frame-ack protocol. Native codec/
+jitter-buffer behavior, hardware acceleration, delivered FPS and source/display
+timestamp mapping remain unmeasured.
 
 ## Local commands and limits
 
@@ -104,7 +134,7 @@ xvfb-run -a bash ./gradlew :desktop:test :android:compileDebugKotlin \
 Linux is a local compilation/synthetic-test workaround authorized by the owner
 on 10 October 2026. It is not a supported desktop product or Windows packaging host.
 The proof loads real Linux and Android WebRTC JNI and exchanges synthetic bytes.
-On 10 October, the final APK passed the Android-only native test and interoperation
+On 10 October, the final APK passed Android-only native data/video checks and interoperation
 with desktop on an API 36.1/Android 16 emulator; see the exact build hashes and
 results in [verification](../docs/VERIFICATION.md). This does not establish Windows
 native operation, physical/OEM compatibility, separate-network direct access or
@@ -130,15 +160,20 @@ bytes in both directions. Stop closes the listener/peers and removes the ADB
 reverse rule. Use a fresh test device: these local debug APKs are not signed with
 the previous release key and must not replace an existing user's app or be
 published as updates. No signing keys are copied between machines.
+The host harness runs two checks (data-only and synthetic video), installs the
+same final APKs and checks received pixels plus aggregate RTP counters for video.
+Android-only instrumentation methods are `nativeDataChannelAndTeardown` and
+`nativeVideoTracksAndTeardown`; invoke them explicitly on the dedicated test device.
 The emulator must finish booting before installation. Android native logging uses
 the injected no-op logger alone: combining it with `enableLogToDebugOutput` throws
 during initialization. Native ICE callbacks enqueue SDP work only when gathering
 is complete. These startup and callback fixes are covered by the final native runs.
 
 Future media integration must retain native capture permission/service ownership.
-Desktop has custom video/audio sources, but the raw/encoded video bridge, Windows
-hardware encoder, Android decoding/rendering and playback-only audio injection
-remain open. No default microphone source is acceptable. Do not send the current
+The synthetic raw-video bridge establishes an SDK path without OS capture. Windows
+capture conversion/hardware encoding, Android projection/rendering integration,
+production frame-age/epoch mapping and playback-only audio injection remain open.
+No default microphone source is acceptable. Do not send the current
 screen/audio TCP stream through this one reliable channel and call media migration
 complete. Files need separate bounded bulk scheduling and explicit cutover policy.
 

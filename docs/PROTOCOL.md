@@ -12,7 +12,10 @@ security audit. Update both apps together. Authoritative implementations are
 The [development-only native proof](../experimental/README.md) uses a separate
 context-bound signaling envelope inside its authenticated fixture. It is excluded
 from normal builds and does not extend production protocol 4, code pairing or
-route negotiation. `SessionTransport` currently adapts the existing `Wire` only.
+route negotiation. Proof signaling version 1 admits data only; version 2 explicitly
+admits one bundled synthetic video track and data, with matching DTLS/ICE identity.
+Neither version accepts an audio track or grants OS capture/input access.
+`SessionTransport` currently adapts the existing `Wire` only.
 
 ## Roles and state
 

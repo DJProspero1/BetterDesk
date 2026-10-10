@@ -6,13 +6,17 @@ import java.nio.ByteBuffer
 import java.util.concurrent.*
 import java.util.concurrent.atomic.AtomicBoolean
 
-/** Development proof only: no media, capture, input or production session access. */
-abstract class RtcPeer : Closeable {
+/** Development proof only: synthetic data/video, no OS capture, input or session access. */
+abstract class RtcPeer(private val videoProof: Boolean = false) : Closeable {
     val opened = CompletableFuture<Unit>()
     private val closed = AtomicBoolean(false)
     private val lock = Any()
     private val pending = ConcurrentHashMap.newKeySet<CompletableFuture<*>>()
     private val inbox = ArrayBlockingQueue<ByteArray>(32)
+    private val videoInbox = ArrayBlockingQueue<RtcVideoSample>(1)
+    private val videoSlots = Semaphore(2)
+    private var lastVideoTimestamp = 0L
+    protected val isClosed: Boolean get() = closed.get()
     private val worker = ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS,
         ArrayBlockingQueue(64), { runnable -> Thread(runnable, "BetterDesk RTC proof").apply { isDaemon = true } })
     private val deadline = Executors.newSingleThreadScheduledExecutor { runnable ->
@@ -29,6 +33,7 @@ abstract class RtcPeer : Closeable {
     protected abstract fun gatheringComplete(): Boolean
     protected abstract fun sendNative(bytes: ByteArray): Boolean
     protected abstract fun closeNative()
+    protected open fun pushVideoNative(frame: RtcVideoFrame) { error("RTC video proof unavailable") }
 
     protected fun dispatch(block: () -> Unit) {
         synchronized(lock) {
@@ -38,7 +43,7 @@ abstract class RtcPeer : Closeable {
         }
     }
 
-    private fun <T> operation(block: (CompletableFuture<T>) -> Unit): CompletableFuture<T> {
+    protected fun <T> operation(block: (CompletableFuture<T>) -> Unit): CompletableFuture<T> {
         val result = CompletableFuture<T>()
         synchronized(lock) {
             if (closed.get()) return result.apply { completeExceptionally(IOException("RTC proof closed")) }
@@ -63,7 +68,7 @@ abstract class RtcPeer : Closeable {
     fun answer(authenticatedOffer: String): CompletableFuture<String> = operation { result ->
         check(negotiation == Negotiation.NEW)
         negotiation = Negotiation.REMOTE_OFFER
-        RtcDescription.validate(authenticatedOffer)
+        RtcDescription.validate(authenticatedOffer, videoProof)
         setDescription(false, true, authenticatedOffer) { success -> dispatch {
             if (!success) close() else localDescription(false, result)
         } }
@@ -72,7 +77,7 @@ abstract class RtcPeer : Closeable {
     fun acceptAnswer(authenticatedAnswer: String): CompletableFuture<Unit> = operation { result ->
         check(negotiation == Negotiation.LOCAL_OFFER && gathering?.isDone == true)
         negotiation = Negotiation.ANSWER_ACCEPTED
-        RtcDescription.validate(authenticatedAnswer)
+        RtcDescription.validate(authenticatedAnswer, videoProof)
         setDescription(false, false, authenticatedAnswer) { success -> dispatch {
             if (!success) close() else result.complete(Unit)
         } }
@@ -91,12 +96,48 @@ abstract class RtcPeer : Closeable {
     protected fun gathered() {
         if (!gatheringComplete()) return
         val sdp = gatheredDescription() ?: return
-        RtcDescription.validate(sdp)
+        RtcDescription.validate(sdp, videoProof)
         gathering?.complete(sdp)
     }
 
     protected fun channelOpened() { opened.complete(Unit) }
     protected fun channelFailed() { close() }
+
+    /** Two pending raw frames at most; callers drop an unaccepted frame. */
+    fun sendVideo(frame: RtcVideoFrame): CompletableFuture<Boolean> {
+        check(videoProof)
+        if (!videoSlots.tryAcquire()) return CompletableFuture.completedFuture(false)
+        return operation<Boolean> { result ->
+            check(opened.isDone && !opened.isCompletedExceptionally)
+            check(frame.timestampNs > lastVideoTimestamp)
+            check(System.nanoTime() - frame.timestampNs in 0..TimeUnit.SECONDS.toNanos(2))
+            lastVideoTimestamp = frame.timestampNs
+            pushVideoNative(frame)
+            result.complete(true)
+        }.whenComplete { _, _ -> videoSlots.release() }
+    }
+
+    protected fun incomingVideo(sample: RtcVideoSample) {
+        synchronized(lock) {
+            if (closed.get()) return
+            videoInbox.poll() // Latest decoded sample only; never queue stale media.
+            videoInbox.offer(sample)
+        }
+    }
+
+    fun receiveVideo(timeoutMillis: Long): RtcVideoSample {
+        check(videoProof)
+        require(timeoutMillis in 1..30_000)
+        val until = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMillis)
+        while (!closed.get()) {
+            val remaining = until - System.nanoTime()
+            if (remaining <= 0) throw TimeoutException("RTC video proof receive timeout")
+            videoInbox.poll(minOf(remaining, TimeUnit.MILLISECONDS.toNanos(100)), TimeUnit.NANOSECONDS)?.let {
+                if (!closed.get()) return it
+            }
+        }
+        throw IOException("RTC proof closed")
+    }
 
     /** Copy the callback-owned native buffer before returning; fail on overflow. */
     protected fun incoming(bytes: ByteBuffer, binary: Boolean) {
@@ -135,6 +176,7 @@ abstract class RtcPeer : Closeable {
             opened.completeExceptionally(error)
             pending.toList().forEach { it.completeExceptionally(error) }
             inbox.clear()
+            videoInbox.clear()
             deadline.shutdownNow()
             worker.queue.clear()
             worker.execute { try { closeNative() } finally { worker.shutdown() } }

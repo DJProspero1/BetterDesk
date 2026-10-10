@@ -4,11 +4,21 @@ import android.content.Context
 import org.webrtc.*
 import java.nio.ByteBuffer
 
-/** The development-only proof never creates media sources or opens OS capture. */
-class AndroidRtcPeer(context: Context) : RtcPeer() {
+/** Synthetic video is opt-in; never creates camera/mic/MediaProjection capture. */
+class AndroidRtcPeer(context: Context, private val videoProof: Boolean = false) : RtcPeer(videoProof) {
     private val factory: PeerConnectionFactory
     private val peer: PeerConnection
     private val channel: DataChannel
+    private var videoSource: VideoSource? = null
+    private var localVideo: VideoTrack? = null
+    private var remoteVideo: VideoTrack? = null // Owned/disposed by the peer's cached receiver.
+    private val videoSink = VideoSink { frame ->
+        if (!isClosed) try {
+            val buffer = checkNotNull(frame.buffer.toI420())
+            try { incomingVideo(RtcVideoSample.read(buffer.width, buffer.height, frame.rotation, buffer.dataY, buffer.strideY)) }
+            finally { buffer.release() }
+        } catch (_: Exception) { close() }
+    }
 
     init {
         synchronized(initializationLock) {
@@ -20,7 +30,12 @@ class AndroidRtcPeer(context: Context) : RtcPeer() {
                 initialized = true
             }
         }
-        factory = PeerConnectionFactory.builder().createPeerConnectionFactory()
+        factory = PeerConnectionFactory.builder().apply {
+            if (videoProof) {
+                setVideoEncoderFactory(SoftwareVideoEncoderFactory())
+                setVideoDecoderFactory(SoftwareVideoDecoderFactory())
+            }
+        }.createPeerConnectionFactory()
         peer = try { factory.createPeerConnection(PeerConnection.RTCConfiguration(emptyList()), object : PeerConnection.Observer {
             override fun onSignalingChange(state: PeerConnection.SignalingState) = Unit
             override fun onIceConnectionChange(state: PeerConnection.IceConnectionState) {
@@ -54,6 +69,12 @@ class AndroidRtcPeer(context: Context) : RtcPeer() {
             } }
             override fun onMessage(buffer: DataChannel.Buffer) { incoming(buffer.data, buffer.binary) }
         })
+        if (videoProof) try {
+            videoSource = factory.createVideoSource(true)
+            videoSource?.capturerObserver?.onCapturerStarted(true)
+            localVideo = factory.createVideoTrack("betterdesk-synthetic-video", videoSource)
+            peer.addTrack(localVideo, listOf("betterdesk-synthetic"))
+        } catch (error: Throwable) { close(); throw error }
     }
 
     override fun createDescription(offer: Boolean, result: (String?) -> Unit) {
@@ -70,7 +91,9 @@ class AndroidRtcPeer(context: Context) : RtcPeer() {
         val observer = object : SdpObserver {
             override fun onCreateSuccess(description: SessionDescription) = Unit
             override fun onCreateFailure(error: String) = Unit
-            override fun onSetSuccess() { result(true) }
+            override fun onSetSuccess() {
+                if (!local && videoProof) dispatch { attachVideoReceiver(); result(true) } else result(true)
+            }
             override fun onSetFailure(error: String) { result(false) }
         }
         if (local) peer.setLocalDescription(observer, description) else peer.setRemoteDescription(observer, description)
@@ -80,11 +103,53 @@ class AndroidRtcPeer(context: Context) : RtcPeer() {
     override fun sendNative(bytes: ByteArray): Boolean =
         channel.state() == DataChannel.State.OPEN && channel.bufferedAmount() + bytes.size <= MAX_BUFFERED &&
             channel.send(DataChannel.Buffer(ByteBuffer.wrap(bytes), true))
+    private fun attachVideoReceiver() {
+        if (remoteVideo != null) return
+        // Android's PeerConnection owns these receiver wrappers; do not double-dispose them.
+        for (receiver in peer.receivers) {
+            val track = receiver.track()
+            if (track is VideoTrack) {
+                check(remoteVideo == null)
+                remoteVideo = track
+                track.addSink(videoSink)
+            }
+        }
+        check(remoteVideo != null)
+    }
+    override fun pushVideoNative(frame: RtcVideoFrame) {
+        val buffer = JavaI420Buffer.allocate(frame.width, frame.height)
+        val nativeFrame = VideoFrame(buffer, 0, frame.timestampNs)
+        try {
+            frame.copyPlanes(buffer.dataY, buffer.strideY, buffer.dataU, buffer.strideU, buffer.dataV, buffer.strideV)
+            checkNotNull(videoSource).capturerObserver.onFrameCaptured(nativeFrame)
+        } finally { nativeFrame.release() }
+    }
+    fun videoCounters() = operation<RtcVideoCounters> { result ->
+        check(videoProof)
+        peer.getStats { report -> dispatch {
+            fun count(type: String, key: String): Long = report.statsMap.values
+                .filter { it.type == type && (it.members["kind"] == "video" || it.members["mediaType"] == "video") }
+                .sumOf { (it.members[key] as? Number)?.toLong() ?: 0 }
+            result.complete(RtcVideoCounters(count("outbound-rtp", "framesEncoded"), count("inbound-rtp", "framesDecoded"),
+                count("outbound-rtp", "bytesSent"), count("inbound-rtp", "bytesReceived")))
+        } }
+    }
     override fun closeNative() {
         try { channel.unregisterObserver(); channel.close() }
         finally {
             try { channel.dispose() }
-            finally { try { peer.dispose() } finally { factory.dispose() } }
+            finally {
+                try { remoteVideo?.removeSink(videoSink) }
+                finally {
+                    try { videoSource?.capturerObserver?.onCapturerStopped() }
+                    finally {
+                        try { peer.dispose() }
+                        finally { try { localVideo?.dispose() }
+                            finally { try { videoSource?.dispose() } finally { factory.dispose() } }
+                        }
+                    }
+                }
+            }
         }
     }
     companion object {

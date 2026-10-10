@@ -17,7 +17,8 @@ Gradle opt-in and bounded Linux compilation/synthetic-test workaround. Ordinary
 builds do not include its sources or dependencies. Linux local tests select Linux
 FFmpeg/JavaCPP test-runtime classifiers; Windows application dependencies retain
 their Windows classifiers. Passing that proof cannot establish physical-device,
-Windows capture, Android interoperation or separate-network coverage.
+Windows capture or separate-network coverage. Dedicated Android native
+instrumentation/interoperation results are recorded separately with exact APK hashes.
 
 ## Ordinary suite
 
@@ -39,8 +40,8 @@ $env:BETTERDESK_BROKER_FIXTURE = (Resolve-Path '..\BetterDesk-Infrastructure\scr
 The current ordinary suite contains 56 tests: 50 enabled on Windows with the
 fixture, and six opt-in device/benchmark tests. On Linux the Windows platform
 decoder integration also skips; the portable native decoder check still runs.
-Without the fixture another nine checks skip. The WebRTC opt-in adds five proof
-checks and one dedicated-device host check.
+Without the fixture another nine checks skip. The WebRTC opt-in adds nine proof
+checks and two dedicated-device host checks (data-only and synthetic video).
 Coverage includes invitation bounds, J-PAKE, pinning, approval before capture,
 input validation, cancellation, route fallback, frame recovery, AVC decoding and
 shared UI. Switch/audio checks cover approval, decline, cancellation, repeated

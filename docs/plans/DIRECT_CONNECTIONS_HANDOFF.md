@@ -44,6 +44,10 @@ Suggested continuation prompt:
 - The owner explicitly resumed tests, emulators/app checks and audio checks on
   10 October 2026. Earlier 0.7/0.7.1 missing runtime coverage is still unverified;
   do not reinterpret old compilation evidence as a new test result.
+- The owner subsequently chose to continue Linux/Android checks while deferring
+  Windows evaluation registration and Cloudflare signup/provisioning. Do not ask
+  for those again or resume them without new direction. Native Windows and public
+  TURN checks remain unavailable; other authorized local work can continue.
 - No development servers without an explicit request. No deployment, provider
   provisioning, DNS change, release or app version bump has been made. Experimental
   dependencies are opt-in; the original handoff was documentation-only.
@@ -100,7 +104,7 @@ exists merely because it is described in the plan.
 | M0 | In progress | Native library/binding decision and local build feasibility | Pinned desktop/Android artifact/ABI/size/hash inventory and opt-in adapters exist. Finish compilation/runtime evidence, native license/build provenance and media bridge feasibility before marking complete. |
 | M1 | Complete | Extract transport boundary, retaining current TLS behavior | `SessionTransport` extracted; `Wire` retains protocol 4/TLS framing and Stop still closes setup sockets. Both target source compilation and ordinary approval/Stop/epoch/input checks passed locally; native Windows-only integration remains untested. |
 | M2 | In progress | Authenticated WebRTC proof behind a development-only opt-in | Five desktop proof checks, Android native peers and desktop/Android interoperation passed with real JNI and synthetic data. Pinned TLS/context validation and teardown are covered. Native Windows load/runtime evidence remains required; no production route label. |
-| M3 | Not started | Screen and playback audio tracks in both directions | Capture/encode/decode/render ownership documented; no microphone, double capture or unbounded media queues. Real device frame-age/quality/CPU evidence when allowed. |
+| M3 | In progress | Screen and playback audio tracks in both directions | Opt-in bounded I420/native-video adapters exist on both targets with synthetic pixel/RTP checks. No OS screen capture/rendering, playback-audio bridge or production freshness/epoch integration yet. Physical device/performance evidence remains required. |
 | M4 | Not started | Direct control/clipboard/files and safe route cutover | Direct payload in both directions, ordered input/paste, verified files, transfer backpressure, old-path rejection and deterministic Stop. No claim of all-direct while file bytes still relay. |
 | M5 | In progress | HTTPS signaling and deployable TURN fallback in sibling infra PR | Internal Cloudflare credential client and nine synthetic checks exist in the companion draft; service does not import it. Approved-session issuance, HTTPS authenticated signaling, provisioning, external UDP/TCP/TLS reachability and deployment remain incomplete. Current Railway TCP bootstrap is not sufficient. |
 | M6 | Not started | Acceptance matrix, default enablement and local release | Separate-network direct proof, forced fallback, security/lifecycle regression evidence, updated guides/notices, local EXE/APK/checksums and verified private release only after applicable checks are permitted and pass. |
@@ -200,13 +204,20 @@ until implementation and acceptance evidence justify changing its status.
   [Infrastructure PR #1](https://github.com/DJProspero1/BetterDesk-Infrastructure/pull/1)
   is a draft; `src/main.mjs`/broker do not import the module and no endpoint,
   production configuration or deployment changed. Cloudflare provisioning needs
-  a new owner account; signup is open in the shared browser. No credentials were
-  entered or read.
+  a new owner account. The owner deferred signup and provisioning; no credentials
+  were entered or read.
 - A local Windows VM was investigated, but Microsoft's official media download
   retail flow returned an error and Access Denied. The official Enterprise
-  evaluation route is available but requires owner contact/company registration,
-  which remains pending. No Windows VM/media was installed.
+  evaluation route requires owner contact/company registration. The owner chose
+  to continue Linux checks and defer it. No Windows VM/media was installed.
 - GitHub Codex review was requested on PR #1 but did not run because account review
   usage limits were exhausted. No review approval or passing remote checks exist.
 - No production signaling/route/media/input/file implementation, infrastructure
   deployment, version bump, portable Windows build or app release yet.
+- The next synthetic-video checkpoint added bounded I420 sources/sinks to both
+  adapters, explicit video signaling version 2, bundled identity checks and
+  aggregate RTP counters. Final suite: 67 checks, 58 passed, nine skipped, no
+  failures. Final APKs passed two Android-only native checks (0.441 seconds),
+  desktop/Android data (3.057 seconds) and video (2.864 seconds) interoperation.
+  Exact APK hashes and scope are in verification. No actual screen capture/render,
+  playback sound or input freshness/epoch integration is attached to the tracks.
