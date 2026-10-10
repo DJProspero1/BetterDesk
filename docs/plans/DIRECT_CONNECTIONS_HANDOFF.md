@@ -102,7 +102,7 @@ exists merely because it is described in the plan.
 | M2 | In progress | Authenticated WebRTC proof behind a development-only opt-in | Five desktop proof checks, Android native peers and desktop/Android interoperation passed with real JNI and synthetic data. Pinned TLS/context validation and teardown are covered. Native Windows load/runtime evidence remains required; no production route label. |
 | M3 | Not started | Screen and playback audio tracks in both directions | Capture/encode/decode/render ownership documented; no microphone, double capture or unbounded media queues. Real device frame-age/quality/CPU evidence when allowed. |
 | M4 | Not started | Direct control/clipboard/files and safe route cutover | Direct payload in both directions, ordered input/paste, verified files, transfer backpressure, old-path rejection and deterministic Stop. No claim of all-direct while file bytes still relay. |
-| M5 | Not started | HTTPS signaling and deployable TURN fallback in sibling infra PR | Reviewed authentication/schema, bounded endpoints, scoped credentials, selected provider, external UDP/TCP/TLS reachability, rollback and live validation when authorized. Current Railway TCP bootstrap is not sufficient. |
+| M5 | In progress | HTTPS signaling and deployable TURN fallback in sibling infra PR | Internal Cloudflare credential client and nine synthetic checks exist in the companion draft; service does not import it. Approved-session issuance, HTTPS authenticated signaling, provisioning, external UDP/TCP/TLS reachability and deployment remain incomplete. Current Railway TCP bootstrap is not sufficient. |
 | M6 | Not started | Acceptance matrix, default enablement and local release | Separate-network direct proof, forced fallback, security/lifecycle regression evidence, updated guides/notices, local EXE/APK/checksums and verified private release only after applicable checks are permitted and pass. |
 
 M0 precedes SDK-specific work; M1 precedes transport integration; M2 precedes M3
@@ -195,8 +195,13 @@ until implementation and acceptance evidence justify changing its status.
   (0.355 seconds) and desktop/Android native interoperation (4.833 seconds), including
   authenticated setup, synthetic bytes and teardown. Exact APK hashes are in
   [verification](../VERIFICATION.md).
-- Sibling infrastructure ordinary suite passed all ten checks; no server source
-  was changed or deployed. Cloudflare provisioning needs a new owner account.
+- Sibling infrastructure baseline passed all ten checks. Subsequent internal TURN
+  provider preparation passed all 19 checks, including nine new synthetic checks.
+  [Infrastructure PR #1](https://github.com/DJProspero1/BetterDesk-Infrastructure/pull/1)
+  is a draft; `src/main.mjs`/broker do not import the module and no endpoint,
+  production configuration or deployment changed. Cloudflare provisioning needs
+  a new owner account; signup is open in the shared browser. No credentials were
+  entered or read.
 - A local Windows VM was investigated, but Microsoft's official media download
   retail flow returned an error and Access Denied. The official Enterprise
   evaluation route is available but requires owner contact/company registration,

@@ -14,7 +14,10 @@ eight skipped**. Five proof checks passed with real Linux WebRTC JNI in 4.383
 seconds: authenticated native binary exchange, Stop during setup, duplicate
 negotiation rejection, malformed SDP bounds and signaling context validation.
 The portable AVC decoder and all nine broker fixture checks also passed. The
-sibling infrastructure suite passed all ten checks with no server source changes.
+sibling infrastructure baseline passed all ten checks. A later internal TURN
+client in [its companion draft](https://github.com/DJProspero1/BetterDesk-Infrastructure/pull/1)
+passed all 19 checks, including nine new synthetic provider tests. It is not wired
+to the service; no issuance endpoint or production configuration exists.
 Normal desktop/Android runtime dependency graphs were checked separately without
 the proof property: neither contains WebRTC artifacts.
 
@@ -50,7 +53,7 @@ media flow returned an error/Access Denied; the official Enterprise evaluation
 route requires owner registration with contact/company details. Registration is
 pending, and no Windows media/VM was installed. The requested GitHub Codex review
 could not run because the account's review usage limit was exhausted; no automated
-approval is claimed. No deployment, publication or infrastructure change occurred.
+approval is claimed. No deployment, publication or live infrastructure change occurred.
 
 ## Version 0.7.1, 10 October 2026: keyboard fixes
 

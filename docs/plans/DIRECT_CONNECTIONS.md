@@ -236,6 +236,13 @@ The Railway relay remains the working production fallback. Do not reuse unrelate
 project secrets or repurpose fleet machines. See [credential generation](https://developers.cloudflare.com/realtime/turn/generate-credentials/)
 and [pricing FAQ](https://developers.cloudflare.com/realtime/turn/faq/).
 
+The companion [infrastructure draft](https://github.com/DJProspero1/BetterDesk-Infrastructure/pull/1)
+prepares an internal bounded Cloudflare credential/revocation client. Synthetic
+validation passed; the broker does not import it and exposes no issuance endpoint.
+Provider credentials do not encode BetterDesk consent or session identity. Reviewed
+session-bound authorization, issuance/spending budgets and signaling must precede
+enabling it; this preparation does not mean TURN is provisioned or usable.
+
 Requirements before deployment: UDP and appropriate TCP/TLS fallback listeners,
 real external reachability tests, short-lived scoped credentials, quotas and rate
 limits, allocation expiry, abuse controls, restricted relay destinations, TLS
