@@ -8,6 +8,13 @@ emulator, not a certification of every supported API or vendor. Windows native
 capture, FFmpeg binaries and portable packaging currently target x64 Windows.
 Linux/macOS desktop support and Windows ARM64 packaging are not implemented.
 
+For direct-connection work, the owner authorized local Linux compilation and
+synthetic testing as a workaround on 10 October 2026. With JDK 17, Android SDK 36,
+Node 24 and Xvfb, both application source sets can compile locally and shared
+tests can run without real capture. See [the experimental proof](../experimental/README.md)
+for bounded commands and opt-in dependencies. This does not provide a Windows
+portable EXE, verify Windows native APIs or make Linux a supported product target.
+
 Install locally:
 
 | Tool | Used for |

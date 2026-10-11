@@ -55,6 +55,41 @@ This is an early prototype, not audited remote-support software. Report issues p
 
 Before production: independent protocol/platform audit, dependency/license review, signed updates, abuse handling, physical-device compatibility testing, denial-of-service testing, and clear release privacy/distribution policies.
 
+## Development-only direct transport proof
+
+The native proof is excluded unless the build explicitly sets
+`betterdesk.rtcProof=true`. It creates synthetic local data channels and optionally
+raw video/audio tracks, never OS capture or input. Production still uses the
+code-authenticated, pinned TLS protocol above.
+Its SDP travels inside pinned TLS with a random fixture secret and context-bound
+session/identity/generation/expiry/fingerprint validation. Application queues,
+packet/frame sizes, native data-channel buffering and proof lifetime are bounded;
+native video codec/jitter-buffer behavior remains unmeasured. Native debug logging
+is disabled. Explicit
+video signaling version 2 binds the bundled video/data transport to the same
+fingerprint/ICE credentials; version 3 adds bounded synthetic audio with the same
+identity. Versions 1/2 reject audio; version 1 rejects video. The synthetic source opens
+no camera, microphone or MediaProjection. Android hardware AudioRecord is disabled
+before factory creation and never re-enabled; audio tests require microphone
+permission denied. Desktop custom audio uses a headless module without physical
+devices. Video/audio counters and decoded audio peaks are aggregate only;
+decoded pixels/native stats/SDP must never enter logs. No RTP input freshness or
+production media consent policy is implemented by this fixture.
+
+Development-only BDC1 control framing binds consecutive message numbers and a
+fixed caller-supplied generation inside the authenticated native channel. It
+bounds fragments, reassembly, writers/readers and timeouts; malformed UTF-8/schema,
+replay and mismatched context fail closed with content-free errors. It does not
+authenticate an untrusted peer by itself or implement approval, frame freshness,
+clipboard barriers or input execution. Fixtures use synthetic messages only.
+Stop and data callback enqueue now share a lock to prevent post-Stop queue refill.
+
+This proof is not production signaling security. It has no public TURN service,
+production ICE destination policy, routing/cutover integration or independent
+native supply-chain audit. Do not accept untrusted mailbox SDP through its adapter
+or infer public Internet/physical-device coverage from a local fixture. See the
+[proof guide](experimental/README.md) and [dated verification](docs/VERIFICATION.md).
+
 ## Reporting a vulnerability
 
 While the repository is private, contact its owner through the established private

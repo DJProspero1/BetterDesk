@@ -62,6 +62,25 @@ setting or permission is introduced.
 
 ## Before redistribution
 
+### Experimental WebRTC dependencies
+
+The explicit `-Pbetterdesk.rtcProof=true` development configuration adds desktop
+`dev.onvoid.webrtc:webrtc-java:0.19.0` and Android
+`io.github.webrtc-sdk:android:150.7871.01`. Normal app builds do not resolve or
+package them. Desktop bindings use [Apache 2.0](https://github.com/devopvoid/webrtc-java/blob/v0.19.0/LICENSE);
+the Android distribution wrapper uses [MIT](https://github.com/webrtc-sdk/android/blob/v150.7871.01/LICENSE).
+Both native artifacts embed WebRTC and additional native components with their
+own terms; the wrapper license alone does not cover them. Inspect the Android
+[upstream native notices](https://github.com/webrtc-sdk/android/tree/v150.7871.01/Licenses)
+and desktop native source/build notices before redistribution.
+
+The [proof inventory](experimental/README.md) records inspected artifact sizes,
+hashes, ABI coverage and remaining gaps. No experimental package is being released.
+Consolidated notices, matching native build recipes/source provenance and final
+artifact inspection remain requirements before these become production dependencies.
+
+### Distribution checklist
+
 1. Export the exact resolved graphs using `:desktop:dependencies --configuration
    runtimeClasspath` and `:android:dependencies --configuration debugRuntimeClasspath`
    through the checked Gradle junction. Repeat for the actual release configuration
@@ -83,5 +102,5 @@ setting or permission is introduced.
    intended release separately. A library's open-source license and a successful
    local build do not settle every distribution obligation.
 
-No new dependency or license change is introduced by this inventory. Public
+The experimental dependencies above are excluded from ordinary builds. Public
 distribution remains pending the review described in [RELEASING.md](docs/RELEASING.md).

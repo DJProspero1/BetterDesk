@@ -1,4 +1,4 @@
-# Connection protocol, application version 0.7.0
+# Connection protocol, application version 0.7.1
 
 This is an implementation guide, not a frozen interoperability standard or a
 security audit. Update both apps together. Authoritative implementations are
@@ -9,6 +9,28 @@ security audit. Update both apps together. Authoritative implementations are
 [TlsIdentity.kt](../shared/src/main/kotlin/app/betterdesk/core/TlsIdentity.kt) and
 [Wire.kt](../shared/src/main/kotlin/app/betterdesk/core/Wire.kt).
 
+The [development-only native proof](../experimental/README.md) uses a separate
+context-bound signaling envelope inside its authenticated fixture. It is excluded
+from normal builds and does not extend production protocol 4, code pairing or
+route negotiation. Proof signaling version 1 admits data only; version 2 explicitly
+admits one bundled synthetic video track and data, with matching DTLS/ICE identity.
+Version 3 explicitly adds one bundled synthetic audio section, with matching
+fingerprint/ICE credentials and RTCP mux. Versions 1/2 reject audio; no profile
+grants OS capture/input access.
+`SessionTransport` currently adapts the existing `Wire` only.
+
+The proof's separate BDC1 control framing transports the existing strict `Message`
+JSON schema, with a 16 KiB total ceiling. Its 32-byte big-endian header is magic
+`0x42444331`, reserved zero (32 bits each), positive generation and sequence
+(64 bits each), total bytes and contiguous offset (32 bits each). Generation is
+fixed by the caller's authenticated context; sequence starts at 1 independently
+in each direction. Canonical fragments carry 8192 bytes except the final fragment.
+One reassembly and one deadline cover a whole message. Invalid encoding, bounds,
+context, replay/order or schema closes the peer without exposing text in errors.
+DTLS authentication comes from the authenticated SDP, not this header. Framing
+does not enforce session approval, input freshness, switch or clipboard semantics;
+the synthetic fixture never executes messages. See the [proof](../experimental/README.md).
+
 ## Roles and state
 
 The **viewer** enters a code. The **sharing device** displays that code and locally
@@ -17,7 +39,7 @@ to choose. The viewer creates the ephemeral TLS identity and acts as the TLS
 server, even over an outbound relay socket. The sharing device pins that identity
 and sends screen frames. Input travels in the opposite direction.
 These media roles can reverse after local switch approval; TLS client/server roles
-stay fixed. Session wire protocol is now 3; the opaque relay API remains version 1.
+stay fixed. Session wire protocol is now 4; the opaque relay API remains version 1.
 
 ```mermaid
 sequenceDiagram

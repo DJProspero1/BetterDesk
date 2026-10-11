@@ -6,7 +6,7 @@ The source is hosted in a private GitHub repository during development. All nati
 
 ## Current milestone
 
-Version 0.7.1 is an **early Internet-connected development build**, not a production remote-support release. Connections prefer a reachable local network and otherwise use the BetterDesk Railway relay. It has not been externally security-audited. Local binaries are distributed through the private repository's GitHub Releases; the website remains a waitlist. Update both devices together: this version uses session protocol 4. Keyboard fixes and transfer paths have compilation checks, not interactive or throughput verification; tests remain paused at the owner's request.
+Version 0.7.1 is an **early Internet-connected development build**, not a production remote-support release. Connections prefer a reachable local network and otherwise use the BetterDesk Railway relay. It has not been externally security-audited. Local binaries are distributed through the private repository's GitHub Releases; the website remains a waitlist. Update both devices together: this version uses session protocol 4. Keyboard fixes and transfer paths have compilation checks, not interactive or throughput verification; those runtime gaps remain unverified. The owner resumed tests for direct-connection work on 10 October; see [dated verification](docs/VERIFICATION.md).
 
 - Windows and Android have the same home screen: this device's code, another device's code, and Connect.
 - Enter the other device's twelve-digit code. Its owner explicitly approves sharing. If the connection service is unavailable, an eight-digit code is available for the local network.
@@ -76,12 +76,19 @@ Treat codes as temporary secrets. A displayed device name is a label, not a veri
 
 ## Documentation
 
+Direct Internet connection implementation has started behind a development-only
+build opt-in; it is not enabled in either app. The
+[design](docs/plans/DIRECT_CONNECTIONS.md) and
+[agent handoff](docs/plans/DIRECT_CONNECTIONS_HANDOFF.md) describe the proposed
+automatic LAN/direct/relay flow, source map, open decisions and delivery checklist.
+
 | Guide | Purpose |
 | --- | --- |
 | [Contributing](CONTRIBUTING.md) | Workflow, review expectations and matching agent instructions |
 | [Development](docs/DEVELOPMENT.md) | Toolchain, fresh checkout, local builds and source map |
 | [Product](PRODUCT.md) / [Design](DESIGN.md) | Shared flow, visual rules and platform consistency |
 | [Architecture](docs/ARCHITECTURE.md) / [Protocol](docs/PROTOCOL.md) | Components, state, LAN/relay pairing, encryption and wire format |
+| [Direct connections plan](docs/plans/DIRECT_CONNECTIONS.md) / [Agent handoff](docs/plans/DIRECT_CONNECTIONS_HANDOFF.md) | Proposed Internet P2P design, implementation milestones and acceptance criteria; not shipped |
 | [Platforms and troubleshooting](docs/PLATFORMS.md) | Permissions, lifecycle, saved data, capabilities and current limits |
 | [Sound and screen switching](docs/AUDIO_AND_SWITCHING.md) | Native audio, consented direction changes and limitations |
 | [Files and clipboard](docs/FILES_AND_CLIPBOARD.md) | Native copy/paste, Android Share, transfer status, protocol and limits |

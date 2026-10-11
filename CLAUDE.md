@@ -74,6 +74,10 @@ These rules apply to work in this repository. Read [PRODUCT.md](PRODUCT.md) and
 
 ## Connections, lifecycle and performance
 
+- For planned direct Internet connections, start with the
+  [implementation handoff](docs/plans/DIRECT_CONNECTIONS_HANDOFF.md). Keep its
+  decisions, milestone status and evidence current as work progresses. A proposed
+  design is not an implemented or verified capability.
 - Prefer a reachable private LAN automatically, with bounded discovery/pairing
   and automatic Railway fallback before approval. Do not add a network picker or
   router setup to the ordinary flow. A local failure must not leave users waiting

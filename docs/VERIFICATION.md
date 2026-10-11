@@ -1,9 +1,215 @@
 # Local verification
 
+Current scope, confirmed by the owner on 11 October 2026: no Windows host will be
+provided. Continue implementation and merge assessment with local Linux/Android
+checks; native Windows runtime/device coverage is an accepted untested gap, not
+a prerequisite for this PR. Do not request Windows access or evaluation-media
+registration. Earlier dated results retain their original scope; this decision
+does not turn Linux/emulator checks into Windows evidence.
+
+## Direct transport implementation, 11 October 2026: bounded control checkpoint
+
+The opt-in proof now carries the existing control-message schema over native
+DTLS/SCTP, with bounded canonical fragmentation/reassembly, fixed generation,
+consecutive sequences and strict UTF-8/schema decoding. Four admitted writers
+use a fair timed lock; reads and whole-message writes have bounded deadlines.
+Oversize fields are rejected before encoding. Errors hide serialized content and
+preserve interruption. A native callback/Stop race was fixed by locking inbox
+enqueue with revocation. This remains an experimental adapter, with no production
+capture/input/clipboard/file execution or route cutover.
+
+Final local compilation and both proof APK packages passed. The full Linux JVM
+suite ran **76 checks: 66 passed, zero failed, ten skipped** (six existing opt-ins,
+Windows decoder integration and three dedicated Android host checks). All thirteen
+native proof checks passed in 2.025 seconds and all four control-framing checks
+passed in 0.199 seconds. Coverage includes Unicode and exact-size reassembly,
+replay/context/order/length rejection, malformed UTF-8/schema, incomplete-message
+timeout, interruption and Stop. Native replay closes its receiving peer without
+executing the synthetic input.
+
+The final APKs passed **three Android-only native checks in 1.567 seconds** on the
+dedicated API 36.1/Android 16 emulator. All three desktop/Android host checks also
+passed on those exact APKs, including the framed control fixture in both directions:
+
+- Data-only: 2.654 seconds.
+- Synthetic video: 2.525 seconds.
+- Synthetic audio/video: 3.730 seconds.
+
+These host-fixture times include installation/setup and are not latency or FPS
+benchmarks. The finite control fixture transports ordered Unicode keyboard/text,
+clipboard barrier/ack, maximum-sized text and switch/status messages; it never
+executes an OS action. The media checks retain synthetic decoded pixels, PCM peaks
+and RTP counter evidence. Microphone permission remained denied. Installed APK
+hashes matched the build outputs before/after host checks; private fixture
+configuration and ADB reverse rules were absent afterwards. The owned emulator
+was stopped after verification.
+
+Final control/media proof APK SHA-256 values:
+
+- App: `228cc7e4b8b7d5b9e1b74e6dde4366f6644d00883f9985a333d78b109aa633d4` (62,421,310 bytes).
+- Instrumentation: `fe9a3266c289b311a4754b13900600e48c2db4de23eefb2cc96393e2f7a3dba5`.
+
+These are dedicated-emulator debug builds, not release updates. Production still
+uses pinned TLS/protocol 4; input freshness/approval, clipboard/paste execution,
+bulk files, media capture/rendering and readiness/cutover have not migrated.
+Native Windows packaging, physical devices, public TURN and separate/restrictive
+networks remain unverified. Cloudflare provisioning and Windows registration
+remain deferred. No production route, deployment, version bump or release changed.
+The dated checkpoints below identify their own historical APKs.
+
+## Direct transport implementation, 10 October 2026: historical synthetic audio/video checkpoint
+
+The opt-in native proof adds external 10 ms, 48 kHz mono PCM16 sources, bounded
+queues, decoded PCM peak checks and aggregate audio RTP counters in both adapters.
+Signaling profile 3 binds audio/video/data to the same DTLS/ICE identity; older
+proof profiles reject audio. Desktop uses a headless module without physical
+sound devices. Android disables hardware AudioRecord before factory creation and
+never re-enables it. Its external callback supplies a 10 ms clock because the
+selected SDK does not pace that mode. Local audio tracks/sources are disposed
+before the factory, then the audio module and owned scheduler are released.
+Earlier unpaced/incorrect-order runs failed; the final checks below include both
+fixes and retain the original teardown deadlines. Stale PCM is dropped without
+closing the peer; future/non-increasing timestamps still fail closed. The audio
+checks reject an expired chunk, then verify fresh native audio exchange.
+
+Two existing Stop tests also exposed asynchronous write/read races in the shared
+session. Established transport I/O failures now end and revoke the current
+session consistently, including queued input/control, media and heartbeat work.
+Setup, code/TLS authentication and non-I/O protocol errors retain their behavior.
+The two regression checks require Ended and report safe exception-class/location
+metadata when it differs.
+
+Final local compilation and both proof APK packages passed. The full Linux JVM
+suite ran **71 checks: 61 passed, zero failed, ten skipped** (six existing opt-ins,
+Windows decoder integration and three dedicated Android host checks). All twelve
+native desktop proof checks passed in 3.810 seconds; all eight session checks
+passed. Android-only native data/video/audio instrumentation passed **three checks
+in 3.105 seconds** on the final APKs on the dedicated API 36.1/Android 16 emulator.
+All three desktop/Android host checks subsequently passed on those exact APKs:
+
+- Data-only: 5.980 seconds.
+- Synthetic video: 5.716 seconds, including decoded pixels and RTP counters.
+- Synthetic audio/video: 9.447 seconds, including stale-chunk rejection, fresh
+  decoded PCM/RTP in both directions, microphone denial and teardown.
+
+These fixture times include installation/setup and are not latency benchmarks.
+The installed app/test APK hashes matched the build outputs. Temporary private
+configuration and ADB forwarding rules were removed. Failed host runs now stop
+their guest instrumentation process as well as the host ADB client.
+
+Final synthetic audio/video proof APK SHA-256 values:
+
+- App: `c722de6a651ca6c209afcdb0aefbdb944dcedf1f953fd0398ef867d25a6d2fcc` (62,421,310 bytes).
+- Instrumentation: `f9411015c6e2005fe0df99d2cc5bf3acd9290f7ed9c8e4005b8f84747a09795b`.
+
+The app's `RECORD_AUDIO` permission remained denied before/after audio exchange.
+These are dedicated-emulator debug APKs, not compatible release updates. Guest
+AudioTrack playback runs without audible host output; this is synthetic decoding
+and cleanup evidence, not physical sound quality or device playback capture.
+No OS screen/camera/microphone capture, input or file routing was opened by the
+native proof. Actual capture/render integration, stereo fidelity, A/V sync,
+source/display freshness/epochs, native Windows operation/packaging, hardware
+encoding, physical/OEM devices and separate/restrictive networks remain unverified.
+Cloudflare signup/provisioning and Windows registration remain deferred by the
+owner. No production direct routing, deployment, version bump or release occurred.
+The earlier checkpoints below identify their own historical APKs.
+
+## Direct transport implementation, 10 October 2026: historical synthetic video checkpoint
+
+The opt-in proof now feeds bounded raw I420 frames into native video tracks on
+both adapters. The Linux desktop proof exchanged authenticated SDP, decoded the
+known 96 × 64 grayscale quadrants in both directions, and confirmed at least three
+encoded/decoded frames and nonzero RTP bytes on each peer. Stop, plane/stride
+bounds and bundled fingerprint/ICE/version substitution checks also passed.
+
+Final local compilation and both APK packages passed. The full JVM suite ran
+**67 checks: 58 passed, zero failures, nine skipped** (six existing opt-ins, Windows
+decoder integration and two dedicated Android host checks). All nine focused native
+proof checks passed. The two host checks were subsequently run separately against
+the final APKs on an API 36.1/Android 16 emulator (four GiB RAM, two cores):
+
+- Android-only data/video instrumentation: **two passed in 0.441 seconds**.
+- Desktop/Android native data interoperability: **passed in 3.057 seconds**.
+- Desktop/Android native video interoperability: **passed in 2.864 seconds**,
+  including authenticated TLS bootstrap, synthetic pixels/RTP in both directions
+  and teardown. The app's `RECORD_AUDIO` permission remained denied.
+
+Final synthetic-video proof APK SHA-256 values:
+
+- App: `eeb7a0d2e8a2f2940f38f65547dbb9c5b55528f1c43bf7ccc43b75136a5b3e75`.
+- Instrumentation: `b5f5a7289c9b186dd140e0d794f5260334e4dee957cdd11e478b9355bbc2e30f`.
+
+These are dedicated-emulator debug APKs, not compatible release updates. Temporary
+private fixture configuration and ADB forwarding rules were removed after each
+host check. No OS screen/camera/microphone capture or input was opened, and no audio
+track was created. This proves an SDK video path, not actual screen/render/input
+integration, source/display freshness mapping, native Windows operation, hardware
+encoding, physical/OEM compatibility, separate networks, delivered FPS or latency.
+The owner chose to defer Windows evaluation registration and Cloudflare signup;
+other local work continues. No production routing, version, deployment or release
+changed. The earlier data-only checkpoint below identifies its own APKs.
+
+## Direct transport implementation, 10 October 2026: initial data-only checkpoint
+
+The owner resumed implementation, tests, app/emulator checks and audio checks for
+this work. No app version was changed or released. `SessionTransport` preserves
+production pinned TLS and protocol 4; the native proof is excluded from ordinary
+builds. See the [proof commands and dependency inventory](../experimental/README.md).
+
+Local Linux/JDK 17 compilation passed for desktop and Android with one Gradle
+worker, a 1536 MiB heap and two visible processors. Both final Android proof APKs
+packaged successfully. The full suite ran 62 checks: **54 passed, zero failures,
+eight skipped**. Five proof checks passed with real Linux WebRTC JNI in 4.383
+seconds: authenticated native binary exchange, Stop during setup, duplicate
+negotiation rejection, malformed SDP bounds and signaling context validation.
+The portable AVC decoder and all nine broker fixture checks also passed. The
+sibling infrastructure baseline passed all ten checks. A later internal TURN
+client in [its companion draft](https://github.com/DJProspero1/BetterDesk-Infrastructure/pull/1)
+passed all 19 checks, including nine new synthetic provider tests. It is not wired
+to the service; no issuance endpoint or production configuration exists.
+Normal desktop/Android runtime dependency graphs were checked separately without
+the proof property: neither contains WebRTC artifacts.
+
+Skips were six existing native/device/benchmark opt-ins, Windows platform decoder
+integration and the dedicated Android interoperability host check. The latter
+was then run separately on a dedicated API 36.1/Android 16 emulator with four GiB
+RAM and two cores. **Desktop/Android native interoperability passed in 4.833
+seconds**, including pinned-TLS bootstrap, context-bound SDP, 16 KiB binary data,
+reverse UTF-8 data, instrumentation success and native teardown. The Android-only
+native peer test also passed in 0.355 seconds. Both used the exact final APKs below.
+
+Earlier attempts failed during slow emulator startup/installation, then Android
+initialization rejected enabling native debug output while an injectable logger
+was installed. A boot-readiness guard and bounded installation timeout were added;
+the conflicting logging call was removed, retaining the no-op logger. ICE gathering
+callbacks now enqueue description work only at COMPLETE. The full 62-check suite
+and both Android native checks passed after these fixes. These are synthetic local
+data-channel checks, not physical-device, screen-sharing or audio evidence.
+
+Final local proof APK SHA-256 values:
+
+- App: `b6ed31a6ff2604a0f8bc3314c260c5d2765187ec85cc35d59bb8eac7b7769999`.
+- Instrumentation: `661920cbc248cd4c101d56255085e973cd45a164aa585a9421f3275b30a2d0b3`.
+
+These are fresh test-emulator debug builds, not same-key updates to the existing
+private release. Windows native load/capture/packaging, physical/OEM devices,
+separate external networks, TURN reachability, RTP screen/sound, route cutover,
+clipboard/files and delivered performance are **untested or not implemented**.
+The proof creates no screen/audio source; no new native playback-audio check was
+performed. Cloudflare TURN remains selected but needs an owner account/key and
+scoped server credential issuance. A local Windows VM was investigated: the retail
+media flow returned an error/Access Denied; the official Enterprise evaluation
+route requires owner registration with contact/company details. Registration is
+pending, and no Windows media/VM was installed. The requested GitHub Codex review
+could not run because the account's review usage limit was exhausted; no automated
+approval is claimed. No deployment, publication or live infrastructure change occurred.
+
 ## Version 0.7.1, 10 October 2026: keyboard fixes
 
-Tests, app launches, emulator/device checks and audio workloads remain paused by
-the owner. Windows and Android are compiled/packaged locally with one Gradle worker
+At delivery of these keyboard fixes, tests, app launches, emulator/device checks
+and audio workloads were paused by the owner. The pause was lifted for the later
+direct-connection implementation; those later checks do not retroactively verify
+the delivered Windows binary. Windows and Android are compiled/packaged locally with one Gradle worker
 and a 1536 MiB heap. Artifact checks and source identity are recorded in the final
 BUILD-INFO.txt/SHA256SUMS.txt. No runtime keyboard or timing result is claimed.
 

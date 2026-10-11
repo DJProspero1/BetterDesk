@@ -47,10 +47,17 @@ class HelpSession(
             it.javaClass.simpleName + " at " + it.stackTrace.firstOrNull { frame -> frame.className.startsWith("app.betterdesk") }
         }
     }
+    private fun sessionWriteFailed(error: Exception, current: Long) {
+        if (generation != current) return
+        rememberFailure(error)
+        // An asynchronous write can observe remote Stop before the reader sees EOF.
+        // Revoke the session in either order, without replacing Ended with an error.
+        if (error is java.io.IOException) stop() else finishError("connection")
+    }
     private var work: Job? = null
     @Volatile private var server: SSLServerSocket? = null
     @Volatile private var socket: SSLSocket? = null
-    @Volatile private var wire: Wire? = null
+    @Volatile private var wire: SessionTransport? = null
     private val authorized = AtomicBoolean(false)
     @Volatile private var generation = 0L
     @Volatile private var sentFrame = 0L
@@ -91,7 +98,8 @@ class HelpSession(
         scope.launch(Dispatchers.IO) {
             for ((current, message) in controlQueue) {
                 try { if (current == generation) wire?.send(message) }
-                catch (_: Exception) { withContext(Dispatchers.Main) { if (current == generation) finishError("connection") } }
+                catch (e: CancellationException) { throw e }
+                catch (e: Exception) { withContext(Dispatchers.Main) { sessionWriteFailed(e, current) } }
             }
         }
         scope.launch {
@@ -115,7 +123,8 @@ class HelpSession(
                 val outgoing = input.copy(frame = mutable.value.frame)
                 try { withContext(Dispatchers.IO) {
                     if (sessionGeneration == generation && outgoing.epoch == epoch && revision == inputRevision && canInput()) wire?.send(outgoing)
-                } } catch (_: Exception) { if (sessionGeneration == generation) finishError("connection") }
+                } } catch (e: CancellationException) { throw e }
+                catch (e: Exception) { sessionWriteFailed(e, sessionGeneration) }
             }
         }
         scope.launch(Dispatchers.IO) {
@@ -213,7 +222,7 @@ class HelpSession(
                 platform.keepConnectionAlive(true)
                 val identity = withContext(Dispatchers.IO) { TlsIdentity.create() }
                 val hosts = withContext(Dispatchers.IO) { runCatching { localAddresses() }.getOrDefault(emptyList()) }
-                var connection: Wire? = null
+                var connection: SessionTransport? = null
                 var invitation: Invitation? = null
                 if (hosts.isNotEmpty() && (deviceCode == null || localDiscovery)) {
                     var paired = false
@@ -324,7 +333,7 @@ class HelpSession(
         candidate.soTimeout = 8000; candidate.tcpNoDelay = true
     }
 
-    private fun accept(listener: SSLServerSocket, invitation: Invitation, current: Long): Wire {
+    private fun accept(listener: SSLServerSocket, invitation: Invitation, current: Long): SessionTransport {
         var failed = 0
         while (current == generation && System.currentTimeMillis() < invitation.expires && failed < 12) {
             val candidate = try { listener.accept() as SSLSocket } catch (_: java.net.SocketTimeoutException) { continue }
@@ -395,7 +404,7 @@ class HelpSession(
                     check(invitation.expires > System.currentTimeMillis())
                     val connection = withContext(Dispatchers.IO) {
                         val context = TlsIdentity.client(invitation.fingerprint)
-                        var connected: Wire? = null
+                        var connected: SessionTransport? = null
                         if (invitation.relayTicket != null) {
                             val client = relayFactory() ?: error("Internet unavailable")
                             relayClient = client
@@ -449,7 +458,7 @@ class HelpSession(
         }
     }
 
-    private fun startMedia(connection: Wire, current: Long, viewOnly: Boolean) {
+    private fun startMedia(connection: SessionTransport, current: Long, viewOnly: Boolean) {
         if (mediaWork?.isActive == true) return
         val media = ++mediaGeneration
         val streamEpoch = epoch
@@ -473,7 +482,7 @@ class HelpSession(
                     if (current != generation || media != mediaGeneration) return@coroutineScope
                     mutable.value = mutable.value.copy(stage = Stage.SHARING, remoteControl = control, audioAvailable = sound)
                     withContext(Dispatchers.IO) { connection.send(Message("ready", control = control, audio = sound, epoch = streamEpoch)) }
-                    socket?.inetAddress?.let { exchange.start(it, mutable.value.viaRelay) }
+                    exchange.start(connection.peerAddress, mutable.value.viaRelay)
                     launch(Dispatchers.IO) {
                         for (frame in frames) {
                             if (!authorized.get() || current != generation || media != mediaGeneration) break
@@ -493,7 +502,7 @@ class HelpSession(
                     awaitCancellation()
                 }
             } catch (e: CancellationException) { throw e }
-            catch (e: Exception) { rememberFailure(e); if (current == generation) finishError("connection") }
+            catch (e: Exception) { sessionWriteFailed(e, current) }
             finally { frames.close(); audio.close() }
         }
     }
@@ -613,7 +622,7 @@ class HelpSession(
         }
     }
 
-    private suspend fun pump(connection: Wire, current: Long) = coroutineScope {
+    private suspend fun pump(connection: SessionTransport, current: Long) = try { coroutineScope {
         val heartbeat = launch(Dispatchers.IO) {
             while (isActive) {
                 delay(750)
@@ -660,7 +669,7 @@ class HelpSession(
                                 check(viewer && !incomingReady && packet.message.epoch == epoch); incomingReady = true; incomingAudio = packet.message.audio
                                 withContext(Dispatchers.Main) {
                                     mutable.value = mutable.value.copy(remoteControl = packet.message.control, audioAvailable = packet.message.audio)
-                                    socket?.inetAddress?.let { exchange.start(it, mutable.value.viaRelay) }
+                                    exchange.start(connection.peerAddress, mutable.value.viaRelay)
                                     if (packet.message.audio && !mutable.value.muted) platform.startAudioPlayback()
                                 }
                             }
@@ -695,6 +704,9 @@ class HelpSession(
                 }
             }
         } finally { heartbeat.cancel() }
+    } } catch (error: java.io.IOException) {
+        // Reads, acknowledgements and heartbeat writes race when either peer stops.
+        throw java.io.EOFException("Session transport closed").apply { initCause(error) }
     }
 
     private fun canInput(): Boolean {

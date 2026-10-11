@@ -5,7 +5,6 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.DataInputStream
 import java.io.DataOutputStream
-import java.io.Closeable
 import java.net.Socket
 
 @Serializable
@@ -24,19 +23,20 @@ sealed interface Packet {
     data class Audio(val id: Long, val pcm: ByteArray, val epoch: Long = 0) : Packet
 }
 
-class Wire(private val socket: Socket) : Closeable {
+class Wire(private val socket: Socket) : SessionTransport {
+    override val peerAddress get() = socket.inetAddress
     private val input = DataInputStream(socket.getInputStream().buffered())
     private val output = DataOutputStream(socket.getOutputStream().buffered())
     private val lock = Any()
     private val json = Json { ignoreUnknownKeys = false; encodeDefaults = true }
 
-    fun send(message: Message) = synchronized(lock) {
+    override fun send(message: Message) = synchronized(lock) {
         val bytes = json.encodeToString(message).toByteArray(Charsets.UTF_8)
         require(bytes.size <= MAX_MESSAGE)
         output.writeByte(1); output.writeInt(bytes.size); output.write(bytes); output.flush()
     }
 
-    fun sendFrame(frame: Packet.Frame) = synchronized(lock) {
+    override fun sendFrame(frame: Packet.Frame) = synchronized(lock) {
         require(frame.jpeg.size in 1..MAX_FRAME && frame.width in 1..MAX_DIMENSION && frame.height in 1..MAX_DIMENSION)
         require(frame.codec in setOf("jpeg", "avc-intra", "avc"))
         output.writeByte(when(frame.codec) { "avc" -> 4; "avc-intra" -> 3; else -> 2 }); output.writeInt(frame.jpeg.size); output.writeLong(frame.id)
@@ -45,14 +45,14 @@ class Wire(private val socket: Socket) : Closeable {
         output.write(frame.jpeg); output.flush()
     }
 
-    fun sendAudio(audio: Packet.Audio) = synchronized(lock) {
+    override fun sendAudio(audio: Packet.Audio) = synchronized(lock) {
         require(audio.id > 0 && audio.epoch >= 0 && audio.pcm.size == AUDIO_BYTES)
         output.writeByte(5); output.writeInt(audio.pcm.size)
         output.writeLong(audio.id); output.writeLong(audio.epoch)
         output.write(audio.pcm); output.flush()
     }
 
-    fun read(): Packet {
+    override fun read(): Packet {
         val type = input.readUnsignedByte()
         val size = input.readInt()
         return when (type) {

@@ -101,6 +101,39 @@ shipping. Neither is implemented in 0.7.0. See [MulticastLock](https://developer
 
 ## Next milestones
 
+`HelpSession` now uses `SessionTransport` for packet operations and the peer
+address required by file exchange. `Wire` implements that interface with the same
+TLS/socket framing. Setup sockets remain directly owned until authentication
+finishes, so Stop can still cancel setup. There is no transport cutover yet.
+Established reads, queued control/input writes, media and heartbeat writes can
+observe transport closure in either order. Their I/O failure ends and revokes the
+current session; it cannot replace remote Stop with a connection error. Setup and
+non-I/O protocol validation failures retain their error behavior. TLS/code
+authentication and cryptographic validation remain unchanged.
+The [opt-in native WebRTC proof](../experimental/README.md) is excluded from normal
+builds and has no production session or permission ownership. Its optional raw
+I420 bridge feeds native video tracks in both adapters, with two pending writes
+and one latest decoded synthetic sample. It does not attach platform screen
+capture, device playback sound, app rendering or remote input to those tracks.
+The optional audio/video profile injects bounded 10 ms synthetic PCM into native
+audio tracks without hardware microphone capture; decoded callbacks keep only
+aggregate peak/rate evidence. Desktop uses a headless audio module and Android
+disables hardware AudioRecord before factory creation.
+
+Its shared `RtcControlChannel` now frames the existing control-message schema on
+the ordered native data channel, with bounded fragmentation, fixed generation,
+consecutive sequence numbers, strict UTF-8/schema parsing and fail-closed cleanup.
+Synthetic tests exercise Unicode input, clipboard/barrier and switch messages;
+they never execute OS actions. This adapter owns its proof peer, carries no
+screen/audio/file bytes and remains separate from production authorization,
+freshness, paste execution and transport cutover. Stop and inbound enqueue share
+a lock so late callbacks cannot repopulate a revoked inbox.
+
+The [direct Internet connection plan](plans/DIRECT_CONNECTIONS.md) and
+[implementation handoff](plans/DIRECT_CONNECTIONS_HANDOFF.md) expand the proposed
+media/transport work below. They document future work; the current release still
+uses direct LAN or the Railway TCP relay.
+
 1. Prove both directions on physical Windows/Android devices and improve denied-permission recovery and text-entry feedback.
 2. Improve mobile desktop control with trackpad mode, zoom and monitor selection.
 3. Evaluate a proven hardware-video/transport engine; replace JPEG streaming where justified.

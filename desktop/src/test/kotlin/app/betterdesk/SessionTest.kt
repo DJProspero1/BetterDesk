@@ -93,7 +93,8 @@ class SessionTest {
         assertEquals(1, rp.inputs)
         assertNull(rp.frame)
         assertEquals(Stage.ENDED, recipient.state.value.stage)
-        until { helper.state.value.stage == Stage.ENDED }
+        until { helper.state.value.stage in setOf(Stage.ENDED, Stage.ERROR) }
+        assertEquals(Stage.ENDED, helper.state.value.stage, helper.failureSummary)
     }
 
     @Test fun `canceling an invitation makes it unusable`() = runBlocking(dispatcher) {
@@ -146,7 +147,8 @@ class SessionTest {
             targetPlatform.frame?.invoke(Packet.Frame(1, 2, 2, byteArrayOf(1)))
             until { source.state.value.stage == Stage.VIEWING }
             target.stop()
-            until { source.state.value.stage == Stage.ENDED }
+            until { source.state.value.stage in setOf(Stage.ENDED, Stage.ERROR) }
+            assertEquals(Stage.ENDED, source.state.value.stage, source.failureSummary)
         } finally { host.close() }
     }
 
