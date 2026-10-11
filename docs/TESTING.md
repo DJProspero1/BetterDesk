@@ -7,6 +7,14 @@ measurements below are historical, not evidence
 for native Explorer paste, Android sharing, keyboard control or protocol 4.
 The pending keyboard/device matrix is documented in [KEYBOARD.md](KEYBOARD.md).
 
+For the direct-connection PR, the owner has explicitly declined providing a
+Windows host. Use local Linux and Android checks and continue Windows source work
+with the available toolchain. Do not request Windows access or evaluation-media
+registration. Native Windows runtime/device coverage stays explicitly untested
+and does not gate implementation or merging this PR. Linux JNI and compatibility
+fixtures remain Linux evidence. This does not waive implementation, approval,
+cryptography or cleanup requirements.
+
 Run all checks locally. Use synthetic content and dedicated test devices. Native
 capture/input tests and UI tests can open windows or interact with a device;
 coordinate them with the person using it. Never capture unrelated private work

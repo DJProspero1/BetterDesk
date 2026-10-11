@@ -179,6 +179,12 @@ integrate WASAPI/AudioPlaybackCapture, mute or production media ownership.
 
 ## Local commands and limits
 
+The owner will not provide a Windows host. Continue with local Linux and Android
+compilation/runtime checks; Windows runtime/device coverage stays explicitly
+untested and does not gate this PR's implementation or merge. Do not request a
+Windows host or evaluation-media registration. Windows source and packaging work
+can continue with locally available tools, with their evidence reported accurately.
+
 With JDK 17, SDK 36 and the infrastructure fixture available, on a local Linux host:
 
 ```sh

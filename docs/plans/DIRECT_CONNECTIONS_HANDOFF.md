@@ -22,9 +22,10 @@ implemented, measured, deployed or ready to ship.
    `87f57b7b220eac3604a3b25dd35b1c16652d2491`, release 0.7.1, protocol 4. The
    sibling infrastructure source inspected was
    `6a2f50c00a531900976687ea049a5632f0fbff6b`; no infrastructure change is in this PR.
-4. Continue **M0/M2** below: finish native integration/build feasibility and proof
-   evidence before connecting the adapter to production. `SessionTransport` is
-   extracted, but `HelpSession` still owns and uses the existing TLS path.
+4. Continue **M0/M3/M4** below using Linux and Android. The owner will not provide
+   a Windows host; Windows runtime coverage is an explicit gap, not a prerequisite
+   for implementation or merging this PR. `SessionTransport` is extracted, but
+   `HelpSession` still owns and uses the existing TLS path.
 5. Update this checklist, decisions and coverage after each meaningful change.
    Mark completed work only when its stated exit evidence exists. Keep the PR a
    draft until implementation and the appropriate acceptance checks pass.
@@ -44,17 +45,23 @@ Suggested continuation prompt:
 - The owner explicitly resumed tests, emulators/app checks and audio checks on
   10 October 2026. Earlier 0.7/0.7.1 missing runtime coverage is still unverified;
   do not reinterpret old compilation evidence as a new test result.
-- The owner subsequently chose to continue Linux/Android checks while deferring
-  Windows evaluation registration and Cloudflare signup/provisioning. Do not ask
-  for those again or resume them without new direction. Native Windows and public
-  TURN checks remain unavailable; other authorized local work can continue.
+- On 11 October the owner explicitly rejected providing any Windows host. Accept
+  that constraint: use Linux and Android, do not ask for Windows access or Windows
+  evaluation registration, and do not keep implementation or merge readiness
+  waiting for Windows. Record native Windows runtime/device coverage as untested;
+  Linux JNI/emulation cannot be represented as Windows evidence. Continue Windows
+  source work and investigate local cross-packaging where practical.
+- Cloudflare signup/provisioning remains deferred. Do not ask for it again or
+  resume it without new direction. Public TURN checks remain unavailable.
 - No development servers without an explicit request. No deployment, provider
   provisioning, DNS change, release or app version bump has been made. Experimental
   dependencies are opt-in; the original handoff was documentation-only.
 - The owner authorized bounded local Linux compilation/synthetic tests as a
   workaround because no Windows host is reachable. See the native proof command.
-  Windows packaging still needs its native toolchain. The Windows bounded command
-  for compilation/packaging without tests is:
+  The existing packaging script uses a Windows toolchain; its command is reference
+  material for contributors who already have one, not a request to the owner or a
+  merge gate. Investigate local cross-packaging separately and document its limits.
+  The existing compilation/packaging command without tests is:
 
   ```powershell
   .\scripts\build-local.ps1 -SkipTests -LowResource
@@ -101,10 +108,10 @@ exists merely because it is described in the plan.
 
 | ID | Status | Deliverable | Exit evidence |
 | --- | --- | --- | --- |
-| M0 | In progress | Native library/binding decision and local build feasibility | Pinned desktop/Android artifact/ABI/size/hash inventory and opt-in adapters exist. Finish compilation/runtime evidence, native license/build provenance and media bridge feasibility before marking complete. |
+| M0 | In progress | Native library/binding decision and local build feasibility | Pinned desktop/Android artifact/ABI/size/hash inventory, opt-in adapters and Linux/Android compilation/runtime evidence exist. Finish native license/build provenance and media bridge feasibility. Windows runtime is untested under the owner's accepted host constraint; do not wait for it. |
 | M1 | Complete | Extract transport boundary, retaining current TLS behavior | `SessionTransport` extracted; `Wire` retains protocol 4/TLS framing and Stop still closes setup sockets. Both target source compilation and ordinary approval/Stop/epoch/input checks passed locally; native Windows-only integration remains untested. |
-| M2 | In progress | Authenticated WebRTC proof behind a development-only opt-in | Twelve Linux proof checks, Android native data/video/audio peers and three desktop/Android host checks passed with real JNI and synthetic media. Pinned TLS/context validation and teardown are covered. Native Windows load/runtime evidence remains required; no production route label. |
-| M3 | In progress | Screen and playback audio tracks in both directions | Opt-in bounded I420/native-video adapters exist on both targets with synthetic pixel/RTP checks. Bounded external synthetic PCM adapters also exist, with hardware microphone capture disabled. No OS screen capture/rendering, real playback capture or production freshness/epoch integration yet. Physical device/performance evidence remains required. |
+| M2 | Complete for available targets | Authenticated WebRTC proof behind a development-only opt-in | Thirteen Linux native proof checks, four framing checks, Android native data/video/audio peers and three desktop/Android host checks passed with real JNI and synthetic media. Pinned TLS/context validation and teardown are covered. Windows runtime remains explicitly untested, not a merge prerequisite; no production route label. |
+| M3 | In progress | Screen and playback audio tracks in both directions | Opt-in bounded I420/native-video adapters exist on both targets with synthetic pixel/RTP checks. Bounded external synthetic PCM adapters also exist, with hardware microphone capture disabled. No OS screen capture/rendering, real playback capture or production freshness/epoch integration yet. Verify actual Android behavior and performance on available targets; record unavailable physical/Windows cases as gaps, not a request for hardware. |
 | M4 | In progress | Direct control/clipboard/files and safe route cutover | Opt-in bounded BDC1 control framing carries existing synthetic messages; replay/context/UTF-8/Stop checks exist. Production input/paste, verified files, bulk scheduling and cutover remain unimplemented. No claim of all-direct while file bytes still relay. |
 | M5 | In progress | HTTPS signaling and deployable TURN fallback in sibling infra PR | Internal Cloudflare credential client and nine synthetic checks exist in the companion draft; service does not import it. Approved-session issuance, HTTPS authenticated signaling, provisioning, external UDP/TCP/TLS reachability and deployment remain incomplete. Current Railway TCP bootstrap is not sufficient. |
 | M6 | Not started | Acceptance matrix, default enablement and local release | Separate-network direct proof, forced fallback, security/lifecycle regression evidence, updated guides/notices, local EXE/APK/checksums and verified private release only after applicable checks are permitted and pass. |
@@ -132,7 +139,10 @@ lands; do not check a milestone off for only writing its plan.
 Record actual OS versions, native dependency revision, network conditions, codec,
 resolution, build hashes and measured results. Never record codes, credentials,
 raw SDP, public/private IPs, real screen content or typed text. Mark unavailable
-physical hardware/network cases as untested, not passed.
+physical hardware/network cases as untested, not passed. Windows cases below
+describe intended platform behavior and remain untested without a host; the owner
+has accepted that constraint, so they do not gate this PR's merge. Available
+Linux/Android evidence and implementation/security requirements still apply.
 
 | Area | Required cases and pass condition |
 | --- | --- |
@@ -175,6 +185,11 @@ until implementation and acceptance evidence justify changing its status.
 
 ### Continuation, 11 October 2026
 
+- The owner will not provide any Windows host. Windows runtime coverage is now an
+  accepted limitation rather than a merge/implementation prerequisite. M2 is
+  complete for the available Linux/Android targets; continue M0/M3/M4 rather than
+  waiting for Windows or requesting evaluation registration. This changes the
+  acceptance scope, not the meaning of earlier test results.
 - Added opt-in BDC1 control framing for the existing message schema, with bounded
   fragments/reassembly/writers, fixed generation and consecutive sequences,
   strict UTF-8/schema rejection, one deadline per message and redacted errors.
@@ -188,8 +203,8 @@ until implementation and acceptance evidence justify changing its status.
 - Both PRs remain draft, with no new review findings. Automated review is unavailable
   because of account review limits; no review or approval was obtained. M4 is now
   in progress, but production cutover, real input/paste, bulk files and M3/M5/M6
-  completion remain required before merging the feature. Windows and Cloudflare
-  account deferrals remain in effect.
+  completion remain required before merging the feature. Cloudflare signup is
+  still deferred; Windows is an accepted coverage gap and must not be requested.
 
 ### Earlier implementation
 

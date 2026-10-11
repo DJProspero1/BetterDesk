@@ -1,5 +1,12 @@
 # Local verification
 
+Current scope, confirmed by the owner on 11 October 2026: no Windows host will be
+provided. Continue implementation and merge assessment with local Linux/Android
+checks; native Windows runtime/device coverage is an accepted untested gap, not
+a prerequisite for this PR. Do not request Windows access or evaluation-media
+registration. Earlier dated results retain their original scope; this decision
+does not turn Linux/emulator checks into Windows evidence.
+
 ## Direct transport implementation, 11 October 2026: bounded control checkpoint
 
 The opt-in proof now carries the existing control-message schema over native
