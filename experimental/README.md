@@ -68,6 +68,33 @@ before return. Native callbacks enqueue operations rather than making synchronou
 calls back into WebRTC. Close rejects outstanding work, unblocks readers and tears
 down channel, peer, factory and audio-module resources.
 
+`RtcControlChannel` adds development-only framing for the existing `Message`
+schema on that channel. It must own one authenticated peer, with exactly one
+wrapper and no raw traffic during its framed phase. It does not implement
+`SessionTransport` or grant input/clipboard permission. Each direction starts at
+sequence 1 and requires consecutive messages in the fixed transport generation.
+A 32-byte big-endian header contains BDC1, a zero reserved word, generation,
+sequence, total JSON bytes and fragment offset. Canonical 8192-byte chunks keep
+native messages below 16 KiB; a maximum-sized control message needs two fragments.
+Reassembly allocates at most the existing 16 KiB JSON ceiling and admits one
+reader. Four writers are admitted, including the active writer; one fair lock keeps
+each message's fragments together. Each write/read has one five-second deadline,
+including queueing/reassembly. This finite-fixture timeout is not a production
+idle policy. The caller's input FIFO must still establish command order before
+concurrent producers reach this adapter. Text fields are bounded before JSON encoding.
+Overflow, replay, wrong generation, malformed lengths/UTF-8/schema,
+incomplete messages and I/O failure close the peer. Serialization errors are
+replaced with a content-free exception; interruption is preserved.
+
+The finite control fixture exchanges ordered Unicode input, keyboard, clipboard
+barrier/ack, maximum-sized clipboard text and switch/status messages in both
+directions after raw/media checks finish. Nothing dispatches them to OS input,
+capture, files or a clipboard. Parser/Stop tests and a native replay check cover
+rejection and cleanup. The callback enqueue and Stop queue clearing now share a
+lock, preventing an incoming callback from refilling the inbox after revocation.
+Bulk data, production authorization/freshness, readiness/cutover and paste-barrier
+execution remain separate unfinished work.
+
 Each peer gathers a complete, bounded SDP once. Data-only signaling version 1
 accepts one application section. Explicit synthetic-video signaling version 2
 accepts one video section plus application, with BUNDLE, RTCP mux and matching

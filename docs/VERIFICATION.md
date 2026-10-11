@@ -1,6 +1,56 @@
 # Local verification
 
-## Direct transport implementation, 10 October 2026: synthetic audio/video checkpoint
+## Direct transport implementation, 11 October 2026: bounded control checkpoint
+
+The opt-in proof now carries the existing control-message schema over native
+DTLS/SCTP, with bounded canonical fragmentation/reassembly, fixed generation,
+consecutive sequences and strict UTF-8/schema decoding. Four admitted writers
+use a fair timed lock; reads and whole-message writes have bounded deadlines.
+Oversize fields are rejected before encoding. Errors hide serialized content and
+preserve interruption. A native callback/Stop race was fixed by locking inbox
+enqueue with revocation. This remains an experimental adapter, with no production
+capture/input/clipboard/file execution or route cutover.
+
+Final local compilation and both proof APK packages passed. The full Linux JVM
+suite ran **76 checks: 66 passed, zero failed, ten skipped** (six existing opt-ins,
+Windows decoder integration and three dedicated Android host checks). All thirteen
+native proof checks passed in 2.025 seconds and all four control-framing checks
+passed in 0.199 seconds. Coverage includes Unicode and exact-size reassembly,
+replay/context/order/length rejection, malformed UTF-8/schema, incomplete-message
+timeout, interruption and Stop. Native replay closes its receiving peer without
+executing the synthetic input.
+
+The final APKs passed **three Android-only native checks in 1.567 seconds** on the
+dedicated API 36.1/Android 16 emulator. All three desktop/Android host checks also
+passed on those exact APKs, including the framed control fixture in both directions:
+
+- Data-only: 2.654 seconds.
+- Synthetic video: 2.525 seconds.
+- Synthetic audio/video: 3.730 seconds.
+
+These host-fixture times include installation/setup and are not latency or FPS
+benchmarks. The finite control fixture transports ordered Unicode keyboard/text,
+clipboard barrier/ack, maximum-sized text and switch/status messages; it never
+executes an OS action. The media checks retain synthetic decoded pixels, PCM peaks
+and RTP counter evidence. Microphone permission remained denied. Installed APK
+hashes matched the build outputs before/after host checks; private fixture
+configuration and ADB reverse rules were absent afterwards. The owned emulator
+was stopped after verification.
+
+Final control/media proof APK SHA-256 values:
+
+- App: `228cc7e4b8b7d5b9e1b74e6dde4366f6644d00883f9985a333d78b109aa633d4` (62,421,310 bytes).
+- Instrumentation: `fe9a3266c289b311a4754b13900600e48c2db4de23eefb2cc96393e2f7a3dba5`.
+
+These are dedicated-emulator debug builds, not release updates. Production still
+uses pinned TLS/protocol 4; input freshness/approval, clipboard/paste execution,
+bulk files, media capture/rendering and readiness/cutover have not migrated.
+Native Windows packaging, physical devices, public TURN and separate/restrictive
+networks remain unverified. Cloudflare provisioning and Windows registration
+remain deferred. No production route, deployment, version bump or release changed.
+The dated checkpoints below identify their own historical APKs.
+
+## Direct transport implementation, 10 October 2026: historical synthetic audio/video checkpoint
 
 The opt-in native proof adds external 10 ms, 48 kHz mono PCM16 sources, bounded
 queues, decoded PCM peak checks and aggregate audio RTP counters in both adapters.

@@ -184,10 +184,12 @@ abstract class RtcPeer(private val videoProof: Boolean = false, private val audi
 
     /** Copy the callback-owned native buffer before returning; fail on overflow. */
     protected fun incoming(bytes: ByteBuffer, binary: Boolean) {
-        if (closed.get()) return
-        if (!binary || bytes.remaining() !in 1..MAX_BYTES) { close(); return }
-        val copy = ByteArray(bytes.remaining()).also { bytes.duplicate().get(it) }
-        if (!inbox.offer(copy)) close()
+        synchronized(lock) {
+            if (closed.get()) return
+            if (!binary || bytes.remaining() !in 1..MAX_BYTES) { close(); return }
+            val copy = ByteArray(bytes.remaining()).also { bytes.duplicate().get(it) }
+            if (!inbox.offer(copy)) close()
+        }
     }
 
     fun send(bytes: ByteArray): CompletableFuture<Unit> {

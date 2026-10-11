@@ -1,6 +1,6 @@
 # Direct connections: agent handoff and work checklist
 
-Last updated: 10 October 2026. State: **implementation in progress; draft PR**.
+Last updated: 11 October 2026. State: **implementation in progress; draft PR**.
 Direct screen/sound/input/file routing is not enabled. Read the
 [proposed design](DIRECT_CONNECTIONS.md) and [native proof](../../experimental/README.md)
 before coding.
@@ -105,7 +105,7 @@ exists merely because it is described in the plan.
 | M1 | Complete | Extract transport boundary, retaining current TLS behavior | `SessionTransport` extracted; `Wire` retains protocol 4/TLS framing and Stop still closes setup sockets. Both target source compilation and ordinary approval/Stop/epoch/input checks passed locally; native Windows-only integration remains untested. |
 | M2 | In progress | Authenticated WebRTC proof behind a development-only opt-in | Twelve Linux proof checks, Android native data/video/audio peers and three desktop/Android host checks passed with real JNI and synthetic media. Pinned TLS/context validation and teardown are covered. Native Windows load/runtime evidence remains required; no production route label. |
 | M3 | In progress | Screen and playback audio tracks in both directions | Opt-in bounded I420/native-video adapters exist on both targets with synthetic pixel/RTP checks. Bounded external synthetic PCM adapters also exist, with hardware microphone capture disabled. No OS screen capture/rendering, real playback capture or production freshness/epoch integration yet. Physical device/performance evidence remains required. |
-| M4 | Not started | Direct control/clipboard/files and safe route cutover | Direct payload in both directions, ordered input/paste, verified files, transfer backpressure, old-path rejection and deterministic Stop. No claim of all-direct while file bytes still relay. |
+| M4 | In progress | Direct control/clipboard/files and safe route cutover | Opt-in bounded BDC1 control framing carries existing synthetic messages; replay/context/UTF-8/Stop checks exist. Production input/paste, verified files, bulk scheduling and cutover remain unimplemented. No claim of all-direct while file bytes still relay. |
 | M5 | In progress | HTTPS signaling and deployable TURN fallback in sibling infra PR | Internal Cloudflare credential client and nine synthetic checks exist in the companion draft; service does not import it. Approved-session issuance, HTTPS authenticated signaling, provisioning, external UDP/TCP/TLS reachability and deployment remain incomplete. Current Railway TCP bootstrap is not sufficient. |
 | M6 | Not started | Acceptance matrix, default enablement and local release | Separate-network direct proof, forced fallback, security/lifecycle regression evidence, updated guides/notices, local EXE/APK/checksums and verified private release only after applicable checks are permitted and pass. |
 
@@ -172,6 +172,26 @@ and release instructions as their behavior changes. Keep this plan labeled plann
 until implementation and acceptance evidence justify changing its status.
 
 ## Implementation evidence, 10 October 2026
+
+### Continuation, 11 October 2026
+
+- Added opt-in BDC1 control framing for the existing message schema, with bounded
+  fragments/reassembly/writers, fixed generation and consecutive sequences,
+  strict UTF-8/schema rejection, one deadline per message and redacted errors.
+  Fixed late inbound callbacks racing Stop queue clearing. Synthetic input,
+  clipboard/barrier and switch/status messages are transported, never executed.
+- Final Linux suite: 76 checks, 66 passed, zero failed, ten explicit skips.
+  Thirteen native proof and four framing checks passed. Three Android-only native
+  checks and all three desktop/Android interoperation profiles passed on the exact
+  final APKs; microphone permission stayed denied. See [verification](../VERIFICATION.md)
+  for hashes, timings and coverage. The owned emulator was stopped after checks.
+- Both PRs remain draft, with no new review findings. Automated review is unavailable
+  because of account review limits; no review or approval was obtained. M4 is now
+  in progress, but production cutover, real input/paste, bulk files and M3/M5/M6
+  completion remain required before merging the feature. Windows and Cloudflare
+  account deferrals remain in effect.
+
+### Earlier implementation
 
 - Owner resumed implementation, tests and audio checks; delegated TURN choice and
   authorized a local workaround for the unavailable Windows host.

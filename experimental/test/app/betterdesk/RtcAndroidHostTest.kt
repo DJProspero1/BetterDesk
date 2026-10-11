@@ -96,6 +96,7 @@ class RtcAndroidHostTest {
                     RtcAudioFixture.checkSample(peer.receiveAudio(5000))
                     RtcAudioFixture.checkCounters(peer.audioCounters().get(2, TimeUnit.SECONDS))
                 }
+                RtcControlFixture.exchange(peer, true)
                 check((wire.read() as Packet.Control).message.type == "rtcProofDone")
                 wire.send(Message("rtcProofDone"))
             }

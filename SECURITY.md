@@ -76,6 +76,14 @@ devices. Video/audio counters and decoded audio peaks are aggregate only;
 decoded pixels/native stats/SDP must never enter logs. No RTP input freshness or
 production media consent policy is implemented by this fixture.
 
+Development-only BDC1 control framing binds consecutive message numbers and a
+fixed caller-supplied generation inside the authenticated native channel. It
+bounds fragments, reassembly, writers/readers and timeouts; malformed UTF-8/schema,
+replay and mismatched context fail closed with content-free errors. It does not
+authenticate an untrusted peer by itself or implement approval, frame freshness,
+clipboard barriers or input execution. Fixtures use synthetic messages only.
+Stop and data callback enqueue now share a lock to prevent post-Stop queue refill.
+
 This proof is not production signaling security. It has no public TURN service,
 production ICE destination policy, routing/cutover integration or independent
 native supply-chain audit. Do not accept untrusted mailbox SDP through its adapter

@@ -40,10 +40,16 @@ $env:BETTERDESK_BROKER_FIXTURE = (Resolve-Path '..\BetterDesk-Infrastructure\scr
 The current ordinary suite contains 56 tests: 50 enabled on Windows with the
 fixture, and six opt-in device/benchmark tests. On Linux the Windows platform
 decoder integration also skips; the portable native decoder check still runs.
-Without the fixture another nine checks skip. The WebRTC opt-in adds twelve proof
-checks and three dedicated-device host checks (data-only, synthetic video and
-synthetic audio/video). Audio instrumentation requires microphone permission
+Without the fixture another nine checks skip. The WebRTC opt-in adds thirteen
+native proof checks, four control-framing checks and three dedicated-device host
+checks (data-only, synthetic video and synthetic audio/video).
+Audio instrumentation requires microphone permission
 denied before and after external PCM exchange; it does not capture device sound.
+Control checks cover exact-size Unicode reassembly, replay/generation/order and
+length rejection, malformed UTF-8/schema, incomplete-message timeout and Stop.
+Native Linux, Android-only data and all three interoperation profiles exchange
+the same finite ordered control fixture without executing its input/clipboard
+messages. Linux also checks that native control replay closes its receiving peer.
 Coverage includes invitation bounds, J-PAKE, pinning, approval before capture,
 input validation, cancellation, remote Stop racing queued input/control writes,
 route fallback, frame recovery, AVC decoding and

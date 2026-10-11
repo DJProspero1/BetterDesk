@@ -120,6 +120,15 @@ audio tracks without hardware microphone capture; decoded callbacks keep only
 aggregate peak/rate evidence. Desktop uses a headless audio module and Android
 disables hardware AudioRecord before factory creation.
 
+Its shared `RtcControlChannel` now frames the existing control-message schema on
+the ordered native data channel, with bounded fragmentation, fixed generation,
+consecutive sequence numbers, strict UTF-8/schema parsing and fail-closed cleanup.
+Synthetic tests exercise Unicode input, clipboard/barrier and switch messages;
+they never execute OS actions. This adapter owns its proof peer, carries no
+screen/audio/file bytes and remains separate from production authorization,
+freshness, paste execution and transport cutover. Stop and inbound enqueue share
+a lock so late callbacks cannot repopulate a revoked inbox.
+
 The [direct Internet connection plan](plans/DIRECT_CONNECTIONS.md) and
 [implementation handoff](plans/DIRECT_CONNECTIONS_HANDOFF.md) expand the proposed
 media/transport work below. They document future work; the current release still

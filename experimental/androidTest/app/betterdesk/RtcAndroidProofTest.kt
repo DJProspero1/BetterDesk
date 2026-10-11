@@ -64,6 +64,7 @@ class RtcAndroidProofTest {
                     RtcAudioFixture.checkCounters(peer.audioCounters().get(2, TimeUnit.SECONDS))
                     check(context.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_DENIED)
                 }
+                RtcControlFixture.exchange(peer, false)
                 wire.send(Message("rtcProofDone"))
                 check((wire.read() as Packet.Control).message.type == "rtcProofDone")
             }
@@ -139,6 +140,12 @@ class RtcAndroidProofTest {
             assertArrayEquals(payload, second.receive(10_000))
             second.send("Olá · synthetic".toByteArray()).get(5, TimeUnit.SECONDS)
             assertEquals("Olá · synthetic", first.receive(10_000).toString(Charsets.UTF_8))
+            val executor = java.util.concurrent.Executors.newSingleThreadExecutor()
+            try {
+                val other = executor.submit { RtcControlFixture.exchange(second, false) }
+                RtcControlFixture.exchange(first, true)
+                other.get(5, TimeUnit.SECONDS)
+            } finally { executor.shutdownNow() }
         } finally {
             first.close(); second.close()
             assertTrue(first.awaitClosed(5000)); assertTrue(second.awaitClosed(5000))

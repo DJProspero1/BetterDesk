@@ -63,6 +63,7 @@ class RtcProofTest {
                         sendTone(serverPeer)
                         RtcAudioFixture.checkCounters(serverPeer.audioCounters().get(2, TimeUnit.SECONDS))
                     }
+                    RtcControlFixture.exchange(serverPeer, false)
                     // Keep authenticated setup alive until the peer confirms delivery.
                     check((wire.read() as Packet.Control).message.type == "rtcProofDone")
                 }
@@ -95,6 +96,7 @@ class RtcProofTest {
                     RtcAudioFixture.checkSample(clientPeer.receiveAudio(5000))
                     RtcAudioFixture.checkCounters(clientPeer.audioCounters().get(2, TimeUnit.SECONDS))
                 }
+                RtcControlFixture.exchange(clientPeer, true)
                 wire.send(Message("rtcProofDone"))
             }
             server.get(5, TimeUnit.SECONDS)
@@ -231,6 +233,27 @@ class RtcProofTest {
             assertFailsWith<ExecutionException> { peer.opened.get(2, TimeUnit.SECONDS) }
             assertTrue(peer.awaitClosed(5000))
         } finally { peer.close() }
+    }
+
+    @Test fun `replayed framed control closes the native peer without executing input`() {
+        val first = DesktopRtcPeer(); val second = DesktopRtcPeer()
+        val outgoing = RtcControlChannel(first, 7); val incoming = RtcControlChannel(second, 7)
+        try {
+            // Trusted in-process endpoints, not an Internet authentication fixture.
+            val offer = first.offer().get(12, TimeUnit.SECONDS)
+            first.acceptAnswer(second.answer(offer).get(12, TimeUnit.SECONDS)).get(12, TimeUnit.SECONDS)
+            first.opened.get(12, TimeUnit.SECONDS); second.opened.get(12, TimeUnit.SECONDS)
+            val message = Message("input", action = "text", text = "synthetic", frame = 1, epoch = 2)
+            outgoing.send(message)
+            assertEquals(message, incoming.read())
+            // Simulate a malicious authenticated endpoint repeating sequence 1.
+            RtcControlEnvelope.fragment(message, 7, 1).forEach { first.send(it).get(2, TimeUnit.SECONDS) }
+            assertFailsWith<java.io.IOException> { incoming.read() }
+            assertTrue(second.awaitClosed(5000))
+        } finally {
+            outgoing.close(); incoming.close()
+            assertTrue(first.awaitClosed(5000)); assertTrue(second.awaitClosed(5000))
+        }
     }
 
     @Test fun `malformed SDP never reaches native parsing`() {
