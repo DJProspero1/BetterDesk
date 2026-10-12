@@ -23,7 +23,7 @@ function Assert-LocalTree([string]$Path) {
 }
 Assert-LocalTree $stagePath
 $artifacts = @("BetterDesk-Windows-$Version.exe", "BetterDesk-Android-$Version-debug.apk")
-$expected = $artifacts + @('SHA256SUMS.txt', 'BUILD-INFO.txt')
+$expected = $artifacts + @('SHA256SUMS.txt', 'BUILD-INFO.txt', 'update.json')
 $items = @(Get-ChildItem -LiteralPath $stagePath -Force)
 if ($items.Count -ne $expected.Count -or @($items | Where-Object { $_.PSIsContainer -or $_.Name -notin $expected }).Count) { throw 'Staged distribution is incomplete or contains unexpected files.' }
 $checksums = @(Get-Content -LiteralPath (Join-Path $stagePath 'SHA256SUMS.txt'))
@@ -31,6 +31,14 @@ foreach ($artifact in $artifacts) {
     $hash = (Get-FileHash -LiteralPath (Join-Path $stagePath $artifact) -Algorithm SHA256).Hash.ToLowerInvariant()
     if ($checksums -notcontains "$hash  $artifact") { throw "Staged checksum mismatch: $artifact" }
 }
+$update = Get-Content -LiteralPath (Join-Path $stagePath 'update.json') -Raw | ConvertFrom-Json
+if ($update.version -ne $Version) { throw 'Update manifest names a different version.' }
+foreach ($entry in @(@($update.windows, $artifacts[0]), @($update.android, $artifacts[1]))) {
+    $file = Get-Item -LiteralPath (Join-Path $stagePath $entry[1])
+    if ($entry[0].name -ne $entry[1] -or $entry[0].size -ne $file.Length -or
+        $entry[0].sha256 -ne (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()) { throw "Update manifest mismatch: $($entry[1])" }
+}
+if ([long]$update.android.versionCode -lt 1) { throw 'Update manifest lacks the Android versionCode.' }
 $archive = Join-Path $buildRoot ('distribution-previous-' + [guid]::NewGuid().ToString('N'))
 if (Test-Path -LiteralPath $dist) {
     Assert-LocalTree $dist
@@ -47,7 +55,7 @@ catch {
 if (Test-Path -LiteralPath $archive) {
     Assert-LocalTree $archive
     Get-ChildItem -LiteralPath $archive -File -Force | Where-Object {
-        $_.Name -match '^BetterDesk-(Windows|Android)-[0-9].*\.(exe|apk|zip)$' -or $_.Name -in @('SHA256SUMS.txt','BUILD-INFO.txt')
+        $_.Name -match '^BetterDesk-(Windows|Android)-[0-9].*\.(exe|apk|zip)$' -or $_.Name -in @('SHA256SUMS.txt','BUILD-INFO.txt','update.json')
     } | ForEach-Object { Remove-Item -LiteralPath $_.FullName }
     if (@(Get-ChildItem -LiteralPath $archive -Force).Count -eq 0) { Remove-Item -LiteralPath $archive }
     else { Write-Output "Preserved previous non-build files in $archive" }

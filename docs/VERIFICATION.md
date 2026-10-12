@@ -7,6 +7,17 @@ a prerequisite for this PR. Do not request Windows access or evaluation-media
 registration. Earlier dated results retain their original scope; this decision
 does not turn Linux/emulator checks into Windows evidence.
 
+## In-app updates, 12 October 2026 (0.8.0 source, unreleased)
+
+On Linux: the full desktop JVM suite ran **65 checks: 49 passed, zero failed,
+16 skipped** (no broker fixture on this host, opt-in device/benchmark checks and
+the Windows decoder). All nine new `UpdateTest` checks passed against a loopback
+release fixture. `:android:assembleDebug` produced versionName 0.8.0, versionCode
+10, with `REQUEST_INSTALL_PACKAGES`. The changed Windows launcher type-checked with
+Mono `mcs`; the real `csc` build, EXE replacement/relaunch, cache cleanup, Android
+`PackageInstaller` confirmation and a real GitHub download are **untested** until
+the first release after an updater-enabled one.
+
 ## Direct transport implementation, 11 October 2026: bounded control checkpoint
 
 The opt-in proof now carries the existing control-message schema over native

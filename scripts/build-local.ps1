@@ -23,7 +23,10 @@ try {
     if ($LowResource) { $resourceArguments = @('--no-parallel', '--max-workers=1', '-Dorg.gradle.jvmargs=-Xmx1536m -Dfile.encoding=UTF-8', '-Pkotlin.compiler.execution.strategy=in-process') }
     & (Join-Path $aliasPath 'gradlew.bat') -p $aliasPath @tasks --no-daemon '-Pkotlin.incremental=false' @resourceArguments
     if ($LASTEXITCODE -ne 0) { throw "Local build failed with exit code $LASTEXITCODE" }
-    $version = '0.7.1'
+    $properties = Get-Content -LiteralPath (Join-Path $repoRoot 'gradle.properties')
+    $version = (($properties | Where-Object { $_ -match '^betterdesk\.version=' }) -split '=', 2)[1].Trim()
+    $versionCode = [long]((($properties | Where-Object { $_ -match '^betterdesk\.versionCode=' }) -split '=', 2)[1].Trim())
+    if ($version -notmatch '^\d+\.\d+\.\d+$' -or $versionCode -lt 1) { throw 'gradle.properties needs betterdesk.version and betterdesk.versionCode.' }
     $dist = Join-Path $repoRoot ('desktop\build\distribution-stage-' + [guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $dist -Force | Out-Null
     Copy-Item -LiteralPath (Join-Path $repoRoot 'android\build\outputs\apk\debug\android-debug.apk') -Destination (Join-Path $dist "BetterDesk-Android-$version-debug.apk") -Force
@@ -34,6 +37,15 @@ try {
         "$($hash.Hash.ToLowerInvariant())  $artifact"
     }
     Set-Content -LiteralPath (Join-Path $dist 'SHA256SUMS.txt') -Value $hashes -Encoding utf8
+    # Installed apps read this from the latest public release, then verify size and SHA-256.
+    function Get-UpdateAsset([string]$Name, [long]$Code) {
+        $file = Get-Item -LiteralPath (Join-Path $dist $Name)
+        $asset = [ordered]@{ name = $Name; sha256 = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant(); size = $file.Length }
+        if ($Code) { $asset.versionCode = $Code }
+        return $asset
+    }
+    $manifest = [ordered]@{ version = $version; windows = Get-UpdateAsset $artifacts[0] 0; android = Get-UpdateAsset $artifacts[1] $versionCode }
+    [IO.File]::WriteAllText((Join-Path $dist 'update.json'), ($manifest | ConvertTo-Json -Depth 3), [Text.UTF8Encoding]::new($false))
     @(
         "BetterDesk $version, local development build",
         "Built locally: $([DateTime]::UtcNow.ToString('u'))",
@@ -42,7 +54,7 @@ try {
         $(if ($SkipTests) { 'Tests: skipped (-SkipTests); compilation and packaging are not runtime validation.' } else { 'Tests: ordinary desktop suite executed by this build; native/device checks are separately opt-in.' }),
         'Windows: unsigned portable x64 EXE, automatic private runtime cache, no installer.',
         'Android: APK signed with the local development key; install as an update.',
-        'Update both devices. Direct LAN or BetterDesk Railway relay. Built locally; distribution through private GitHub Releases.'
+        'Installed apps offer this version from the latest public GitHub release (update.json). Built locally.'
     ) | Set-Content -LiteralPath (Join-Path $dist 'BUILD-INFO.txt') -Encoding utf8
     & (Join-Path $PSScriptRoot 'publish-distribution.ps1') -Staging $dist -Version $version
     $hashes

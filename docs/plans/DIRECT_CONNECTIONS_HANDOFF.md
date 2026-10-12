@@ -72,7 +72,7 @@ Suggested continuation prompt:
   a 1536 MiB heap; ordinary Gradle defaults are four workers/a 3 GiB heap. A future
   WebRTC source build needs its own bounded resource
   plan and must not silently launch a large parallel build.
-- Keep source/private releases private, website waitlist-only, Windows portable
+- Keep the website and infrastructure private, website waitlist-only, Windows portable
   EXE, Android package/signing continuity, and all three agent files identical.
 - The app, infrastructure and website are separate repositories. Infrastructure
   main auto-deploys: use a separate branch/PR there if server work becomes needed.
@@ -114,7 +114,7 @@ exists merely because it is described in the plan.
 | M3 | In progress | Screen and playback audio tracks in both directions | Opt-in bounded I420/native-video adapters exist on both targets with synthetic pixel/RTP checks. Bounded external synthetic PCM adapters also exist, with hardware microphone capture disabled. No OS screen capture/rendering, real playback capture or production freshness/epoch integration yet. Verify actual Android behavior and performance on available targets; record unavailable physical/Windows cases as gaps, not a request for hardware. |
 | M4 | In progress | Direct control/clipboard/files and safe route cutover | Opt-in bounded BDC1 control framing carries existing synthetic messages; replay/context/UTF-8/Stop checks exist. Production input/paste, verified files, bulk scheduling and cutover remain unimplemented. No claim of all-direct while file bytes still relay. |
 | M5 | In progress | HTTPS signaling and deployable TURN fallback in sibling infra PR | Internal Cloudflare credential client and nine synthetic checks exist in the companion draft; service does not import it. Approved-session issuance, HTTPS authenticated signaling, provisioning, external UDP/TCP/TLS reachability and deployment remain incomplete. Current Railway TCP bootstrap is not sufficient. |
-| M6 | Not started | Acceptance matrix, default enablement and local release | Separate-network direct proof, forced fallback, security/lifecycle regression evidence, updated guides/notices, local EXE/APK/checksums and verified private release only after applicable checks are permitted and pass. |
+| M6 | Not started | Acceptance matrix, default enablement and local release | Separate-network direct proof, forced fallback, security/lifecycle regression evidence, updated guides/notices, local EXE/APK/checksums/update.json and verified release only after applicable checks are permitted and pass. |
 
 M0 precedes SDK-specific work; M1 precedes transport integration; M2 precedes M3
 and M4. M5's design can proceed alongside client work, but **M6 requires all of

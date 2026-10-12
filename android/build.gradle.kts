@@ -12,8 +12,8 @@ android {
         applicationId = "app.betterdesk"
         minSdk = 26
         targetSdk = 36
-        versionCode = 9
-        versionName = "0.7.1"
+        versionCode = providers.gradleProperty("betterdesk.versionCode").get().toInt()
+        versionName = providers.gradleProperty("betterdesk.version").get()
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     sourceSets["main"].java.srcDir("../shared/src/main/kotlin")

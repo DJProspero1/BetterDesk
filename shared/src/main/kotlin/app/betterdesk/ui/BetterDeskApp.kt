@@ -62,7 +62,7 @@ fun BetterDeskTheme(content: @Composable () -> Unit) {
 }
 
 @Composable
-fun BetterDeskApp(session: HelpSession, onFullScreenChange: (Boolean) -> Unit = {}) {
+fun BetterDeskApp(session: HelpSession, updater: AppUpdater? = null, onFullScreenChange: (Boolean) -> Unit = {}) {
     val state by session.state.collectAsState()
     var portuguese by rememberSaveable { mutableStateOf((session.platform.languageTag ?: Locale.getDefault().language) == "pt") }
     val viewing = state.stage == Stage.VIEWING
@@ -97,6 +97,7 @@ fun BetterDeskApp(session: HelpSession, onFullScreenChange: (Boolean) -> Unit = 
                         if (state.stage != Stage.SHARING) ExchangeNotice(session, portuguese)
                         when (state.stage) {
                             Stage.HOME -> {
+                                updater?.let { UpdateNotice(it, portuguese) }
                                 Text(t("This device", "Este dispositivo"), fontSize = 17.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Text(session.platform.defaultName, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Spacer(Modifier.height(12.dp))

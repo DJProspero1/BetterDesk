@@ -7,7 +7,9 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import app.betterdesk.core.AppUpdater
 import app.betterdesk.core.HelpSession
+import app.betterdesk.core.Stage
 import app.betterdesk.ui.BetterDeskApp
 import app.betterdesk.ui.BetterDeskTheme
 import app.betterdesk.ui.BetterDeskIcon
@@ -19,7 +21,12 @@ fun main(args: Array<String>) {
     }
     application {
     val session = remember { HelpSession(DesktopPlatform()) }
-    DisposableEffect(Unit) { onDispose { session.dispose() } }
+    val updater = remember {
+        val idle = { session.state.value.stage in setOf(Stage.HOME, Stage.ENDED, Stage.ERROR) }
+        // The new copy is already starting; close this one on the UI thread.
+        DesktopUpdate { java.awt.EventQueue.invokeLater { session.dispose(); exitApplication() } }.takeIf { it.available }?.let { AppUpdater(it, idle) }
+    }
+    DisposableEffect(Unit) { onDispose { session.dispose(); updater?.dispose() } }
     LaunchedEffect(Unit) { args.firstOrNull { it.startsWith("betterdesk://") }?.let(session::acceptInvitation) }
     val windowState = rememberWindowState(width = 760.dp, height = 820.dp)
     var previousPlacement by remember { mutableStateOf(WindowPlacement.Floating) }
@@ -51,7 +58,7 @@ fun main(args: Array<String>) {
             })
             onDispose { target.isActive = false; window.dropTarget = null }
         }
-        BetterDeskTheme { BetterDeskApp(session) { enabled ->
+        BetterDeskTheme { BetterDeskApp(session, updater) { enabled ->
             if (enabled && windowState.placement != WindowPlacement.Fullscreen) {
                 previousPlacement = windowState.placement
                 windowState.placement = WindowPlacement.Fullscreen

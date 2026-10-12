@@ -1,4 +1,4 @@
-param([string]$Version = '0.7.1', [string]$OutputDirectory)
+param([Parameter(Mandatory)][string]$Version, [string]$OutputDirectory)
 $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $app = Join-Path $repoRoot 'desktop\build\compose\binaries\main\app\BetterDesk'
