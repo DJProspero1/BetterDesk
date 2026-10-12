@@ -4,7 +4,14 @@ This records user-visible milestones. Native artifacts remain local development
 builds; dates do not imply a public release. Validation is in
 [docs/VERIFICATION.md](docs/VERIFICATION.md).
 
-## 0.8.0 - Unreleased
+## 0.8.1 - Unreleased
+
+- Android sharing no longer stops at the Accessibility instructions. Approving
+  needs only Android's own notification and screen-sharing prompts. Tapping and
+  typing is optional: **Allow tapping and typing** during sharing opens Settings,
+  and control starts on return without reconnecting.
+
+## 0.8.0 - 2026-10-12
 
 - In-app updates on Windows and Android, modeled on T3 Code's GitHub Releases
   updater. The home screen offers a newer version (Update / Later); nothing

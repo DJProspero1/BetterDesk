@@ -12,7 +12,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import javax.net.ssl.SSLServerSocket
 import javax.net.ssl.SSLSocket
 
-enum class Stage { HOME, INVITATION, PREPARING, WAITING, CONNECTING, CONTROL_PERMISSION, SHARING, VIEWING, ENDED, ERROR }
+enum class Stage { HOME, INVITATION, PREPARING, WAITING, CONNECTING, SHARING, VIEWING, ENDED, ERROR }
 data class HelpState(
     val stage: Stage = Stage.HOME, val invitation: Invitation? = null,
     val image: ImageBitmap? = null, val frame: Long = 0, val remoteControl: Boolean = false,
@@ -196,11 +196,11 @@ class HelpSession(
         approvalExpiry = scope.launch {
             val client = if (parsed.relayTicket != null) relayFactory() else null
             try {
-                while (current == generation && mutable.value.stage in setOf(Stage.INVITATION, Stage.CONTROL_PERMISSION)) {
+                while (current == generation && mutable.value.stage == Stage.INVITATION) {
                     val remaining = parsed.expires - System.currentTimeMillis()
                     if (remaining <= 0) { finishError("expired"); break }
                     delay(minOf(1500L, remaining))
-                    if (current != generation || mutable.value.stage !in setOf(Stage.INVITATION, Stage.CONTROL_PERMISSION)) break
+                    if (current != generation || mutable.value.stage != Stage.INVITATION) break
                     if (client != null && parsed.relayTicket != null) {
                         val active = withContext(Dispatchers.IO) { client.active(parsed.relayTicket) }
                         if (!active && current == generation) { stop(); break }
@@ -351,30 +351,35 @@ class HelpSession(
         error("Invitation expired")
     }
 
+    /** Approval needs only the native capture prompt; control is an optional later step. */
     fun allowHelp() {
         if (mutable.value.stage != Stage.INVITATION) return
-        if (platform.isAndroid && !platform.controlAvailable()) {
-            mutable.value = mutable.value.copy(stage = Stage.CONTROL_PERMISSION)
-        } else connectRecipient()
+        connectRecipient()
+    }
+
+    private fun canOfferControl() = mutable.value.let {
+        it.stage == Stage.SHARING && it.switchState.isEmpty() && !it.remoteControl && platform.isAndroid
     }
 
     fun enableControl() {
-        if (mutable.value.stage != Stage.CONTROL_PERMISSION) return
+        if (!canOfferControl()) return
         permissionPending = true
         platform.openControlSettings()
     }
 
     fun openRestrictedSettings() {
-        if (mutable.value.stage != Stage.CONTROL_PERMISSION) return
+        if (!canOfferControl()) return
         platform.openAppSettings()
     }
 
     fun refreshPermissions() {
-        if (permissionPending && mutable.value.stage == Stage.CONTROL_PERMISSION && !platform.controlAvailable()) {
-            mutable.value = mutable.value.copy(permissionReturned = true)
-        }
-        if (permissionPending && mutable.value.stage == Stage.CONTROL_PERMISSION && platform.controlAvailable()) {
-            permissionPending = false; connectRecipient()
+        // Only the person's own request during this session turns control on.
+        if (permissionPending && canOfferControl()) {
+            if (platform.controlAvailable()) {
+                permissionPending = false
+                mutable.value = mutable.value.copy(remoteControl = true, permissionReturned = false)
+                sendControl(Message("capability", control = true, epoch = epoch))
+            } else mutable.value = mutable.value.copy(permissionReturned = true)
         }
         if (mutable.value.stage == Stage.SHARING && !platform.controlAvailable() && mutable.value.remoteControl) {
             mutable.value = mutable.value.copy(remoteControl = false)
@@ -382,15 +387,10 @@ class HelpSession(
         }
     }
 
-    fun shareWithoutControl() {
-        if (mutable.value.stage != Stage.CONTROL_PERMISSION) return
-        permissionPending = false; connectRecipient(viewOnly = true)
-    }
-
-    private fun connectRecipient(viewOnly: Boolean = false) {
+    private fun connectRecipient() {
         if (wire != null && !viewer) {
             mutable.value = mutable.value.copy(stage = Stage.CONNECTING)
-            startMedia(wire!!, generation, viewOnly)
+            startMedia(wire!!, generation)
             return
         }
         val invitation = mutable.value.invitation ?: return
@@ -447,7 +447,7 @@ class HelpSession(
                     if (current != generation) { connection.close(); return@coroutineScope }
                     wire = connection
                     viewer = false
-                    startMedia(connection, current, viewOnly)
+                    startMedia(connection, current)
                     // One reader and heartbeat remain alive throughout OS permissions.
                     pump(connection, current)
                 }
@@ -458,7 +458,7 @@ class HelpSession(
         }
     }
 
-    private fun startMedia(connection: SessionTransport, current: Long, viewOnly: Boolean) {
+    private fun startMedia(connection: SessionTransport, current: Long) {
         if (mediaWork?.isActive == true) return
         val media = ++mediaGeneration
         val streamEpoch = epoch
@@ -475,7 +475,7 @@ class HelpSession(
                     )
                     if (!allowed || current != generation || media != mediaGeneration) { if (current == generation) stop(); return@coroutineScope }
                     authorized.set(true)
-                    val control = !viewOnly && platform.controlAvailable()
+                    val control = platform.controlAvailable()
                     val sound = peerAudio && withContext(Dispatchers.IO) {
                         runCatching { platform.startAudio { if (current == generation && media == mediaGeneration && authorized.get()) audio.trySend(it.copy(epoch = streamEpoch)) } }.getOrDefault(false)
                     }
@@ -587,10 +587,7 @@ class HelpSession(
         sentFrame = 0; sentAt = 0; capturedFrame = 0; frameWindow.clear(); performance.reset()
         clearSwitch()
         mutable.value = HelpState(stage = Stage.CONNECTING, peer = mutable.value.peer, viaRelay = mutable.value.viaRelay)
-        if (!viewer) {
-            if (platform.isAndroid && !platform.controlAvailable()) mutable.value = mutable.value.copy(stage = Stage.CONTROL_PERMISSION)
-            else startMedia(wire!!, current, viewOnly = false)
-        }
+        if (!viewer) { permissionPending = false; startMedia(wire!!, current) }
     }
 
     private suspend fun switchMessage(message: Message, current: Long) {
@@ -675,8 +672,8 @@ class HelpSession(
                             }
                             "capability" -> {
                                 if (packet.message.epoch != epoch || mutable.value.switchState == "switching") continue
-                                check(viewer && incomingReady && !packet.message.control)
-                                withContext(Dispatchers.Main) { mutable.value = mutable.value.copy(remoteControl = false) }
+                                check(viewer && incomingReady)
+                                withContext(Dispatchers.Main) { mutable.value = mutable.value.copy(remoteControl = packet.message.control) }
                             }
                             "inputUnavailable" -> withContext(Dispatchers.Main) {
                                 if (current == generation && viewer && packet.message.epoch == epoch) showInputNotice("unavailable")

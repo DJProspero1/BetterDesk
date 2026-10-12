@@ -67,8 +67,7 @@ class RelayDeviceTest {
                     until(60000) { Runtime.session?.state?.value?.stage == Stage.INVITATION }
                     assertTrue(Runtime.session!!.state.value.viaRelay)
                     click("Allow connection|Permitir ligação")
-                    until { Runtime.session!!.state.value.stage in setOf(Stage.CONTROL_PERMISSION,Stage.CONNECTING) }
-                    if(Runtime.session!!.state.value.stage==Stage.CONTROL_PERMISSION) click("Share my screen only|Partilhar apenas o ecrã")
+                    until { Runtime.session!!.state.value.stage in setOf(Stage.CONNECTING,Stage.SHARING) }
                     // Use the genuine OS prompts for playback audio and notifications.
                     repeat(3) {
                         val allow = device.wait(Until.findObject(By.res(Pattern.compile(".*permissioncontroller:id/permission_allow(_foreground_only)?_button"))),1500)
@@ -141,8 +140,7 @@ class RelayDeviceTest {
                     // Either device can request the reversal; each new Android capture
                     // must use a fresh, genuine MediaProjection approval.
                     click("Switch screens|Trocar ecrãs")
-                    until { Runtime.session!!.state.value.stage==Stage.CONTROL_PERMISSION || Runtime.session!!.state.value.stage==Stage.CONNECTING }
-                    if(Runtime.session!!.state.value.stage==Stage.CONTROL_PERMISSION) click("Share my screen only|Partilhar apenas o ecrã")
+                    until { Runtime.session!!.state.value.stage in setOf(Stage.CONNECTING,Stage.SHARING) }
                     approveProjection()
                     until { Runtime.session!!.state.value.stage==Stage.SHARING }
                     assertSame(connectedSession,Runtime.session)

@@ -38,7 +38,7 @@ Local outputs for this milestone:
 
 | File under `dist/` | Meaning |
 | --- | --- |
-| `BetterDesk-Windows-0.8.0.exe` | Unsigned x64 portable EXE, including app and Java runtime |
+| `BetterDesk-Windows-0.8.1.exe` | Unsigned x64 portable EXE, including app and Java runtime |
 | `BetterDesk-Android-0.8.0-debug.apk` | Local debug-signed Android APK |
 | `SHA256SUMS.txt` | SHA-256 of those final artifacts |
 | `BUILD-INFO.txt` | UTC build time, source Git revision, dirty state and packaging notes |

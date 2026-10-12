@@ -7,6 +7,16 @@ a prerequisite for this PR. Do not request Windows access or evaluation-media
 registration. Earlier dated results retain their original scope; this decision
 does not turn Linux/emulator checks into Windows evidence.
 
+## Optional Android control, 12 October 2026 (0.8.1 source, unreleased)
+
+On Linux: the full desktop JVM suite ran **66 checks: 50 passed, zero failed,
+16 skipped** (same skip reasons as below). The new `SwitchAudioTest` check covers
+an Android share that starts view-only, ignores a stored accessibility grant
+without an in-session request, and upgrades to control live after **Allow tapping
+and typing**. `:android:assembleDebug` produced versionName 0.8.1, versionCode 11;
+the instrumentation sources compiled. Emulator and physical-phone runs of the
+approval, capture prompt and live control upgrade are **untested** for this change.
+
 ## In-app updates, 12 October 2026 (0.8.0 source, unreleased)
 
 On Linux: the full desktop JVM suite ran **65 checks: 49 passed, zero failed,

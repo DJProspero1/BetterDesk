@@ -25,7 +25,7 @@ This is an early prototype, not audited remote-support software. Report issues p
   AudioPlaybackCapture with the genuine audio/MediaProjection grants; Windows uses
   a render-endpoint WASAPI loopback stream. Neither opens the microphone. No audio
   is recorded to disk or included in logs. Audio packet size and queues are bounded.
-- This version has no trusted-device/unattended mode. A stored Android accessibility grant does not authorize any future session.
+- This version has no trusted-device/unattended mode. A stored Android accessibility grant does not authorize any future session. Android sessions start view-only; control is enabled mid-session only after the sharer selects Allow tapping and typing in that session, and is revoked if the service is turned off.
 - Session protocol 4 retains approved file/clipboard exchange. Only new Windows
   clipboard content is observed automatically, while both devices enable it;
   Android uses explicit foreground actions. File manifests identify user-selected

@@ -61,7 +61,10 @@ sequenceDiagram
 ```
 
 `HelpSession` exposes HOME, INVITATION, PREPARING, WAITING, CONNECTING,
-CONTROL_PERMISSION, SHARING, VIEWING, ENDED and ERROR. A successful pairing
+SHARING, VIEWING, ENDED and ERROR. Android approval never waits on
+Accessibility: sharing starts view-only, and the sharer can later select Allow
+tapping and typing. Only after that in-session request does a granted service send
+`capability(control=true)`; revoking it sends `capability(control=false)`. A successful pairing
 acknowledgement means the invitation was delivered; it does not mean the person
 approved capture. VIEWING begins after a valid frame is decoded. Stop clears
 authorization first, advances the session generation, then closes resources so

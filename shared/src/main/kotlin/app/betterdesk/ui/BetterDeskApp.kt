@@ -144,32 +144,6 @@ fun BetterDeskApp(session: HelpSession, updater: AppUpdater? = null, onFullScree
                                 LinearProgressIndicator(Modifier.fillMaxWidth())
                                 TextButton(onClick = { session.stop() }) { Text(t("Cancel", "Cancelar")) }
                             }
-                            Stage.CONTROL_PERMISSION -> {
-                                if (restricted) {
-                                    Heading(t("Unblock the setting", "Desbloquear a definição"), t("Android may block control for apps installed from an APK. Only continue if you trust BetterDesk.", "O Android pode bloquear o controlo em aplicações instaladas por APK. Continue apenas se confia no BetterDesk."))
-                                    PermissionStep("1", t("Open app info below.", "Abra as informações da aplicação abaixo."))
-                                    PermissionStep("2", t("Tap ⋮, then Allow restricted settings.", "Toque em ⋮ e em Permitir definições restritas."))
-                                    PermissionStep("3", t("Return here. Then enable control.", "Volte aqui. Depois ative o controlo."))
-                                    Spacer(Modifier.height(20.dp))
-                                    Primary(t("Open app info", "Abrir informações da aplicação")) { appSettingsOpened = true; session.openRestrictedSettings() }
-                                    if (appSettingsOpened) TextButton(onClick = { restricted = false; session.enableControl() }) { Text(t("Continue to control settings", "Continuar para as definições de controlo")) }
-                                    TextButton(onClick = { restricted = false }) { Text(t("I don't see that option", "Não vejo essa opção")) }
-                                } else {
-                                    Heading(t("Enable control", "Ativar controlo"), t("This lets the connected person tap and type. Android needs you to approve it once.", "Permite à pessoa ligada tocar e escrever. O Android precisa que autorize esta opção uma vez."))
-                                    PermissionStep("1", t("Select BetterDesk in Accessibility.", "Escolha BetterDesk em Acessibilidade."))
-                                    PermissionStep("2", t("Turn on Use BetterDesk and confirm.", "Ative Utilizar BetterDesk e confirme."))
-                                    PermissionStep("3", t("Return here to continue.", "Volte aqui para continuar."))
-                                    if (state.permissionReturned) {
-                                        Spacer(Modifier.height(12.dp))
-                                        Text(t("Control is still off.", "O controlo continua desativado."), color = MaterialTheme.colorScheme.error)
-                                    }
-                                    Spacer(Modifier.height(20.dp))
-                                    Primary(t("Open control settings", "Abrir definições de controlo")) { session.enableControl() }
-                                    if (session.platform.mayRestrictSettings) TextButton(onClick = { restricted = true }) { Text(t("Android blocked this?", "O Android bloqueou esta opção?")) }
-                                }
-                                TextButton(onClick = { session.shareWithoutControl() }) { Text(t("Share my screen only", "Partilhar apenas o ecrã")) }
-                                TextButton(onClick = { session.home() }) { Text(t("Cancel", "Cancelar")) }
-                            }
                             Stage.SHARING -> {
                                 Heading(t("Connected to ${state.peer}", "Ligado a ${state.peer}"), if (state.remoteControl) t("Your screen is shared. They can tap and type. Stay with your device.", "O ecrã está partilhado. A pessoa pode tocar e escrever. Fique junto do dispositivo.") else t("Your screen is shared. Only you can tap and type.", "O ecrã está partilhado. Só o utilizador pode tocar e escrever."))
                                 Primary(t("Disconnect", "Desligar")) { session.stop() }
@@ -178,6 +152,29 @@ fun BetterDeskApp(session: HelpSession, updater: AppUpdater? = null, onFullScree
                                 Text(if (state.audioAvailable) t("Device sound is shared", "O som do dispositivo está partilhado") else t("Device sound is unavailable", "O som do dispositivo está indisponível"), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Spacer(Modifier.height(16.dp))
                                 Text(t("You can continue using your device.", "Pode continuar a utilizar o dispositivo."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                // Optional: sharing already works. Android has no prompt for this, so explain before opening Settings.
+                                if (session.platform.isAndroid && !state.remoteControl && state.switchState.isEmpty()) {
+                                    Spacer(Modifier.height(28.dp))
+                                    if (restricted) {
+                                        Text(t("Unblock the setting", "Desbloquear a definição"), fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+                                        Text(t("Android may block this for apps installed from an APK. Only continue if you trust BetterDesk.", "O Android pode bloquear esta opção em aplicações instaladas por APK. Continue apenas se confia no BetterDesk."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        PermissionStep("1", t("Open app info below.", "Abra as informações da aplicação abaixo."))
+                                        PermissionStep("2", t("Tap ⋮, then Allow restricted settings.", "Toque em ⋮ e em Permitir definições restritas."))
+                                        PermissionStep("3", t("Return here. Then try again.", "Volte aqui. Depois tente novamente."))
+                                        TextButton(onClick = { appSettingsOpened = true; session.openRestrictedSettings() }) { Text(t("Open app info", "Abrir informações da aplicação")) }
+                                        if (appSettingsOpened) TextButton(onClick = { restricted = false; session.enableControl() }) { Text(t("Try again", "Tentar novamente")) }
+                                        TextButton(onClick = { restricted = false }) { Text(t("I don't see that option", "Não vejo essa opção")) }
+                                    } else {
+                                        Text(t("Let them tap and type?", "Deixar a pessoa tocar e escrever?"), fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+                                        Text(t("Optional. Android asks you to turn this on once in Accessibility.", "Opcional. O Android pede que ative esta opção uma vez em Acessibilidade."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        PermissionStep("1", t("Select BetterDesk in Accessibility.", "Escolha BetterDesk em Acessibilidade."))
+                                        PermissionStep("2", t("Turn on Use BetterDesk and confirm.", "Ative Utilizar BetterDesk e confirme."))
+                                        PermissionStep("3", t("Return here. Your screen stays shared.", "Volte aqui. O ecrã continua partilhado."))
+                                        if (state.permissionReturned) Text(t("Control is still off.", "O controlo continua desativado."), color = MaterialTheme.colorScheme.error)
+                                        TextButton(onClick = { session.enableControl() }) { Text(t("Allow tapping and typing", "Permitir tocar e escrever")) }
+                                        if (session.platform.mayRestrictSettings) TextButton(onClick = { restricted = true }) { Text(t("Android blocked this?", "O Android bloqueou esta opção?")) }
+                                    }
+                                }
                             }
                             Stage.ENDED -> {
                                 Heading(t("Disconnected", "Ligação terminada"), t("Your screen is no longer shared. This connection is closed.", "O ecrã já não está partilhado. A ligação foi encerrada."))

@@ -59,7 +59,7 @@ Short panel transitions honor the platform's reduced-motion setting.
 | --- | --- |
 | MediaProjection | Genuine per-session screen-capture consent; denial leaves no authorized capture |
 | AudioPlaybackCapture / AudioTrack (capture API 29+) | Supported app playback accompanies the screen; native low-latency playback on the viewer |
-| AccessibilityService | Optional input gestures/text; grant through real Settings; view-only remains available |
+| AccessibilityService | Optional input gestures/text, offered during sharing; grant through real Settings; enabled live without reconnecting; view-only is the default |
 | Notification permission (API 33+) | Requested before the separate sharing prompt; denial does not grant capture |
 | Media-projection foreground service | Sharing lifetime, visible sharing notice and Disconnect action |
 | Connected-device foreground service | Availability/session continuity while changing apps; replaced when capture starts |
@@ -76,8 +76,13 @@ runtime prompt. Android requires the permission labeled microphone/record audio
 for playback capture, but BetterDesk never opens a microphone source. Denial keeps
 video available without sound. There is no contacts, file-storage or camera grant.
 
-Sideloaded APKs may have accessibility restricted by Android. BetterDesk explains
-the steps before opening Settings and includes **Android blocked this?** recovery
+Android has no runtime dialog for Accessibility, so ordinary sharing never asks for
+it: approval needs only the notification and screen-capture prompts. While
+sharing, **Allow tapping and typing** opens Accessibility settings; returning
+rechecks the real service and upgrades the session to control. A grant present
+without that in-session request is ignored. Sideloaded APKs may have
+accessibility restricted by Android (Play Store installs are not). BetterDesk
+explains the steps before opening Settings and includes **Android blocked this?** recovery
 through its App info page. Only the device owner can allow restricted settings;
 the app cannot legitimately do it silently. Labels/menus vary by OS and vendor.
 See [Android's restricted-settings guidance](https://support.google.com/android/answer/12623953).
@@ -146,7 +151,7 @@ public distribution; this implementation guide is not a provider-retention promi
 | Code fails | Use the current code within five minutes, update both apps, and approve only the intended request. Expired/stopped sessions need a new code. |
 | Internet connects nowhere | HTTPS and the configured Railway outgoing TCP endpoint must be reachable. There is no port-443 tunnel or manual port-forwarding setup. |
 | Large borders in landscape | Fit preserves the remote aspect ratio; a portrait source cannot fill a landscape screen without cropping. Controls must not reserve permanent space. |
-| Phone sees screen but cannot control | Check view-only status, accessibility, focused editable node, full-display sharing and blocked system screens. Do not bypass the permission boundary. |
+| Phone sees screen but cannot control | On the phone, select Allow tapping and typing while sharing. Check view-only status, accessibility, focused editable node, full-display sharing and blocked system screens. Do not bypass the permission boundary. |
 | Physical keyboard does nothing | Update both devices to 0.7.1 or later, then tap the remote field. Keyboard on shows remote focus. Local Type/code fields keep input local; Ctrl+Shift+Space releases focus. Custom/protected editors can reject input. See KEYBOARD.md. |
 | Phone session ends after network change | Seamless Wi-Fi/mobile handover and reconnect are not implemented. Start a fresh attended session. |
 | Update fails | Check the Internet connection and, on Windows, that the EXE's folder is writable (copy it to Desktop or Downloads). The current app is unchanged; Try again downloads it again. |
