@@ -15,7 +15,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import app.betterdesk.core.AppUpdater
 import app.betterdesk.core.HelpSession
+import app.betterdesk.core.Stage
 import app.betterdesk.ui.BetterDeskApp
 import app.betterdesk.ui.BetterDeskTheme
 import kotlinx.coroutines.*
@@ -23,6 +25,7 @@ import kotlinx.coroutines.*
 object Runtime {
     var platform: AndroidPlatform? = null
     var session: HelpSession? = null
+    var updater: AppUpdater? = null
 }
 
 class MainActivity : ComponentActivity() {
@@ -64,7 +67,10 @@ class MainActivity : ComponentActivity() {
         platform.exchange.attach(this, fileResult::launch)
         if (intent?.action == Intent.ACTION_VIEW && intent?.data?.scheme == "betterdesk") intent?.dataString?.let(session::acceptInvitation)
         if (savedInstanceState == null) receiveSharedIntent(intent)
-        setContent { BetterDeskTheme { BetterDeskApp(session, ::setFullScreen) } }
+        val updater = Runtime.updater ?: AppUpdater(AndroidUpdate(applicationContext), {
+            Runtime.session?.state?.value?.stage in setOf(Stage.HOME, Stage.ENDED, Stage.ERROR)
+        }).also { Runtime.updater = it }
+        setContent { BetterDeskTheme { BetterDeskApp(session, updater, ::setFullScreen) } }
     }
 
     private fun setFullScreen(enabled: Boolean) {
@@ -109,6 +115,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         Runtime.session?.refreshPermissions()
+        Runtime.updater?.refreshPermission()
         android.os.Handler(mainLooper).postDelayed({ if (!isFinishing) Runtime.session?.refreshPermissions() }, 400)
     }
 

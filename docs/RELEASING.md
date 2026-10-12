@@ -1,33 +1,28 @@
 # Local builds and release preparation
 
-Current delivery is a private development build. The source may be prepared for
-open source, but repository publication, consumer distribution and public downloads
-are separate decisions. The owner has authorized EXE/APK downloads in this
-existing private GitHub repository. The public website remains a waitlist.
+Current delivery is a development build. On 12 October 2026 the owner authorized
+making this app repository and its Releases public, so installed apps can update
+without credentials. The website and infrastructure repositories stay private.
+The public website remains a waitlist.
 All native builds, signing and packaging remain local; GitHub only stores source
 and the completed assets. No cloud build workflow is used.
 
 ## Version and source preparation
 
-Update version references together:
-
-- `android/build.gradle.kts`: `versionName` and monotonically increasing `versionCode`.
-- `desktop/build.gradle.kts`: `packageVersion`.
-- `scripts/build-local.ps1` and `scripts/package-portable.ps1`: artifact/version defaults.
-- `README.md`, this guide and [CHANGELOG.md](../CHANGELOG.md): delivery names/history.
-
-Version 0.7.1 uses Android versionCode 9. There is not yet a single version manifest;
-search for the previous version before committing. Keep the Android application ID
+`gradle.properties` holds the only version: `betterdesk.version` (X.Y.Z) and the
+monotonically increasing Android `betterdesk.versionCode`. Both Gradle apps and
+`build-local.ps1` read them. Also update `README.md`, this guide and
+[CHANGELOG.md](../CHANGELOG.md). Version 0.8.0 uses Android versionCode 10.
+Every release must raise both: the updater offers only a higher X.Y.Z, and Android
+additionally needs a higher versionCode. Keep the Android application ID
 and the signing key stable for updates. Update [VERIFICATION.md](VERIFICATION.md)
 with actual coverage and limits, not intended tests. Check instruction-file parity
 and preserve generated icons if their source changed.
 
 ## Build and inspect
 
-For 0.7.1 the owner paused tests and audio workloads. Use `-SkipTests -LowResource`
-for authorized local packaging, and clearly record unverified runtime coverage.
-Do not launch native apps, devices or tests just to fill the ordinary checklist
-while that instruction remains active. Release notes must distinguish compilation,
+Use `-SkipTests -LowResource` only when the owner has paused tests, and clearly
+record unverified runtime coverage. Release notes must distinguish compilation,
 artifact checksum readback and actual end-to-end verification.
 
 1. Follow [DEVELOPMENT.md](DEVELOPMENT.md), including the real broker fixture.
@@ -43,14 +38,15 @@ Local outputs for this milestone:
 
 | File under `dist/` | Meaning |
 | --- | --- |
-| `BetterDesk-Windows-0.7.1.exe` | Unsigned x64 portable EXE, including app and Java runtime |
-| `BetterDesk-Android-0.7.1-debug.apk` | Local debug-signed Android APK |
+| `BetterDesk-Windows-0.8.0.exe` | Unsigned x64 portable EXE, including app and Java runtime |
+| `BetterDesk-Android-0.8.0-debug.apk` | Local debug-signed Android APK |
 | `SHA256SUMS.txt` | SHA-256 of those final artifacts |
 | `BUILD-INFO.txt` | UTC build time, source Git revision, dirty state and packaging notes |
+| `update.json` | Version, Android versionCode, and each artifact's name, size and SHA-256 for in-app updates |
 
 ```powershell
-Get-FileHash .\dist\BetterDesk-Windows-0.7.1.exe -Algorithm SHA256
-Get-FileHash .\dist\BetterDesk-Android-0.7.1-debug.apk -Algorithm SHA256
+Get-FileHash .\dist\BetterDesk-Windows-0.8.0.exe -Algorithm SHA256
+Get-FileHash .\dist\BetterDesk-Android-0.8.0-debug.apk -Algorithm SHA256
 Get-Content .\dist\SHA256SUMS.txt
 git rev-parse HEAD
 git status --short
@@ -60,11 +56,12 @@ Record a dirty checkout if applicable; do not pretend the revision alone identif
 uncommitted source. Byte-for-byte reproducible packages are not established:
 timestamps, the local signing key, JDK vendor and resolved native artifacts matter.
 
-## Distribution cleanup and private GitHub Releases
+## Distribution cleanup and GitHub Releases
 
-Every successful `build-local.ps1` invocation stages four complete outputs under
+Every successful `build-local.ps1` invocation stages five complete outputs under
 `desktop/build/distribution-stage-*`, validates checksums, then replaces `dist/`.
-Only the current EXE/APK and two metadata files remain in `dist/`. Failed compilation,
+Only the current EXE/APK and three metadata files remain in `dist/`. Staging also
+checks that `update.json` matches both artifacts byte-for-byte (size and SHA-256). Failed compilation,
 packaging or checksum verification preserves the prior working distribution.
 Recognized older binaries are removed after replacement; unrelated notes/previews
 are preserved under `desktop/build/distribution-previous-*`. Links/junctions in
@@ -78,12 +75,13 @@ authorized local GitHub CLI login:
 
 ```powershell
 .\scripts\test-release-scripts.ps1
-.\scripts\publish-release.ps1 -Version 0.7.1 -NotesFile .\desktop\build\release-notes.md
+.\scripts\publish-release.ps1 -Version 0.8.0 -NotesFile .\desktop\build\release-notes.md
 ```
 
-The publisher checks repository privacy, instruction parity, clean source,
+The publisher checks that the repository is public (installed apps fetch
+anonymously), instruction parity, clean source,
 `origin/main`, the build's source revision and artifact hashes. It creates/reuses a
-draft, uploads all four files, downloads them again and compares every SHA-256.
+draft, uploads all five files, downloads them again and compares every SHA-256.
 Draft retries update the intended source commit and notes. Draft validation uses
 the authenticated release listing and release ID; GitHub's by-tag lookup does not
 resolve an unpublished draft. Publication is then read back by that same ID.
@@ -92,8 +90,46 @@ releases/assets. Git source tags/history and unrelated drafts are retained.
 Never remove the last working release before verifying its replacement. A failed
 upload/readback leaves the earlier release intact. Published versions cannot be
 overwritten: increment the version and rebuild. Final GitHub readback must show
-the new release and its four uploaded assets. This remains a private, unsigned
+the new release and its five uploaded assets. Publishing it as Latest is what makes
+installed apps offer it, so publish only verified builds. This remains an unsigned
 Windows/debug-signed Android development channel, despite GitHub's Latest label.
+
+## In-app updates
+
+Both apps share `AppUpdater` and `UpdateSource` (`shared/.../core/AppUpdate.kt`);
+`DesktopUpdate` and `AndroidUpdate` install. The design follows open-source desktop
+apps such as T3 Code (electron-updater with public GitHub Releases and a hashed
+`latest.yml`), adapted to local builds without GitHub Actions:
+
+1. About 15 seconds after opening, then every six hours, the app anonymously
+   fetches `https://github.com/DJProspero1/BetterDesk/releases/latest/download/update.json`
+   (at most 16 KiB). Failures are silent; the next check retries.
+2. A higher X.Y.Z (and, on Android, a higher versionCode) shows a home-screen
+   notice. Later hides that version until the next one. The notice never appears
+   on connection screens.
+3. Update downloads the platform asset from the same release. Redirects may only
+   go to `github.com` or `*.githubusercontent.com` over HTTPS. The file is written to
+   a `.part` file and kept only when its size and SHA-256 equal the manifest.
+4. Installing waits until no connection is pending or active (otherwise the notice
+   says the update is ready and offers Install update).
+   - Windows: the launcher passes its own path in `BETTERDESK_PORTABLE`. The app
+     downloads beside it (`<exe>.new`), renames the running EXE to `<exe>.old`,
+     moves the new file into place, starts it with `--after <pid>` and exits. The
+     new launcher waits for that process, deletes `<exe>.old`, and removes completed
+     caches older than ten minutes that no running copy holds open. If the EXE's
+     folder is not writable, the update fails visibly and the app is unchanged.
+   - Android: after Android's per-app **Install unknown apps** permission (explained
+     in the notice, rechecked on return), the APK is checked for the same package,
+     a higher versionCode and identical signing certificates, then committed through
+     `PackageInstaller`, which always shows Android's confirmation.
+
+Trust model and limits: authenticity rests on HTTPS to GitHub and on control of
+this GitHub account; the manifest is not separately signed. Anyone who can publish
+a release here can offer Windows users an arbitrary EXE (still requiring their
+Update click). Android is stronger: a different signing key is refused. Before
+public distribution, add Windows code signing (and verify it before replacing the
+EXE) or a detached manifest signature with a key held offline. Versions before
+0.8.0 contain no updater.
 
 The offline script tests use an isolated checkout and Git/GitHub doubles. They
 exercise failed checksums, safe cleanup, junction rejection, upload failure and
@@ -130,19 +166,22 @@ never upload them or put passwords in commands, commits or reports.
 Install an update with Android's genuine confirmation or, on an authorized test
 device, `adb -s <serial> install -r <apk>`. Do not automatically uninstall a
 signature-conflicting app: that clears preferences and can affect OS grants.
-Reinstall/update requires a user/authorized-device action; silent consumer updates
-are not implemented. Test-only instrumentation and motion-fixture APKs stay separate.
+Reinstall/update requires a user/authorized-device action; the in-app updater uses
+Android's confirmation and silent updates are not implemented. Every APK published
+for in-app updates must be signed with the same key as the installed app, so keep
+building releases on the machine that holds the original debug key. Test-only instrumentation and motion-fixture APKs stay separate.
 
 ## Before public distribution
 
 These remain release work, not checks already completed:
 
-- Explicit authorization to make source or binaries public; private source history
-  review for secrets, personal data and accidental test artifacts.
+- Source history was reviewed for secrets on 12 October 2026 before the repository
+  was made public (none found; commit author emails are public). Repeat the review
+  for later history-rewriting or bulk imports.
 - Independent protocol/platform security review, abuse response and a working
   private vulnerability-reporting channel.
-- Signed Windows and Android release artifacts, protected production keys and a
-  documented update trust/rollback policy. The current debug/unsigned builds are
+- Signed Windows and Android release artifacts, protected production keys, a
+  signed update manifest and a rollback policy (the updater cannot downgrade). The current debug/unsigned builds are
   not that release channel.
 - Complete resolved dependency/SBOM and notice audit for both final artifacts,
   including native libraries and the embedded JDK. Provide corresponding source

@@ -41,9 +41,11 @@ dependencies {
 compose.desktop {
     application {
         mainClass = "app.betterdesk.desktop.MainKt"
+        // The updater compares releases against the packaged version.
+        jvmArgs += "-Dbetterdesk.version=${providers.gradleProperty("betterdesk.version").get()}"
         nativeDistributions {
             packageName = "BetterDesk"
-            packageVersion = "0.7.1"
+            packageVersion = providers.gradleProperty("betterdesk.version").get()
             description = "Simple attended help for Windows and Android"
             vendor = "BetterDesk contributors"
             modules("java.desktop", "java.prefs", "java.naming", "java.logging", "jdk.crypto.ec", "jdk.unsupported")

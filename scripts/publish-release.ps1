@@ -12,7 +12,8 @@ function Invoke-Gh([string[]]$Arguments) {
 }
 & (Join-Path $PSScriptRoot 'check-agent-instructions.ps1')
 $metadata = Invoke-Gh @('repo','view',$repo,'--json','isPrivate,nameWithOwner') | ConvertFrom-Json
-if (-not $metadata.isPrivate -or $metadata.nameWithOwner -ne $repo) { throw 'This workflow publishes only to the authorized private BetterDesk repository.' }
+# Installed apps fetch updates without credentials, which needs public releases.
+if ($metadata.isPrivate -or $metadata.nameWithOwner -ne $repo) { throw 'Installed apps can update only from the public BetterDesk repository.' }
 if (@(& git -C $repoRoot status --porcelain).Count) { throw 'Commit source and documentation before publishing a build.' }
 $revision = (& git -C $repoRoot rev-parse HEAD).Trim()
 $remote = (& git -C $repoRoot ls-remote origin refs/heads/main) -split '\s+'
@@ -24,7 +25,7 @@ if ($tagRefs.Count) {
     $target = if ($peeled.Count) { ($peeled[0] -split '\s+')[0] } else { ($tagRefs[0] -split '\s+')[0] }
     if ($target -ne $revision) { throw 'The release tag already names different source. Increment the version.' }
 }
-$files = @("BetterDesk-Windows-$Version.exe", "BetterDesk-Android-$Version-debug.apk", 'SHA256SUMS.txt', 'BUILD-INFO.txt')
+$files = @("BetterDesk-Windows-$Version.exe", "BetterDesk-Android-$Version-debug.apk", 'SHA256SUMS.txt', 'BUILD-INFO.txt', 'update.json')
 $checksums = @(Get-Content -LiteralPath (Join-Path $dist 'SHA256SUMS.txt'))
 $info = @(Get-Content -LiteralPath (Join-Path $dist 'BUILD-INFO.txt'))
 if ($info -notcontains "Source revision: $revision" -or $info -notcontains 'Working tree dirty: False') { throw 'Rebuild locally from the clean committed revision before publishing.' }
@@ -36,6 +37,8 @@ foreach ($name in $files) {
         if ($checksums -notcontains "$hash  $name") { throw "Release checksum mismatch: $name" }
     }
 }
+$update = Get-Content -LiteralPath (Join-Path $dist 'update.json') -Raw | ConvertFrom-Json
+if ($update.version -ne $Version -or $update.windows.name -ne $files[0] -or $update.android.name -ne $files[1]) { throw 'Update manifest does not describe this release.' }
 $notes = (Resolve-Path -LiteralPath $NotesFile).Path
 $releases = @(Invoke-Gh @('api',"repos/$repo/releases?per_page=100") | ConvertFrom-Json)
 $existing = $releases | Where-Object tag_name -eq $tag

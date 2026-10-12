@@ -1,8 +1,8 @@
 # Contributing to BetterDesk
 
 BetterDesk is an early attended remote-access application for Windows and Android.
-Its source currently lives in a private repository. These instructions prepare
-for outside contributors; they do not announce public availability or downloads.
+Its source and app releases are public on GitHub; the website and infrastructure
+repositories are private and not needed for ordinary app work.
 BetterDesk's own code is under [MIT](LICENSE); bundled dependencies retain their
 own [licenses](THIRD_PARTY.md).
 
@@ -80,5 +80,6 @@ direction, LAN/relay route if known, reproducible steps, expected/actual behavio
 and whether the problem persists with synthetic content. Omit codes, names and
 screen/input contents. Security-sensitive findings follow [SECURITY.md](SECURITY.md)
 instead of an ordinary issue. Publish verified locally built app binaries only
-through the private [release workflow](docs/RELEASING.md). Do not make the repository
-public or deploy the separate website/infrastructure as part of a routine app change.
+through the [release workflow](docs/RELEASING.md): a published Latest release is
+offered to every installed app. Do not publish or deploy the separate private
+website/infrastructure repositories as part of a routine app change.

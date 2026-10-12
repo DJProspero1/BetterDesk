@@ -2,11 +2,11 @@
 
 Simple, attended remote help for Windows and Android. Both applications use the **same Kotlin/Compose interface, copy, session state machine, and encrypted transport**. Only capture, input, permissions and packaging are platform-specific.
 
-The source is hosted in a private GitHub repository during development. All native compilation, tests, and packaging happen locally. There are no GitHub Actions, cloud app builds, telemetry or remote fonts. Railway hosts the connection service; the separate website remains a waitlist with no downloads.
+The source and app releases are hosted in a public GitHub repository; the website and infrastructure repositories remain private. All native compilation, tests, and packaging happen locally. There are no GitHub Actions, cloud app builds, telemetry or remote fonts. Railway hosts the connection service; the separate website remains a waitlist with no downloads.
 
 ## Current milestone
 
-Version 0.7.1 is an **early Internet-connected development build**, not a production remote-support release. Connections prefer a reachable local network and otherwise use the BetterDesk Railway relay. It has not been externally security-audited. Local binaries are distributed through the private repository's GitHub Releases; the website remains a waitlist. Update both devices together: this version uses session protocol 4. Keyboard fixes and transfer paths have compilation checks, not interactive or throughput verification; those runtime gaps remain unverified. The owner resumed tests for direct-connection work on 10 October; see [dated verification](docs/VERIFICATION.md).
+Version 0.8.0 is an **early Internet-connected development build**, not a production remote-support release. Connections prefer a reachable local network and otherwise use the BetterDesk Railway relay. It has not been externally security-audited. Local binaries are distributed through this repository's GitHub Releases, and installed apps offer newer releases in place; the website remains a waitlist. Update both devices together: this version uses session protocol 4. Keyboard fixes and transfer paths have compilation checks, not interactive or throughput verification; those runtime gaps remain unverified. The owner resumed tests for direct-connection work on 10 October; see [dated verification](docs/VERIFICATION.md).
 
 - Windows and Android have the same home screen: this device's code, another device's code, and Connect.
 - Enter the other device's twelve-digit code. Its owner explicitly approves sharing. If the connection service is unavailable, an eight-digit code is available for the local network.
@@ -38,18 +38,27 @@ Create ignored `local.properties` with `sdk.dir=C:/path/to/Android/Sdk`.
 
 Outputs:
 
-- **Windows: `dist/BetterDesk-Windows-0.7.1.exe`**. Double-click. No installer, ZIP extraction or separate Java installation.
-- **Android: `dist/BetterDesk-Android-0.7.1-debug.apk`**. Install as an update over the previous APK; the same local debug signing key is used.
+- **Windows: `dist/BetterDesk-Windows-0.8.0.exe`**. Double-click. No installer, ZIP extraction or separate Java installation.
+- **Android: `dist/BetterDesk-Android-0.8.0-debug.apk`**. Install as an update over the previous APK; the same local debug signing key is used.
 - Local checks: `desktop/build/reports/tests/test/index.html`.
 - Rendered UI checks: `desktop/build/screenshots/`.
 
 The script uses a checked local directory junction with an ASCII path for JDK packaging compatibility (for example when the source folder is `Programação`). Source stays in this checkout. It does not start a development server, upload code, or run cloud builds.
 
-After a successful build, `dist/` contains only the latest EXE/APK and their metadata/checksums. Staged files are verified before replacing the previous distribution; failed builds preserve it. The separate [release workflow](docs/RELEASING.md) uploads and verifies the latest private GitHub release before removing superseded app releases/assets. Git source tags/history remain.
+After a successful build, `dist/` contains only the latest EXE/APK and their metadata/checksums. Staged files are verified before replacing the previous distribution; failed builds preserve it. The separate [release workflow](docs/RELEASING.md) uploads and verifies the latest GitHub release before removing superseded app releases/assets. Git source tags/history remain.
 
-The portable EXE contains the app and Java runtime. On first opening each build it automatically expands its private files into `%LOCALAPPDATA%/BetterDesk/portable/<content-hash>/`, then launches. Subsequent opens reuse those files. There is no installer, registry association or admin prompt; internal cached files are necessary for the native runtime. Older build caches remain until manually removed when no instance is running. Keep only one BetterDesk window open.
+The portable EXE contains the app and Java runtime. On first opening each build it automatically expands its private files into `%LOCALAPPDATA%/BetterDesk/portable/<content-hash>/`, then launches. Subsequent opens reuse those files. There is no installer, registry association or admin prompt; internal cached files are necessary for the native runtime. After an update, the launcher removes older build caches once no copy is running from them. Keep only one BetterDesk window open.
 
-The Android APK uses the local debug signing key. The Windows build is unsigned. Consumer release signing remains later work. Downloading a new APK still requires Android's update confirmation; ordinary apps cannot silently replace themselves.
+The Android APK uses the local debug signing key. The Windows build is unsigned. Consumer release signing remains later work.
+
+### Updates
+
+From 0.8.0, both apps check the latest GitHub release about 15 seconds after opening and every six hours. When a newer version exists, the home screen shows **BetterDesk 0.x.y is available** with **Update** and **Later**. Nothing downloads until you choose Update, and nothing installs during a pending or active connection. The download must match the exact size and SHA-256 in the release's `update.json`.
+
+- Windows replaces the portable EXE you opened, in the same folder, and reopens it. Development runs (no portable launcher) never update themselves.
+- Android asks once for **Allow from this source**, explained in the app, then shows Android's own update confirmation. Android refuses an APK signed with a different key; the app also checks this first.
+
+No account, token or telemetry is involved: it is an anonymous HTTPS download from GitHub. Versions before 0.8.0 have no updater and need one manual update. See [releasing](docs/RELEASING.md#in-app-updates) for the trust model and its limits.
 
 ## Try a session
 
@@ -101,4 +110,4 @@ automatic LAN/direct/relay flow, source map, open decisions and delivery checkli
 BetterDesk's own code and documentation use the [MIT license](LICENSE).
 Dependency licenses remain separate. Preparing documentation for open source does
 not mean the repository is public, independently audited or approved for consumer
-redistribution. Native builds and private GitHub release publication are separate steps.
+redistribution. Native builds and GitHub release publication are separate steps.

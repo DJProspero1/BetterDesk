@@ -4,6 +4,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Reflection;
 using System.Security.Cryptography;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -28,7 +29,12 @@ internal static class Portable
             try {
                 var executable = await Task.Run(() => Prepare());
                 if (args.Length == 0 || args[0] != "--prepare-only") {
-                    Process.Start(new ProcessStartInfo(executable) { WorkingDirectory = Path.GetDirectoryName(executable), UseShellExecute = false });
+                    // After an update, the previous app is still closing; never run two copies.
+                    if (args.Length == 2 && args[0] == "--after") await Task.Run(() => WaitFor(args[1]));
+                    var start = new ProcessStartInfo(executable) { WorkingDirectory = Path.GetDirectoryName(executable), UseShellExecute = false };
+                    // The app replaces this file, not its private cache, when the person chooses Update.
+                    start.EnvironmentVariables["BETTERDESK_PORTABLE"] = Application.ExecutablePath;
+                    Process.Start(start);
                 }
                 window.Close();
             } catch (Exception) {
@@ -69,8 +75,37 @@ internal static class Portable
                     if (!File.Exists(executable)) throw new InvalidDataException();
                     File.WriteAllText(complete, digest);
                 }
+                RemoveStale(Path.GetDirectoryName(cache), digest);
                 return executable;
             }
+        }
+    }
+
+    private static void WaitFor(string id)
+    {
+        int pid;
+        if (!Int32.TryParse(id, out pid)) return;
+        try { using (var previous = Process.GetProcessById(pid)) previous.WaitForExit(30000); }
+        catch (ArgumentException) { }
+    }
+
+    // Updates leave the previous version's cache and file behind. A directory whose
+    // files are in use cannot be renamed, so only caches no copy is running from go.
+    private static void RemoveStale(string root, string current)
+    {
+        var replaced = Application.ExecutablePath + ".old";
+        try { if (File.Exists(replaced)) File.Delete(replaced); } catch (Exception) { }
+        foreach (var directory in Directory.GetDirectories(root)) {
+            var name = Path.GetFileName(directory);
+            if (name == current || !Regex.IsMatch(name, "^[0-9a-f]{64}(\\.stale)?$")) continue;
+            try {
+                // Another version may have been opened just now; leave fresh caches alone.
+                var complete = Path.Combine(directory, ".complete");
+                if (!name.EndsWith(".stale") && (!File.Exists(complete) || File.GetLastWriteTimeUtc(complete) > DateTime.UtcNow.AddMinutes(-10))) continue;
+                var stale = name.EndsWith(".stale") ? directory : directory + ".stale";
+                if (stale != directory) Directory.Move(directory, stale);
+                Directory.Delete(stale, true);
+            } catch (Exception) { }
         }
     }
 

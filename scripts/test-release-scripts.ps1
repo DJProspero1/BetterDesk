@@ -19,20 +19,29 @@ foreach ($name in $names) { Set-Content -LiteralPath (Join-Path $stage $name) -V
 $sums = $names | ForEach-Object { "$((Get-FileHash -LiteralPath (Join-Path $stage $_)).Hash.ToLowerInvariant())  $_" }
 Set-Content -LiteralPath (Join-Path $stage 'SHA256SUMS.txt') -Value 'bad checksum'
 Set-Content -LiteralPath (Join-Path $stage 'BUILD-INFO.txt') -Value @('Source revision: fixture-revision','Working tree dirty: False')
+function Get-FixtureAsset([string]$Name) { $f = Get-Item -LiteralPath (Join-Path $stage $Name); @{ name=$Name; sha256=(Get-FileHash -LiteralPath $f.FullName).Hash.ToLowerInvariant(); size=$f.Length } }
+$update = @{ version='0.6.0'; windows=(Get-FixtureAsset $names[0]); android=(Get-FixtureAsset $names[1]) }
+$update.android.versionCode = 7
+Set-Content -LiteralPath (Join-Path $stage 'update.json') -Value ($update | ConvertTo-Json -Depth 3)
 Set-Content -LiteralPath (Join-Path $testRoot 'dist\BetterDesk-Windows-0.5.0.exe') -Value 'old build'
 Set-Content -LiteralPath (Join-Path $testRoot 'dist\notes.txt') -Value 'keep this note'
 Expect-Failure { & "$testRoot\scripts\publish-distribution.ps1" -Staging $stage -Version 0.6.0 }
 Assert (Test-Path -LiteralPath "$testRoot\dist\BetterDesk-Windows-0.5.0.exe") 'Invalid build removed the previous distribution.'
 Set-Content -LiteralPath (Join-Path $stage 'SHA256SUMS.txt') -Value $sums
+$good = Get-Content -LiteralPath (Join-Path $stage 'update.json') -Raw
+Set-Content -LiteralPath (Join-Path $stage 'update.json') -Value ($good -replace '"size":\s*\d+', '"size": 1')
+Expect-Failure { & "$testRoot\scripts\publish-distribution.ps1" -Staging $stage -Version 0.6.0 }
+Assert (Test-Path -LiteralPath "$testRoot\dist\BetterDesk-Windows-0.5.0.exe") 'Wrong update manifest removed the previous distribution.'
+Set-Content -LiteralPath (Join-Path $stage 'update.json') -Value $good
 & "$testRoot\scripts\publish-distribution.ps1" -Staging $stage -Version 0.6.0 | Out-Null
-Assert (@(Get-ChildItem -LiteralPath "$testRoot\dist").Count -eq 4) 'Distribution was not cleaned.'
+Assert (@(Get-ChildItem -LiteralPath "$testRoot\dist").Count -eq 5) 'Distribution was not cleaned.'
 $archives = @(Get-ChildItem -LiteralPath "$testRoot\desktop\build" -Directory -Filter 'distribution-previous-*')
 Assert ($archives.Count -eq 1 -and (Get-Content -LiteralPath (Join-Path $archives[0].FullName 'notes.txt')) -eq 'keep this note') 'Unrelated notes were not preserved.'
 Assert (-not (Test-Path -LiteralPath (Join-Path $archives[0].FullName 'BetterDesk-Windows-0.5.0.exe'))) 'Old binary remains.'
 $link = Join-Path $testRoot 'desktop\build\distribution-stage-link'
 New-Item -ItemType Junction -Path $link -Target (Join-Path $testRoot 'dist') | Out-Null
 Expect-Failure { & "$testRoot\scripts\publish-distribution.ps1" -Staging $link -Version 0.6.0 }
-Assert (@(Get-ChildItem -LiteralPath "$testRoot\dist").Count -eq 4) 'Rejected junction changed the distribution.'
+Assert (@(Get-ChildItem -LiteralPath "$testRoot\dist").Count -eq 5) 'Rejected junction changed the distribution.'
 
 # Offline Git/GitHub doubles: exercise failed uploads and publication-before-deletion
 # without making any repository, account or network mutations.
@@ -43,7 +52,7 @@ Assert (@(Get-ChildItem -LiteralPath "$testRoot\dist").Count -eq 4) 'Rejected ju
     function git { $global:LASTEXITCODE=0; if ($args -contains 'rev-parse') { 'fixture-revision' } elseif ($args -contains 'refs/heads/main') { 'fixture-revision refs/heads/main' } }
     function gh {
         $global:LASTEXITCODE=0
-        if ($args[0] -eq 'repo') { return '{"isPrivate":true,"nameWithOwner":"DJProspero1/BetterDesk"}' }
+        if ($args[0] -eq 'repo') { return '{"isPrivate":false,"nameWithOwner":"DJProspero1/BetterDesk"}' }
         if ($args[0] -eq 'api') {
             if ($args[1] -like '*/releases/600') { return ($ctx.releases | Where-Object tag_name -eq 'v0.6.0' | ConvertTo-Json -Depth 5) }
             return ConvertTo-Json -InputObject @($ctx.releases) -Depth 5
@@ -78,5 +87,5 @@ Assert (@(Get-ChildItem -LiteralPath "$testRoot\dist").Count -eq 4) 'Rejected ju
     Assert ($ctx.events.IndexOf('download') -lt $ctx.events.IndexOf('edit') -and $ctx.events.IndexOf('edit') -lt $ctx.events.IndexOf('delete')) 'Old release deleted before new asset verification/publication.'
     Assert (-not $ctx.events.Contains('create')) 'Retry failed to reuse the draft.'
 }
-Write-Output 'Passed: checksum failure preserves old distribution; clean replacement preserves unrelated notes; junction rejected; failed readback retains old release; retry verifies/publishes before deleting old release.'
+Write-Output 'Passed: checksum and update-manifest failures preserve old distribution; clean replacement preserves unrelated notes; junction rejected; failed readback retains old release; retry verifies/publishes before deleting old release.'
 Write-Output "Isolated fixture evidence retained in $testRoot"

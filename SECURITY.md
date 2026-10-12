@@ -53,6 +53,14 @@ This is an early prototype, not audited remote-support software. Report issues p
   likewise remain runtime unverified. Compilation is not an assurance of
   correct shell interoperation, cancellation, throughput or adversarial robustness.
 
+In-app updates: the manifest is fetched anonymously over HTTPS from this
+repository's latest release, and downloads are kept only when size and SHA-256
+match it. The manifest itself is not signed, and the Windows EXE is unsigned, so
+whoever controls this GitHub account or its releases can offer Windows users any
+EXE (still after an explicit Update). Android refuses a different signing key.
+Updates never install during a pending or active connection. See
+[RELEASING.md](docs/RELEASING.md#in-app-updates).
+
 Before production: independent protocol/platform audit, dependency/license review, signed updates, abuse handling, physical-device compatibility testing, denial-of-service testing, and clear release privacy/distribution policies.
 
 ## Development-only direct transport proof
@@ -92,12 +100,11 @@ or infer public Internet/physical-device coverage from a local fixture. See the
 
 ## Reporting a vulnerability
 
-While the repository is private, contact its owner through the established private
-project channel. Do not place exploit details, live codes, tickets, credentials,
+Contact the repository owner privately (for example through GitHub's private
+vulnerability reporting once it is enabled for this repository). Do not place exploit details, live codes, tickets, credentials,
 screen captures or typed private data in an ordinary issue or public discussion.
-This repository does not yet advertise a dedicated security email, confirmed
-GitHub private-reporting endpoint or response-time commitment. Establish and test
-that channel before opening the project publicly; do not invent a contact address.
+This repository does not yet advertise a dedicated security email or
+response-time commitment; do not invent a contact address.
 
 A useful private report includes affected source revision/app versions, both OS
 versions, LAN or relay route, prerequisites, a minimal reproduction using synthetic
@@ -106,8 +113,8 @@ stop, replay, pin/code bypass and permission-boundary failures as security issue
 Never test against someone else's device without their authorization.
 
 Only the current development line is maintained; there is no supported-version
-matrix or automatic signed updater yet. Fixed builds require a local rebuild and
-an attended update. See [local release preparation](docs/RELEASING.md) and
+matrix. Fixed builds are built locally and published as the latest GitHub release;
+installed 0.8.0+ apps offer them and install after the user chooses Update. See [local release preparation](docs/RELEASING.md) and
 [platform data handling](docs/PLATFORMS.md) for remaining delivery/privacy work.
 
 Protocol reference: [Bouncy Castle J-PAKE](https://downloads.bouncycastle.org/lts-java/docs/bcprov-lts8on-2.73.5-javadoc/org/bouncycastle/crypto/agreement/jpake/JPAKEParticipant.html). Use of standard primitives is not an audit of BetterDesk's integration.

@@ -138,6 +138,6 @@ uses direct LAN or the Railway TCP relay.
 2. Improve mobile desktop control with trackpad mode, zoom and monitor selection.
 3. Evaluate a proven hardware-video/transport engine; replace JPEG streaming where justified.
 4. Improve Internet transport resilience, adaptive quality, and restrictive-network fallback.
-5. Add signed local release packaging and an explicit update trust model.
+5. Add signed local release packaging and a signed update manifest; the current in-app updater relies on HTTPS to GitHub plus SHA-256 (see RELEASING.md).
 
 The Internet relay is an early implementation with bounded sessions and a single region. Neither OS consent nor firewall policy is bypassed. Native app builds remain local.

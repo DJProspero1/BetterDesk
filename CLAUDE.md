@@ -139,11 +139,15 @@ These rules apply to work in this repository. Read [PRODUCT.md](PRODUCT.md) and
 - Android delivery is a local APK update. Preserve compatible app identity and
   signing continuity; do not silently uninstall to solve an update error. Ordinary
   Android update/permission confirmation cannot be bypassed.
-- Source may be committed and pushed to the existing private GitHub repository
-  under the owner's authorization. Keep it private until explicitly told otherwise.
-  Potential open-source readiness does not authorize publication.
-- Build binaries locally, then publish verified Windows/Android builds and checksums
-  to Releases in the existing private GitHub repository. After verifying the new
+- Both apps offer updates from the latest GitHub release's `update.json`. Checking
+  is quiet and credential-free; downloading and installing wait for the user's
+  Update action, never run during a pending/active connection, and accept only
+  the exact size/SHA-256 in the manifest. Never add silent or forced installs.
+- The owner authorized this app repository and its Releases to be public (12
+  October 2026) so updates need no credentials. The website and infrastructure
+  repositories stay private; never publish them or their secrets from here.
+- Build binaries locally, then publish verified Windows/Android builds, checksums
+  and `update.json` to this repository's Releases. After verifying the new
   release assets, remove superseded app releases/assets so only the latest build
   remains available. Preserve source history/tags. Never delete the last working
   release before its replacement is verified. The website remains a waitlist.

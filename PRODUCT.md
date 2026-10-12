@@ -28,7 +28,7 @@ No busy remote administration dashboard, account gate, setup wizard with five pe
 4. Clearly show the connected device, viewing versus controlling, and Disconnect.
 5. A stopped connection/code cannot grant future access. Switching apps should preserve an active or pending connection.
 6. Responsive interaction is essential. Bound frame queues, measure delivered performance, and never call a target FPS an achieved result.
-7. Windows delivery is a single portable EXE; Android updates remain local APKs. Explain unavoidable Android restrictions inside the app.
+7. Windows delivery is a single portable EXE; Android updates remain APKs confirmed by Android. Both apps offer new releases in place. Explain unavoidable Android restrictions inside the app.
 8. Use native Android integrations wherever they improve the experience without reducing quality. Preserve the shared Windows/Android flow. Prefer built-in system capabilities for capture, input, permissions, notifications and lifecycle; measure performance and battery impact before adding background work.
 9. Apply design feedback to both apps by default. Use a black interface and a shared computer/connection icon. Viewing is full screen with controls available on demand; permanent app branding must not take space from the remote screen.
 10. Save an explicit language choice across rotation, app switches, restarts and updates. Use a flag button with an accessible language name, not a platform-dependent flag emoji.
@@ -43,4 +43,4 @@ Keyboard focus, screen-reader labels, large touch targets, scalable text, no sta
 
 ## Local development
 
-The user authorizes private GitHub source hosting, private GitHub Releases and the BetterDesk Railway relay. All native builds and tests run locally. No cloud builds or GitHub Actions. Connections prefer a reachable local network and otherwise use the public relay. Keep only the latest verified distribution and private app release, replacing older outputs only after verification. The separate website offers a waitlist, not downloads.
+The user authorizes a public GitHub repository and public GitHub Releases for this app (the website and infrastructure repositories stay private), and the BetterDesk Railway relay. All native builds and tests run locally. No cloud builds or GitHub Actions. Connections prefer a reachable local network and otherwise use the public relay. Keep only the latest verified distribution and app release, replacing older outputs only after verification. Installed apps quietly check that release and offer an update; installing always waits for the person to choose Update. The separate website offers a waitlist, not downloads.

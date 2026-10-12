@@ -4,6 +4,19 @@ This records user-visible milestones. Native artifacts remain local development
 builds; dates do not imply a public release. Validation is in
 [docs/VERIFICATION.md](docs/VERIFICATION.md).
 
+## 0.8.0 - Unreleased
+
+- In-app updates on Windows and Android, modeled on T3 Code's GitHub Releases
+  updater. The home screen offers a newer version (Update / Later); nothing
+  downloads or installs without that choice or during a connection. Downloads
+  must match the release's `update.json` size and SHA-256.
+- Windows replaces the opened portable EXE and reopens it; the launcher now cleans
+  up superseded caches. Android uses its own installer confirmation, after a
+  once-only Install unknown apps permission, and refuses a different signing key.
+- One version source in `gradle.properties`. This app repository and its Releases
+  are public so updates need no credentials; website/infrastructure stay private.
+- Versions before 0.8.0 contain no updater: install 0.8.0 manually once.
+
 ## 0.7.1 - 2026-10-10
 
 - Physical keyboard input in the shared Windows/Android viewer, including native

@@ -33,7 +33,9 @@ Short panel transitions honor the platform's reduced-motion setting.
 
 - The portable x64 EXE needs no installer or separate Java installation. It expands
   its embedded runtime once per content hash into the current user's local cache.
-  It is unsigned; release signing and a trusted updater are not implemented.
+  It is unsigned; release signing is not implemented. The in-app updater replaces
+  the opened EXE in its own folder after the user chooses Update (see
+  [RELEASING.md](RELEASING.md#in-app-updates)); the folder must be writable.
 - Capture uses D3D11/DXGI Desktop Duplication on the primary display, with GDI
   fallback. Windows currently transmits JPEG. Android-to-Windows can use AVC
   with native FFmpeg decoding. Multi-monitor selection and Windows hardware video
@@ -63,6 +65,7 @@ Short panel transitions honor the platform's reduced-motion setting.
 | Connected-device foreground service | Availability/session continuity while changing apps; replaced when capture starts |
 | Partial wake lock | Connection-service lifetime only; released on teardown |
 | Internet/network permissions | HTTPS, relay TCP and direct LAN; network-state permissions support the connected-device service |
+| Install unknown apps (`REQUEST_INSTALL_PACKAGES`) | Only after the user chooses Update; explained in the app, then Android's per-app setting and its own update confirmation. Same package and signing key only |
 | WindowInsetsController / edge-to-edge | Native full-screen viewer, transient bars by swipe, cutout and keyboard handling |
 
 The manifest declares `INTERNET`, `ACCESS_NETWORK_STATE`, `CHANGE_NETWORK_STATE`,
@@ -113,7 +116,8 @@ system localization and remain native.
 | --- | --- |
 | Android language (`en`/`pt`) | Private SharedPreferences `appearance`, key `language`; same-app updates retain it; clearing data/uninstall resets it |
 | Windows language | Java per-user Preferences node `app/betterdesk`, key `language`; independent of the versioned portable cache |
-| Windows extracted runtime/app | `%LOCALAPPDATA%/BetterDesk/portable/<content-hash>/`; previous caches remain until manually removed while stopped |
+| Windows extracted runtime/app | `%LOCALAPPDATA%/BetterDesk/portable/<content-hash>/`; the launcher removes completed caches older than ten minutes that no running copy holds open |
+| Update downloads | Windows: `<exe>.new`/`.part` beside the EXE, the replaced `<exe>.old` until the next launch. Android: private `cache/updates/update.apk`, deleted after installation or failure. Only after the user chooses Update |
 | Codes, keys, invitations, tickets | Ephemeral process/connection state; not stored as future access credentials |
 | Screen/audio/input content | Live endpoint memory and encrypted transport; no app recording/history/telemetry |
 | File transfer cache | Windows LocalAppData/BetterDesk/transfers or private Android cache; partial/verified files kept for same-session retry and cleaned on teardown when handles permit |
@@ -143,8 +147,10 @@ public distribution; this implementation guide is not a provider-retention promi
 | Internet connects nowhere | HTTPS and the configured Railway outgoing TCP endpoint must be reachable. There is no port-443 tunnel or manual port-forwarding setup. |
 | Large borders in landscape | Fit preserves the remote aspect ratio; a portrait source cannot fill a landscape screen without cropping. Controls must not reserve permanent space. |
 | Phone sees screen but cannot control | Check view-only status, accessibility, focused editable node, full-display sharing and blocked system screens. Do not bypass the permission boundary. |
-| Physical keyboard does nothing | Update both devices to 0.7.1, then tap the remote field. Keyboard on shows remote focus. Local Type/code fields keep input local; Ctrl+Shift+Space releases focus. Custom/protected editors can reject input. See KEYBOARD.md. |
+| Physical keyboard does nothing | Update both devices to 0.7.1 or later, then tap the remote field. Keyboard on shows remote focus. Local Type/code fields keep input local; Ctrl+Shift+Space releases focus. Custom/protected editors can reject input. See KEYBOARD.md. |
 | Phone session ends after network change | Seamless Wi-Fi/mobile handover and reconnect are not implemented. Start a fresh attended session. |
+| Update fails | Check the Internet connection and, on Windows, that the EXE's folder is writable (copy it to Desktop or Downloads). The current app is unchanged; Try again downloads it again. |
+| No update is offered | Versions before 0.8.0 have no updater. Checks run after about 15 seconds and every six hours, and only on the home screen. Later hides that version until a newer one. |
 | Android update is rejected | Another signing key or lower versionCode cannot replace the installed APK. Use the original key; uninstalling loses app data and must not be an automatic fix. |
 | Language resets | Update without clearing data; check the same Windows user/Android app installation. Native notification language is currently separate. |
 | Old Windows taskbar icon | Check whether an old process or pinned shortcut targets the previous EXE. Test the current portable EXE/window before changing Windows caches. |

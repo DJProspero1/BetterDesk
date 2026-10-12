@@ -45,7 +45,7 @@ $env:BETTERDESK_BROKER_FIXTURE = (Resolve-Path '..\BetterDesk-Infrastructure\scr
 & "$workspace\gradlew.bat" -p $workspace :desktop:test --no-daemon '-Pkotlin.incremental=false'
 ```
 
-The current ordinary suite contains 56 tests: 50 enabled on Windows with the
+The current ordinary suite contains 65 tests: 59 enabled on Windows with the
 fixture, and six opt-in device/benchmark tests. On Linux the Windows platform
 decoder integration also skips; the portable native decoder check still runs.
 Without the fixture another nine checks skip. The WebRTC opt-in adds thirteen
@@ -64,6 +64,16 @@ route fallback, frame recovery, AVC decoding and
 shared UI. Switch/audio checks cover approval, decline, cancellation, repeated
 reversal, stale callbacks, mute, denied new capture, Android navigation policy and
 PCM conversion. No ordinary test captures an unrelated real desktop.
+
+`UpdateTest` serves a bounded loopback release fixture (never GitHub) and checks
+version comparison, origin pinning, manifest validation, size/SHA-256 rejection
+with partial-file cleanup, redirect restriction, consent before download, no
+installation during a connection, Android permission/versionCode gating and Later.
+The Windows file replacement/relaunch and Android `PackageInstaller` paths are
+not covered by automated tests. The origin is pinned, so verify them end to end
+with the first real release that follows an updater-enabled one: install the older
+build, publish, choose Update, and confirm the new version opens with its language
+preference kept.
 
 Inspect `desktop/build/reports/tests/test/index.html` and XML under
 `desktop/build/test-results/test/`; report failures and skipped checks separately.
