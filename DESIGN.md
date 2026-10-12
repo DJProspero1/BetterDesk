@@ -41,7 +41,7 @@ Both devices expose a short-lived code on opening the app. Entering a code reque
 
 Show “Getting a code…” while registering. A failed Internet registration can still expose a local code with a short local-network-only message. Transport selection is automatic and never adds a role or network setup screen.
 
-Android approval never stops at a control-permission screen: sharing starts after the genuine OS prompts. While sharing, an optional Allow tapping and typing action uses short numbered steps before opening Settings. If Android restricts the APK, the inline recovery path explains the App info overflow menu and opens that app-specific page. Returning checks the actual service permission and enables control without reconnecting.
+Android approval never stops at a control-permission screen: sharing starts after the genuine OS prompts. While sharing, an optional Allow tapping and typing action lists every tap in numbered steps (list entry, BetterDesk, the Use BetterDesk switch, Allow, Back) before opening Settings, and notes that names vary by phone maker. If Android restricts the APK, the inline recovery path names each tap (App info, ⋮ at top right, Allow restricted settings, unlock confirmation, Back, Try again) and opens that app-specific page. Returning checks the actual service permission and enables control without reconnecting.
 
 No cloud image-generation assets or remote fonts are required.
 

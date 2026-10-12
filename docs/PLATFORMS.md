@@ -82,8 +82,10 @@ sharing, **Allow tapping and typing** opens Accessibility settings; returning
 rechecks the real service and upgrades the session to control. A grant present
 without that in-session request is ignored. Sideloaded APKs may have
 accessibility restricted by Android (Play Store installs are not). BetterDesk
-explains the steps before opening Settings and includes **Android blocked this?** recovery
-through its App info page. Only the device owner can allow restricted settings;
+lists each tap before opening Settings (Installed/Downloaded apps when the list
+opens, BetterDesk, the Use BetterDesk switch, Allow, Back) and includes **Android blocked this?** recovery
+through its App info page (⋮ at top right, Allow restricted settings, confirm with
+PIN/pattern/fingerprint, Back, Try again). Only the device owner can allow restricted settings;
 the app cannot legitimately do it silently. Labels/menus vary by OS and vendor.
 See [Android's restricted-settings guidance](https://support.google.com/android/answer/12623953).
 
