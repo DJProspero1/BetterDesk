@@ -96,10 +96,31 @@ class SwitchAudioTest {
         val source = session(sp); val viewer = session(vp)
         connect(source, viewer, sp)
         source.requestSwitch(); until { viewer.state.value.switchState == "incoming" }
-        viewer.acceptSwitch(); until { viewer.state.value.stage == Stage.CONTROL_PERMISSION }
-        assertEquals(0, vp.starts); assertNull(sp.frames); assertNull(sp.audio)
-        viewer.shareWithoutControl(); until { source.state.value.stage == Stage.ENDED }
+        // Control is optional, so approval goes straight to the native capture prompt.
+        viewer.acceptSwitch(); until { source.state.value.stage == Stage.ENDED }
+        assertEquals(1, vp.starts); assertNull(sp.frames); assertNull(sp.audio)
         assertNull(vp.frames); assertNull(vp.audio)
+    }
+
+    @Test fun `android shares without control and only its own request enables control live`() = runBlocking(dispatcher) {
+        val sp = Platform(true).apply { controls = false }; val vp = Platform()
+        val source = session(sp); val viewer = session(vp)
+        connect(source, viewer, sp)
+        assertFalse(source.state.value.remoteControl); assertFalse(viewer.state.value.remoteControl)
+        viewer.input("tap", .5f, .5f); delay(60); assertEquals(0, sp.inputs)
+        // A grant appearing without the person's request in this session is not consent.
+        sp.controls = true; source.refreshPermissions(); delay(60)
+        assertFalse(source.state.value.remoteControl)
+        sp.controls = false; source.enableControl(); source.refreshPermissions()
+        assertTrue(source.state.value.permissionReturned); assertFalse(source.state.value.remoteControl)
+        sp.controls = true; source.refreshPermissions()
+        until { viewer.state.value.remoteControl }
+        assertTrue(source.state.value.remoteControl); assertEquals(Stage.SHARING, source.state.value.stage)
+        viewer.input("tap", .5f, .5f); until { sp.inputs == 1 }
+        sp.controls = false; source.refreshPermissions()
+        until { !viewer.state.value.remoteControl }
+        viewer.input("tap", .5f, .5f); delay(60); assertEquals(1, sp.inputs)
+        assertEquals(Stage.SHARING, source.state.value.stage)
     }
 
     @Test fun `concurrent requests and disconnect cannot silently approve capture`() = runBlocking(dispatcher) {

@@ -6,7 +6,7 @@ The source and app releases are hosted in a public GitHub repository; the websit
 
 ## Current milestone
 
-Version 0.8.0 is an **early Internet-connected development build**, not a production remote-support release. Connections prefer a reachable local network and otherwise use the BetterDesk Railway relay. It has not been externally security-audited. Local binaries are distributed through this repository's GitHub Releases, and installed apps offer newer releases in place; the website remains a waitlist. Update both devices together: this version uses session protocol 4. Keyboard fixes and transfer paths have compilation checks, not interactive or throughput verification; those runtime gaps remain unverified. The owner resumed tests for direct-connection work on 10 October; see [dated verification](docs/VERIFICATION.md).
+Version 0.8.1 is an **early Internet-connected development build**, not a production remote-support release. Connections prefer a reachable local network and otherwise use the BetterDesk Railway relay. It has not been externally security-audited. Local binaries are distributed through this repository's GitHub Releases, and installed apps offer newer releases in place; the website remains a waitlist. Update both devices together: this version uses session protocol 4. Keyboard fixes and transfer paths have compilation checks, not interactive or throughput verification; those runtime gaps remain unverified. The owner resumed tests for direct-connection work on 10 October; see [dated verification](docs/VERIFICATION.md).
 
 - Windows and Android have the same home screen: this device's code, another device's code, and Connect.
 - Enter the other device's twelve-digit code. Its owner explicitly approves sharing. If the connection service is unavailable, an eight-digit code is available for the local network.
@@ -38,8 +38,8 @@ Create ignored `local.properties` with `sdk.dir=C:/path/to/Android/Sdk`.
 
 Outputs:
 
-- **Windows: `dist/BetterDesk-Windows-0.8.0.exe`**. Double-click. No installer, ZIP extraction or separate Java installation.
-- **Android: `dist/BetterDesk-Android-0.8.0-debug.apk`**. Install as an update over the previous APK; the same local debug signing key is used.
+- **Windows: `dist/BetterDesk-Windows-0.8.1.exe`**. Double-click. No installer, ZIP extraction or separate Java installation.
+- **Android: `dist/BetterDesk-Android-0.8.1-debug.apk`**. Install as an update over the previous APK; the same local debug signing key is used.
 - Local checks: `desktop/build/reports/tests/test/index.html`.
 - Rendered UI checks: `desktop/build/screenshots/`.
 
@@ -65,7 +65,7 @@ No account, token or telemetry is involved: it is an anonymous HTTPS download fr
 1. Install/open the updated app on both devices. Internet connections need HTTPS and the Railway relay's outgoing TCP port; no router forwarding is required. Windows firewall may require allowing direct LAN connections on a private network; do not disable the firewall.
 2. Each device shows its own code. On either device, enter the other device's code and select **Connect**.
 3. The requested device selects **Allow connection**. No role selection or clickable link is involved.
-4. On Android, follow the short control instructions or choose **Share my screen only**. If Android blocks the setting, select **Android blocked this?** for the App info steps. Then confirm the genuine screen-sharing prompt.
+4. On Android, confirm the genuine notification and screen-sharing prompts; sharing starts without visiting Settings. Tapping and typing is optional: while sharing, select **Allow tapping and typing** and follow the numbered on-screen taps (BetterDesk, the **Use BetterDesk** switch, **Allow**, Back); control starts as soon as you return. If Android blocks the setting, select **Android blocked this?** for the App info steps.
 5. While viewing, open **Controls**, then **Disconnect**; the sharing device also has Disconnect and Android's Stop notification. Switching apps and returning keeps the connection; swiping BetterDesk out of Recents ends it. Pending codes expire after five minutes and can be renewed with **Get a code**.
 
 Treat codes as temporary secrets. A displayed device name is a label, not a verified real-world identity. Approve only an expected connection.

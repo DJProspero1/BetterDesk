@@ -24,6 +24,8 @@ class ControlService : AccessibilityService() {
         if (Build.VERSION.SDK_INT >= 33) serviceInfo = serviceInfo.apply {
             flags = flags or AccessibilityServiceInfo.FLAG_INPUT_METHOD_EDITOR
         }
+        // Turning control on mid-session upgrades the live session; the person stays in Settings.
+        Runtime.session?.refreshPermissions()
     }
     override fun onDestroy() { instance = null; Runtime.session?.refreshPermissions(); super.onDestroy() }
     override fun onAccessibilityEvent(event: AccessibilityEvent?) = Unit

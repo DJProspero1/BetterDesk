@@ -144,32 +144,6 @@ fun BetterDeskApp(session: HelpSession, updater: AppUpdater? = null, onFullScree
                                 LinearProgressIndicator(Modifier.fillMaxWidth())
                                 TextButton(onClick = { session.stop() }) { Text(t("Cancel", "Cancelar")) }
                             }
-                            Stage.CONTROL_PERMISSION -> {
-                                if (restricted) {
-                                    Heading(t("Unblock the setting", "Desbloquear a definição"), t("Android may block control for apps installed from an APK. Only continue if you trust BetterDesk.", "O Android pode bloquear o controlo em aplicações instaladas por APK. Continue apenas se confia no BetterDesk."))
-                                    PermissionStep("1", t("Open app info below.", "Abra as informações da aplicação abaixo."))
-                                    PermissionStep("2", t("Tap ⋮, then Allow restricted settings.", "Toque em ⋮ e em Permitir definições restritas."))
-                                    PermissionStep("3", t("Return here. Then enable control.", "Volte aqui. Depois ative o controlo."))
-                                    Spacer(Modifier.height(20.dp))
-                                    Primary(t("Open app info", "Abrir informações da aplicação")) { appSettingsOpened = true; session.openRestrictedSettings() }
-                                    if (appSettingsOpened) TextButton(onClick = { restricted = false; session.enableControl() }) { Text(t("Continue to control settings", "Continuar para as definições de controlo")) }
-                                    TextButton(onClick = { restricted = false }) { Text(t("I don't see that option", "Não vejo essa opção")) }
-                                } else {
-                                    Heading(t("Enable control", "Ativar controlo"), t("This lets the connected person tap and type. Android needs you to approve it once.", "Permite à pessoa ligada tocar e escrever. O Android precisa que autorize esta opção uma vez."))
-                                    PermissionStep("1", t("Select BetterDesk in Accessibility.", "Escolha BetterDesk em Acessibilidade."))
-                                    PermissionStep("2", t("Turn on Use BetterDesk and confirm.", "Ative Utilizar BetterDesk e confirme."))
-                                    PermissionStep("3", t("Return here to continue.", "Volte aqui para continuar."))
-                                    if (state.permissionReturned) {
-                                        Spacer(Modifier.height(12.dp))
-                                        Text(t("Control is still off.", "O controlo continua desativado."), color = MaterialTheme.colorScheme.error)
-                                    }
-                                    Spacer(Modifier.height(20.dp))
-                                    Primary(t("Open control settings", "Abrir definições de controlo")) { session.enableControl() }
-                                    if (session.platform.mayRestrictSettings) TextButton(onClick = { restricted = true }) { Text(t("Android blocked this?", "O Android bloqueou esta opção?")) }
-                                }
-                                TextButton(onClick = { session.shareWithoutControl() }) { Text(t("Share my screen only", "Partilhar apenas o ecrã")) }
-                                TextButton(onClick = { session.home() }) { Text(t("Cancel", "Cancelar")) }
-                            }
                             Stage.SHARING -> {
                                 Heading(t("Connected to ${state.peer}", "Ligado a ${state.peer}"), if (state.remoteControl) t("Your screen is shared. They can tap and type. Stay with your device.", "O ecrã está partilhado. A pessoa pode tocar e escrever. Fique junto do dispositivo.") else t("Your screen is shared. Only you can tap and type.", "O ecrã está partilhado. Só o utilizador pode tocar e escrever."))
                                 Primary(t("Disconnect", "Desligar")) { session.stop() }
@@ -178,6 +152,36 @@ fun BetterDeskApp(session: HelpSession, updater: AppUpdater? = null, onFullScree
                                 Text(if (state.audioAvailable) t("Device sound is shared", "O som do dispositivo está partilhado") else t("Device sound is unavailable", "O som do dispositivo está indisponível"), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Spacer(Modifier.height(16.dp))
                                 Text(t("You can continue using your device.", "Pode continuar a utilizar o dispositivo."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                // Optional: sharing already works. Android has no prompt for this, so explain before opening Settings.
+                                if (session.platform.isAndroid && !state.remoteControl && state.switchState.isEmpty()) {
+                                    Spacer(Modifier.height(28.dp))
+                                    if (restricted) {
+                                        Text(t("Unblock the setting", "Desbloquear a definição"), fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+                                        Text(t("Android blocks this setting for apps installed from an APK until you allow it. Only continue if you trust BetterDesk.", "O Android bloqueia esta definição em aplicações instaladas por APK até a permitir. Continue apenas se confia no BetterDesk."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        PermissionStep("1", t("Tap Open app info below. The BetterDesk App info page opens.", "Toque em Abrir informações da aplicação abaixo. Abre-se a página de informações do BetterDesk."))
+                                        PermissionStep("2", t("Tap ⋮ (three dots) in the top-right corner.", "Toque em ⋮ (três pontos) no canto superior direito."))
+                                        PermissionStep("3", t("Tap Allow restricted settings.", "Toque em Permitir definições restritas."))
+                                        PermissionStep("4", t("Confirm with your PIN, pattern or fingerprint.", "Confirme com o PIN, padrão ou impressão digital."))
+                                        PermissionStep("5", t("Press Back to return here.", "Prima Voltar para regressar aqui."))
+                                        PermissionStep("6", t("Tap Try again and follow the Accessibility steps.", "Toque em Tentar novamente e siga os passos de Acessibilidade."))
+                                        TextButton(onClick = { appSettingsOpened = true; session.openRestrictedSettings() }) { Text(t("Open app info", "Abrir informações da aplicação")) }
+                                        if (appSettingsOpened) TextButton(onClick = { restricted = false; session.enableControl() }) { Text(t("Try again", "Tentar novamente")) }
+                                        TextButton(onClick = { restricted = false }) { Text(t("I don't see that option", "Não vejo essa opção")) }
+                                    } else {
+                                        Text(t("Let them tap and type?", "Deixar a pessoa tocar e escrever?"), fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+                                        Text(t("Optional. Android has no pop-up for this, so you turn it on once in Accessibility settings.", "Opcional. O Android não mostra um pedido para isto, por isso ativa-o uma vez nas definições de Acessibilidade."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        PermissionStep("1", t("Tap Allow tapping and typing below. Accessibility settings open.", "Toque em Permitir tocar e escrever abaixo. Abrem-se as definições de Acessibilidade."))
+                                        PermissionStep("2", t("If you see a list, tap Installed apps or Downloaded apps (scroll down if needed), then tap BetterDesk.", "Se vir uma lista, toque em Aplicações instaladas ou Apps transferidas (deslize para baixo se for preciso) e depois em BetterDesk."))
+                                        PermissionStep("3", t("Turn on the switch next to Use BetterDesk.", "Ative o interruptor junto a Utilizar BetterDesk."))
+                                        PermissionStep("4", t("Tap Allow (or OK) in the message that appears.", "Toque em Permitir (ou OK) na mensagem que aparece."))
+                                        PermissionStep("5", t("Press Back until you return here. Your screen stays shared.", "Prima Voltar até regressar aqui. O ecrã continua partilhado."))
+                                        Text(t("Names can differ slightly between phone makers.", "Os nomes podem variar ligeiramente entre marcas de telemóvel."), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        if (state.permissionReturned) Text(t("Control is still off.", "O controlo continua desativado."), color = MaterialTheme.colorScheme.error)
+                                        TextButton(onClick = { session.enableControl() }) { Text(t("Allow tapping and typing", "Permitir tocar e escrever")) }
+                                        if (session.platform.mayRestrictSettings) Text(t("Switch grey, or a Restricted setting message? Tap Android blocked this?", "Interruptor cinzento ou mensagem de definição restrita? Toque em O Android bloqueou esta opção?"), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        if (session.platform.mayRestrictSettings) TextButton(onClick = { restricted = true }) { Text(t("Android blocked this?", "O Android bloqueou esta opção?")) }
+                                    }
+                                }
                             }
                             Stage.ENDED -> {
                                 Heading(t("Disconnected", "Ligação terminada"), t("Your screen is no longer shared. This connection is closed.", "O ecrã já não está partilhado. A ligação foi encerrada."))

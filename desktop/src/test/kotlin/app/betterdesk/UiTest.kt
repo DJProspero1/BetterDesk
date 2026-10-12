@@ -128,12 +128,12 @@ class UiTest {
             compose.onNodeWithText("Decline").assertIsDisplayed()
             snapshot(name + "-consent")
             if (width < 500) {
+                // Without Accessibility, approving still connects at once; control is offered later while sharing.
                 compose.onNodeWithText("Allow connection").performClick()
-                compose.onNodeWithText("Open control settings").assertIsDisplayed()
-                snapshot(name + "-permissions")
-                compose.onNodeWithText("Android blocked this?").performClick()
-                compose.onNodeWithText("Open app info").assertIsDisplayed()
-                snapshot(name + "-restricted-settings")
+                compose.waitUntil(5000) { session.state.value.stage != Stage.INVITATION }
+                compose.onNodeWithText("Open control settings").assertDoesNotExist()
+                compose.onNodeWithText("Allow tapping and typing").assertDoesNotExist()
+                compose.onNodeWithText("Android blocked this?").assertDoesNotExist()
             } else compose.onNodeWithText("Decline").performClick()
         } finally {
             session.dispose(); Locale.setDefault(oldLocale)
