@@ -23,8 +23,12 @@ class SessionTest {
         Dispatchers.resetMain(); dispatcher.close()
         assertTrue(uncaught.isEmpty(), "Session failures must not escape to the Android main thread: $uncaught")
     }
-    private class Platform : RemotePlatform {
-        override val isAndroid = false
+    private class Platform(override val deviceIdentity: DeviceIdentity? = null, override val isAndroid: Boolean = false) : RemotePlatform {
+        var failSaving = false
+        private var storedDevices: String? = null
+        override var rememberedDevices: String?
+            get() = storedDevices
+            set(value) { check(!failSaving); storedDevices = value }
         override val defaultName = "Test helper"
         var starts = 0; var inputs = 0
         var keptAlive = false
@@ -41,6 +45,84 @@ class SessionTest {
     }
     private suspend fun until(condition: () -> Boolean) { withTimeout(12_000) { while (!condition()) delay(20) } }
     private fun session(platform: Platform) = HelpSession(platform, { listOf("127.0.0.1") }, java.net.InetAddress.getLoopbackAddress(), relayFactory = { null }).also(sessions::add)
+
+    @Test fun `remember choice stays local before capture and signed code reconnect skips approval until removed`() = runBlocking(dispatcher) {
+        val controller = session(Platform(testDeviceIdentity()))
+        val platform = Platform(isAndroid = true)
+        val target = session(platform)
+        suspend fun request() {
+            target.prepareDeviceCode()
+            until { target.state.value.deviceCode.length == 8 }
+            controller.connectCode(target.state.value.deviceCode)
+        }
+        request()
+        until { target.state.value.stage == Stage.INVITATION }
+        target.allowHelp()
+        assertEquals(Stage.REMEMBER, target.state.value.stage)
+        assertEquals(Stage.WAITING, controller.state.value.stage)
+        assertEquals(0, platform.starts)
+        target.finishRemember(true)
+        until { target.state.value.stage == Stage.SHARING }
+        assertTrue(target.state.value.remoteControl)
+        assertEquals(1, RememberedDevices.read(platform.rememberedDevices).size)
+        val key = target.remembered.value.single().key
+        target.home(); controller.home()
+        // A fresh session reloads the grant, as after rotation/restart/update.
+        val restored = session(platform)
+        restored.prepareDeviceCode()
+        until { restored.state.value.deviceCode.length == 8 }
+        controller.connectCode(restored.state.value.deviceCode)
+        until { restored.state.value.stage == Stage.SHARING }
+        assertEquals(2, platform.starts)
+        restored.home(); controller.home()
+        restored.forgetDevice(key)
+        assertTrue(RememberedDevices.read(platform.rememberedDevices).isEmpty())
+        restored.prepareDeviceCode()
+        until { restored.state.value.deviceCode.length == 8 }
+        controller.connectCode(restored.state.value.deviceCode)
+        until { restored.state.value.stage == Stage.INVITATION }
+        assertEquals(2, platform.starts)
+        restored.allowHelp(); restored.finishRemember(false)
+        until { restored.state.value.stage == Stage.SHARING }
+        assertFalse(restored.state.value.remoteControl, "Stored accessibility alone must not authorize control")
+        assertTrue(restored.remembered.value.isEmpty())
+    }
+
+    @Test fun `canceling remember starts no capture and a copied signed link cannot auto approve`() = runBlocking(dispatcher) {
+        val controller = session(Platform(testDeviceIdentity()))
+        val platform = Platform()
+        val target = session(platform)
+        target.prepareDeviceCode(); until { target.state.value.deviceCode.length == 8 }
+        controller.connectCode(target.state.value.deviceCode)
+        until { target.state.value.stage == Stage.INVITATION }
+        val invite = target.state.value.invitation!!
+        target.allowHelp(); assertEquals(Stage.REMEMBER, target.state.value.stage)
+        target.home(); target.finishRemember(true)
+        assertEquals(0, platform.starts); assertTrue(target.remembered.value.isEmpty())
+        platform.rememberedDevices = RememberedDevices.encode(listOf(RememberedDevice(invite.deviceKey, invite.name)))
+        val restored = session(platform)
+        restored.acceptInvitation(invite.link())
+        assertEquals(Stage.INVITATION, restored.state.value.stage)
+        assertEquals(0, platform.starts)
+    }
+
+    @Test fun `failed persistence keeps remember private and just this time still works`() = runBlocking(dispatcher) {
+        val controller = session(Platform(testDeviceIdentity()))
+        val platform = Platform().apply { failSaving = true }
+        val target = session(platform)
+        target.prepareDeviceCode(); until { target.state.value.deviceCode.length == 8 }
+        controller.connectCode(target.state.value.deviceCode)
+        until { target.state.value.stage == Stage.INVITATION }
+        target.allowHelp(); target.finishRemember(true)
+        assertEquals(Stage.REMEMBER, target.state.value.stage)
+        assertTrue(target.state.value.rememberError)
+        assertEquals(Stage.WAITING, controller.state.value.stage)
+        assertEquals(0, platform.starts)
+        assertTrue(target.remembered.value.isEmpty())
+        target.finishRemember(false)
+        until { target.state.value.stage == Stage.SHARING }
+        assertTrue(target.remembered.value.isEmpty())
+    }
 
     @Test fun `canceling a local attempt never starts an Internet request`() = runBlocking(dispatcher) {
         val platform=Platform()

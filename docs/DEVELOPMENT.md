@@ -12,8 +12,8 @@ For direct-connection work, the owner authorized local Linux compilation and
 synthetic testing as a workaround on 10 October 2026. With JDK 17, Android SDK 36,
 Node 24 and Xvfb, both application source sets can compile locally and shared
 tests can run without real capture. See [the experimental proof](../experimental/README.md)
-for bounded commands and opt-in dependencies. This does not provide a Windows
-portable EXE, verify Windows native APIs or make Linux a supported product target.
+for bounded commands and opt-in dependencies. This does not verify Windows native APIs or make Linux a supported product target.
+For unchanged Windows dependencies/runtime only, the [release guide](RELEASING.md#local-linux-packaging-with-a-verified-windows-baseline) describes local cross-packaging from a verified previous release.
 
 Install locally:
 

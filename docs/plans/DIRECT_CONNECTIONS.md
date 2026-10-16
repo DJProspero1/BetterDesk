@@ -9,7 +9,8 @@ the intended feature, not the capabilities of the current release.
 
 Connect Windows and Android directly even when they use different Internet
 connections, reducing avoidable relay delay and traffic. Preserve the current
-experience: enter a code, the other device approves, then connect. Route selection
+experience: enter a code, the other device approves or uses its locally saved
+verified-device grant, then connect. Route selection
 is automatic and symmetric across both apps.
 
 Preference: reachable local network, then direct Internet, then an encrypted relay
@@ -38,10 +39,21 @@ moving only video does not complete this feature.
 - Disconnect and the Android sharing notification must revoke every path and
   pending attempt. No revival after Stop, expiry or permission revocation.
 - Hotspots/Wi-Fi Direct connect nearby devices and are outside this feature.
-  Internet sharing, exit nodes, unattended access and routing other apps are also
-  outside scope.
+  Internet sharing, exit nodes, autostart and routing other apps are also outside
+  scope. Direct routing inherits the owner-approved 0.9.0 saved-device grants; it
+  must not introduce additional persistent authorization mechanisms.
 
 ## Verified baseline
+
+The production authorization baseline has advanced to **0.9.0 source**: signed
+invitation v3/v4 binds a persistent requesting key to the ephemeral TLS pin,
+secret, route, name and expiry. Only code-paired delivery may match a recipient-local
+Always allow grant; otherwise approval and the local-before-capture choice remain
+required. Grants/names never go to the peer. New DTLS/signaling contexts must retain
+this identity/authorization binding, OS consent, revocation and session-only control
+approval. See the [updated handoff](DIRECT_CONNECTIONS_HANDOFF.md#production-authorization-update-16-october-2026).
+At the pre-merge snapshot on 16 October, 0.8.1 was published and 0.9.0 was under
+review; consult the current release for delivery status. The facts below describe the **historical start** of this design, not the complete current app.
 
 At app commit `87f57b7b220eac3604a3b25dd35b1c16652d2491` (0.7.1):
 
@@ -179,8 +191,10 @@ feed native tracks or whether capture ownership changes, then document lifetimes
 ### Route selection and lifecycle
 
 1. Preserve the current bounded LAN preference and offline local-code behavior.
-2. Authenticate the session and obtain the same single local approval. No private
-   content travels while approval or genuine OS capture permission is pending.
+2. Authenticate the signed requesting device and retain the recipient's local
+   approval or verified saved grant. Show the local remember/name choice only for
+   a new signed code request; no private content travels while required local or
+   genuine OS capture permission is pending.
 3. Start a usable approved transport promptly; attempt direct ICE without delaying
    an already usable relay. In the proof this means bootstrap relay first, then
    a background direct upgrade. Do not launch duplicate capture pipelines.

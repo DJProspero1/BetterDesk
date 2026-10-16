@@ -1,4 +1,4 @@
-# Connection protocol, application version 0.7.1
+# Connection protocol, application version 0.9.0
 
 This is an implementation guide, not a frozen interoperability standard or a
 security audit. Update both apps together. Authoritative implementations are
@@ -50,7 +50,7 @@ sequenceDiagram
     V->>R: Locate entered code
     V->>S: J-PAKE authenticated pairing
     V->>S: Encrypted pinned invitation
-    Note over S: Person approves locally
+    Note over S: Person approves locally or saved device signature matches
     S->>V: Pinned TLS + invitation secret
     V->>S: Accepted + incoming codec preference
     Note over S: Genuine platform capture/control permissions
@@ -60,11 +60,14 @@ sequenceDiagram
     Note over V,S: Either end disconnects and revokes access
 ```
 
-`HelpSession` exposes HOME, INVITATION, PREPARING, WAITING, CONNECTING,
+`HelpSession` exposes HOME, INVITATION, REMEMBER, PREPARING, WAITING, CONNECTING,
 SHARING, VIEWING, ENDED and ERROR. Android approval never waits on
-Accessibility: sharing starts view-only, and the sharer can later select Allow
-tapping and typing. Only after that in-session request does a granted service send
-`capability(control=true)`; revoking it sends `capability(control=false)`. A successful pairing
+Accessibility. Without a saved Always allow grant, sharing starts view-only and
+the sharer can later select Allow tapping and typing. That in-session request or
+a saved signed-device grant authorizes control with a real OS service; enabling
+it mid-session sends
+`capability(control=true)`; explicit current-session approval survives direction
+changes and is reset by disconnect. Actual OS permission is always checked; revoking it sends `capability(control=false)`. A successful pairing
 acknowledgement means the invitation was delivered; it does not mean the person
 approved capture. VIEWING begins after a valid frame is decoded. Stop clears
 authorization first, advances the session generation, then closes resources so
@@ -113,6 +116,28 @@ single-use relay ticket instead. Both carry an exact certificate SHA-256 pin,
 random 256-bit secret, bounded display name and expiry. Generated invitations
 expire in five minutes; parsing rejects expired or more-than-ten-minute future
 values. A name is an unverified label, not the identity of a person.
+
+Signed version 3 uses the version 1 LAN fields plus `device` and `proof`; version
+4 uses the version 2 relay fields plus those fields. `device` is canonical unpadded
+base64url X.509 P-256 public-key encoding (100..160 characters). `proof` is
+unpadded base64url DER SHA256withECDSA (90..100 characters) over UTF-8
+`BetterDesk remembered device v1\n` followed by the canonical unsigned invitation
+URI (v1/v2, ordered v/key/secret/name/expires, then hosts/port or ticket). The
+signature binds every original invitation field. Local observation of the pairing
+peer is not serialized and never changes the signed hosts. Invalid/missing proofs,
+unknown/duplicate fields and expired requests fail before delivery. Legacy v1/v2
+has no remembered identity and always requires approval. Older receiving apps
+reject v3/v4; both apps must update together.
+
+Only authenticated code-delivery callbacks can skip approval or offer REMEMBER.
+After local initial Allow connection, REMEMBER offers Always allow / Just this
+time / Cancel before capture or the media socket opens. No grant flag, grant list
+or choice is sent. Editable saved names stay local and must be distinct; they are
+not the signed peer name and never affect signature verification. Matching an existing saved public key requires a valid fresh
+invitation signature, then the same pinned TLS and invitation-secret handshake.
+Deep links never use or create saved grants. Switch requests still need explicit
+approval; grants authorize only the original requesting device, not the reverse
+direction or microphone capture.
 
 Legacy local invitation handling remains for tests/compatibility, but links are
 not the normal UI flow. External relay invitations are rejected: the relay variant
@@ -178,7 +203,8 @@ availability and the current epoch. Every frame, audio packet, input, acknowledg
 and heartbeat carries that epoch. Audio IDs are positive and monotonically increasing
 per direction; epochs start at zero and advance once per completed switch.
 Normal messages are `ping`, `frameAck`, `capability` (control revoked) and `input`.
-Closing transport ends the session; there is no persistent-access token.
+Closing transport ends the session. A saved device public key authorizes only a
+fresh signed code-paired request, never reuse of a closed transport or token.
 
 Protocol 3 adds `exchangeClipboard` (session toggle), `exchangeText` (bounded text
 and revision in `action`), `exchangeOffer` (bounded JSON FileOffer),

@@ -139,7 +139,7 @@ class PairingHost(
                             routeProbe = null
                             check(System.currentTimeMillis() < expires && !closed.get())
                             exchange.sendSecret("accepted")
-                            value.copy(hosts = listOf(it.inetAddress.hostAddress!!))
+                            value.copy(observedHost = it.inetAddress.hostAddress!!)
                         }
                     }.getOrNull()
                     timeout.cancel(false)

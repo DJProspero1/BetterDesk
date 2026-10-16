@@ -45,7 +45,7 @@ $env:BETTERDESK_BROKER_FIXTURE = (Resolve-Path '..\BetterDesk-Infrastructure\scr
 & "$workspace\gradlew.bat" -p $workspace :desktop:test --no-daemon '-Pkotlin.incremental=false'
 ```
 
-The current ordinary suite contains 65 tests: 59 enabled on Windows with the
+The current ordinary suite contains 77 tests: 71 enabled on Windows with the
 fixture, and six opt-in device/benchmark tests. On Linux the Windows platform
 decoder integration also skips; the portable native decoder check still runs.
 Without the fixture another nine checks skip. The WebRTC opt-in adds thirteen
@@ -178,3 +178,29 @@ For relevant UI/lifecycle changes, check both directions and both native apps:
 Test physical phones, vendor permission screens/keyboards, high-DPI Windows and
 constrained networks before making compatibility claims. Record untested rows as
 pending, not passed. See [PLATFORMS.md](PLATFORMS.md) for expected limitations.
+
+## Remembered devices (0.9.0)
+
+`RememberedDevicesTest` checks canonical signature binding of every invitation
+field, signed LAN/relay parsing, expiry, wrong keys, legacy invitations and corrupt,
+duplicate/oversized grant stores. `SessionTest` checks the local-before-capture
+choice, first approval, persistence across session recreation, saved reconnect,
+removal, Just this time, cancellation, failed storage, copied-link rejection and
+Android view-only behavior without an explicit device grant. `RelayIntegrationTest`
+adds first/save/reconnect and a different key with the same name through the real
+bounded loopback broker. `UiTest` renders the prompt at phone/desktop sizes in
+Portuguese/English and confirms it is absent on the waiting controller. Saved local names are
+distinct, bounded, persisted and used in accessible Remove actions.
+`SwitchAudioTest` checks control approval across a round-trip switch and that
+disconnect clears session-only approval.
+
+The opt-in Railway device fixtures explicitly choose Just this time when a real
+platform signs a request, keeping fixture runs from saving persistent grants.
+
+Native acceptance still needs actual AndroidKeyStore persistence across updates,
+MediaProjection consent with a remembered peer, accessibility revocation,
+app-only versus full-display capture, Windows DPAPI persistence, lock/protected
+screens and both physical directions. The local Linux suite cannot establish
+those platform results. The Linux packaging helper compares retained Windows
+payload bytes and reads back the outer EXE; this is artifact verification, not
+execution of Windows APIs.

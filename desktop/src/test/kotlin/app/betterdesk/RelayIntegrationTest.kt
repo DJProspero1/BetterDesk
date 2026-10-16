@@ -37,7 +37,8 @@ class RelayIntegrationTest {
         Dispatchers.resetMain(); dispatcher.close()
         fixture?.let { it.outputStream.close(); if (!it.waitFor(3, TimeUnit.SECONDS)) it.destroyForcibly() }
     }
-    private class Platform : RemotePlatform {
+    private class Platform(override val deviceIdentity: DeviceIdentity? = null) : RemotePlatform {
+        override var rememberedDevices: String? = null
         override val isAndroid = false
         override val defaultName = "Transport test"
         var starts = 0; var inputs = 0
@@ -62,6 +63,45 @@ class RelayIntegrationTest {
         session.prepareDeviceCode(); until { session.state.value.deviceCode.length == 12 }
         return session.state.value.deviceCode
     }
+    @Test fun `signed remembered device skips app approval over the real loopback broker`() = runBlocking(dispatcher) {
+        val viewer = session(Platform(testDeviceIdentity()))
+        val platform = Platform()
+        val target = session(platform)
+        suspend fun request() {
+            target.prepareDeviceCode()
+            until { target.state.value.deviceCode.length == 12 }
+            viewer.connectCode(target.state.value.deviceCode)
+        }
+        request()
+        until { target.state.value.stage == Stage.INVITATION }
+        target.allowHelp()
+        assertEquals(Stage.REMEMBER, target.state.value.stage)
+        assertEquals(Stage.WAITING, viewer.state.value.stage)
+        assertEquals(0, platform.starts)
+        target.finishRemember(true)
+        until { target.state.value.stage == Stage.SHARING }
+        assertTrue(target.state.value.viaRelay)
+        target.home(); viewer.home()
+        request()
+        until { target.state.value.stage == Stage.SHARING }
+        assertEquals(2, platform.starts)
+        target.home(); viewer.home()
+        val impostor = session(Platform(testDeviceIdentity()))
+        target.prepareDeviceCode(); until { target.state.value.deviceCode.length == 12 }
+        impostor.connectCode(target.state.value.deviceCode)
+        until { target.state.value.stage == Stage.INVITATION }
+        assertEquals(2, platform.starts, "Matching names without the saved signing key must still need approval")
+        target.allowHelp()
+        assertEquals("Transport test (2)", target.state.value.rememberName)
+        target.nameRememberedDevice("transport TEST"); target.finishRemember(true)
+        assertEquals(Stage.REMEMBER, target.state.value.stage)
+        assertTrue(target.state.value.rememberNameError)
+        assertEquals(2, platform.starts)
+        target.nameRememberedDevice("Office tablet"); target.finishRemember(true)
+        until { target.state.value.stage == Stage.SHARING }
+        assertEquals(listOf("Transport test", "Office tablet"), RememberedDevices.read(platform.rememberedDevices).map { it.name })
+    }
+
     @Test fun `relay pairs with code and pins TLS before consented capture and control`() = runBlocking(dispatcher) {
         val platform = Platform(); val target = session(platform); val viewer = session()
         viewer.connectCode(code(target)); until { target.state.value.stage == Stage.INVITATION }

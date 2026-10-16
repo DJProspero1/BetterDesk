@@ -152,7 +152,10 @@ class AndroidRelayDeviceTest {
                 android=instrument(UUID.randomUUID().toString(),"view",session.state.value.deviceCode)
                 until { session.state.value.stage==Stage.INVITATION }
                 assertTrue(session.state.value.viaRelay)
-                withContext(Dispatchers.Main){session.allowHelp()}
+                withContext(Dispatchers.Main){
+                    session.allowHelp()
+                    if (session.state.value.stage == Stage.REMEMBER) session.finishRemember(false)
+                }
                 try { until(75000) { check(android.isAlive) { "Android instrumentation ended before input" }; received.get() } }
                 catch(e: Exception) { error("Desktop relay state ${session.state.value.stage}; ${session.failureSummary}; Android input not received") }
                 until { session.state.value.switchState=="incoming" }

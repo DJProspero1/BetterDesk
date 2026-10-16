@@ -1,6 +1,6 @@
 # Direct connections: agent handoff and work checklist
 
-Last updated: 11 October 2026. State: **implementation in progress; draft PR**.
+Last updated: 16 October 2026. State: **implementation in progress; draft PR**.
 Direct screen/sound/input/file routing is not enabled. Read the
 [proposed design](DIRECT_CONNECTIONS.md) and [native proof](../../experimental/README.md)
 before coding.
@@ -21,7 +21,13 @@ implemented, measured, deployed or ready to ship.
 3. Recheck baseline claims against source. This plan started from app commit
    `87f57b7b220eac3604a3b25dd35b1c16652d2491`, release 0.7.1, protocol 4. The
    sibling infrastructure source inspected was
-   `6a2f50c00a531900976687ea049a5632f0fbff6b`; no infrastructure change is in this PR.
+   `6a2f50c00a531900976687ea049a5632f0fbff6b`. **Current app source baseline is
+   0.9.0** (remembered-device PR #3; initial reviewed head `fb694fd`). The
+   pre-merge snapshot on 16 October had published release 0.8.1; check the current
+   release rather than inferring delivery from this historical note. Session protocol remains 4, but
+   production code pairing now carries signed invitation versions 3/4 and may use
+   a local saved device grant. Read the authorization decisions below before
+   implementing cutover. No infrastructure change accompanies this feature.
 4. Continue **M0/M3/M4** below using Linux and Android. The owner will not provide
    a Windows host; Windows runtime coverage is an explicit gap, not a prerequisite
    for implementation or merging this PR. `SessionTransport` is extracted, but
@@ -54,8 +60,10 @@ Suggested continuation prompt:
 - Cloudflare signup/provisioning remains deferred. Do not ask for it again or
   resume it without new direction. Public TURN checks remain unavailable.
 - No development servers without an explicit request. No deployment, provider
-  provisioning, DNS change, release or app version bump has been made. Experimental
-  dependencies are opt-in; the original handoff was documentation-only.
+  provisioning or DNS change has been made for direct transport. Experimental
+  dependencies are opt-in; the original handoff was documentation-only. The
+  independent app releases 0.8.0/0.8.1 and 0.9.0 source changes are not M6 direct
+  transport evidence and must not be described as enabling direct Internet routing.
 - The owner authorized bounded local Linux compilation/synthetic tests as a
   workaround because no Windows host is reachable. See the native proof command.
   The existing packaging script uses a Windows toolchain; its command is reference
@@ -84,13 +92,14 @@ Suggested continuation prompt:
 
 | Existing source | Why the next agent needs it |
 | --- | --- |
-| [HelpSession.kt](../../shared/src/main/kotlin/app/betterdesk/core/HelpSession.kt) | Concrete socket/Wire ownership, hello/accepted protocol 4, startMedia/pump, input queues, requestSwitch/stopForSwitch and stopTransport. Separate session lifetime from optional signaling socket lifetime. |
+| [HelpSession.kt](../../shared/src/main/kotlin/app/betterdesk/core/HelpSession.kt) | Socket/Wire ownership, signed request validation, recipient-only REMEMBER step, saved-grant versus current-session approval, hello/accepted protocol 4, media/input/switching and teardown. Separate session lifetime and authorization from optional signaling socket lifetime. |
 | [DeviceAvailability.kt](../../shared/src/main/kotlin/app/betterdesk/core/DeviceAvailability.kt) | One displayed code, LAN/relay availability, single-delivery guard, poll/cancel/close. Preserve one approval request. |
 | [Pairing.kt](../../shared/src/main/kotlin/app/betterdesk/core/Pairing.kt) | LAN discovery, J-PAKE CodeExchange, transcript-derived encryption and single-use envelopes. Not a reusable signaling mailbox. |
-| [Invitation.kt](../../shared/src/main/kotlin/app/betterdesk/core/Invitation.kt) / [TlsIdentity.kt](../../shared/src/main/kotlin/app/betterdesk/core/TlsIdentity.kt) | Expiry, validated local/relay endpoints, ephemeral identity and certificate pinning. New transport must preserve authenticated identity. |
+| [Invitation.kt](../../shared/src/main/kotlin/app/betterdesk/core/Invitation.kt) / [TlsIdentity.kt](../../shared/src/main/kotlin/app/betterdesk/core/TlsIdentity.kt) | Expiry, validated endpoints, signed v3/v4 invitations bound to the persistent requesting device key plus the ephemeral TLS pin/secret, and certificate pinning. Preserve both identity layers; observed LAN peer routing is separate from signed hosts. |
+| [RememberedDevices.kt](../../shared/src/main/kotlin/app/betterdesk/core/RememberedDevices.kt) / [DesktopDeviceIdentity.kt](../../desktop/src/main/kotlin/app/betterdesk/desktop/DesktopDeviceIdentity.kt) / [AndroidDeviceIdentity.kt](../../android/src/main/kotlin/app/betterdesk/AndroidDeviceIdentity.kt) | Persistent P-256 signing identity, bounded recipient-local grants/names, Windows DPAPI and AndroidKeyStore. Names are local labels, never authentication. No grant state goes over the wire. |
 | [RelayClient.kt](../../shared/src/main/kotlin/app/betterdesk/core/RelayClient.kt) | API v1 config, leases, room allocation/cancellation, strict Railway host validation and blocking TCP connection. |
 | [Wire.kt](../../shared/src/main/kotlin/app/betterdesk/core/Wire.kt) | Strict Message schema, bounded frame/audio packets, input allowlist; not a UDP or WebRTC framing implementation. |
-| [RemotePlatform.kt](../../shared/src/main/kotlin/app/betterdesk/core/RemotePlatform.kt) | Native capture/input/decode/audio boundary. Adapt media flow without duplicating permission ownership. |
+| [RemotePlatform.kt](../../shared/src/main/kotlin/app/betterdesk/core/RemotePlatform.kt) | Native capture/input/decode/audio and persistent signing/grant-storage boundary. Adapt media flow without duplicating permission or saved-identity ownership. |
 | [FrameWindow.kt](../../shared/src/main/kotlin/app/betterdesk/core/FrameWindow.kt) / [FramePerformance.kt](../../shared/src/main/kotlin/app/betterdesk/core/FramePerformance.kt) / [VideoRecovery.kt](../../shared/src/main/kotlin/app/betterdesk/core/VideoRecovery.kt) | Existing backpressure, distinct-frame metrics and AVC recovery. Do not blindly layer TCP frame-ack pacing onto RTP. |
 | [DesktopPlatform.kt](../../desktop/src/main/kotlin/app/betterdesk/desktop/DesktopPlatform.kt) / [DxgiCapture.kt](../../desktop/src/main/kotlin/app/betterdesk/desktop/DxgiCapture.kt) / [WasapiAudio.kt](../../desktop/src/main/kotlin/app/betterdesk/desktop/WasapiAudio.kt) | Windows capture produces JPEG today; hardware encode/video-track integration and playback-only audio need explicit ownership. |
 | [ScreenShareService.kt](../../android/src/main/kotlin/app/betterdesk/ScreenShareService.kt) / [SurfaceEncoder.kt](../../android/src/main/kotlin/app/betterdesk/SurfaceEncoder.kt) / [AndroidPlatform.kt](../../android/src/main/kotlin/app/betterdesk/AndroidPlatform.kt) / [PlaybackAudio.kt](../../android/src/main/kotlin/app/betterdesk/PlaybackAudio.kt) | Android projection, service lifecycle, AVC encoder, current JPEG decode and playback capture/output. New Windows video codecs need a matching receiver. |
@@ -112,9 +121,9 @@ exists merely because it is described in the plan.
 | M1 | Complete | Extract transport boundary, retaining current TLS behavior | `SessionTransport` extracted; `Wire` retains protocol 4/TLS framing and Stop still closes setup sockets. Both target source compilation and ordinary approval/Stop/epoch/input checks passed locally; native Windows-only integration remains untested. |
 | M2 | Complete for available targets | Authenticated WebRTC proof behind a development-only opt-in | Thirteen Linux native proof checks, four framing checks, Android native data/video/audio peers and three desktop/Android host checks passed with real JNI and synthetic media. Pinned TLS/context validation and teardown are covered. Windows runtime remains explicitly untested, not a merge prerequisite; no production route label. |
 | M3 | In progress | Screen and playback audio tracks in both directions | Opt-in bounded I420/native-video adapters exist on both targets with synthetic pixel/RTP checks. Bounded external synthetic PCM adapters also exist, with hardware microphone capture disabled. No OS screen capture/rendering, real playback capture or production freshness/epoch integration yet. Verify actual Android behavior and performance on available targets; record unavailable physical/Windows cases as gaps, not a request for hardware. |
-| M4 | In progress | Direct control/clipboard/files and safe route cutover | Opt-in bounded BDC1 control framing carries existing synthetic messages; replay/context/UTF-8/Stop checks exist. Production input/paste, verified files, bulk scheduling and cutover remain unimplemented. No claim of all-direct while file bytes still relay. |
-| M5 | In progress | HTTPS signaling and deployable TURN fallback in sibling infra PR | Internal Cloudflare credential client and nine synthetic checks exist in the companion draft; service does not import it. Approved-session issuance, HTTPS authenticated signaling, provisioning, external UDP/TCP/TLS reachability and deployment remain incomplete. Current Railway TCP bootstrap is not sufficient. |
-| M6 | Not started | Acceptance matrix, default enablement and local release | Separate-network direct proof, forced fallback, security/lifecycle regression evidence, updated guides/notices, local EXE/APK/checksums/update.json and verified release only after applicable checks are permitted and pass. |
+| M4 | In progress | Direct control/clipboard/files and safe route cutover with identity/authorization continuity | Opt-in bounded BDC1 control framing carries existing synthetic messages; replay/context/UTF-8/Stop checks exist. Production input/paste, verified files, bulk scheduling and cutover remain unimplemented. No claim of all-direct while file bytes still relay. Exit additionally requires signed-device/TLS-to-DTLS transcript binding and preservation of local grants and current-session control approval; these are production cutover requirements, not implemented proof capabilities. |
+| M5 | In progress | HTTPS signaling and deployable TURN fallback in sibling infra PR | Internal Cloudflare credential client and nine synthetic checks exist in the companion draft; service does not import it. Locally authorized-session issuance (including a verified saved-device request), HTTPS authenticated signaling, provisioning, external UDP/TCP/TLS reachability and deployment remain incomplete. Current Railway TCP bootstrap is not sufficient. |
+| M6 | Not started | Acceptance matrix, default enablement and local release | Separate-network direct proof, forced fallback, signed-device/grant and session-approval regression evidence, updated guides/notices, local EXE/APK/checksums/update.json and verified release only after applicable checks are permitted and pass. |
 
 M0 precedes SDK-specific work; M1 precedes transport integration; M2 precedes M3
 and M4. M5's design can proceed alongside client work, but **M6 requires all of
@@ -127,12 +136,13 @@ lands; do not check a milestone off for only writing its plan.
 | Decision | Starting position | Still needed |
 | --- | --- | --- |
 | Engine/bindings | Prefer maintained native WebRTC | Pinned candidate comparison, local build/packaging feasibility on both targets |
-| Initial bootstrap | Existing pinned TLS for isolated proof | Explicit feature capability/version strategy; proof limitations documented |
+| Initial bootstrap | Code-authenticated pairing, signed invitation v3/v4 and pinned ephemeral TLS; existing proof remains isolated | Explicit feature capability/version strategy; proof limitations documented |
 | Full signaling | Authenticated, end-to-end protected messages over HTTPS | API version, mailbox/WS choice, crypto/transcript review, size/rate/TTL limits |
 | Relay | Preserve legacy fallback; select managed Cloudflare TURN | Owner has no Cloudflare account. Account creation/key access, scoped credential issuance/rotation, quotas, billing controls and external reachability remain required. Railway public HTTP/TCP proxies do not provide the needed public relay UDP range |
+| Device authentication and consent | Owner approved local Always allow grants in 0.9.0; only a verified signed code-paired request can match a recipient-local saved key. Otherwise require local approval and show REMEMBER before capture. | Bind the approved requesting identity and ephemeral TLS pin to the direct DTLS fingerprint/session/generation/expiry; do not let mailbox SDP, a name, a copied deep link or a key alone authorize capture. Keep grants directional and revocable, never transmit trust choice/list, and retain genuine OS prompts. |
 | Capture bridge | Preserve platform permission/service ownership | Codec/surface bridge, Windows hardware encoder and Android receive path |
-| Cutover | Explicit transport-generation commit inside one approved session | Exact failure/rollback state machine; file and input ordering policy |
-| Old clients | No silent schema extensions or downgrade | Deliberate compatibility behavior or clear update requirement |
+| Cutover | Explicit transport-generation commit inside one approved session | Exact failure/rollback state machine; file/input ordering; preserve existing local grant or explicit session-only control approval through route/direction changes, never carry session-only approval past disconnect |
+| Old clients | No silent schema extensions or downgrade | Signed v3/v4 invitations are rejected by older receivers; update both apps. Legacy v1/v2 stays manual. New direct capability negotiation must not strip device proofs or downgrade to saved access without verification |
 
 ## Acceptance matrix, now authorized but not yet completed
 
@@ -151,9 +161,9 @@ Linux/Android evidence and implementation/security requirements still apply.
 | Internet direct | Two genuinely different external networks; inspect selected non-relay candidate pair and actual payload route. Local Wi-Fi/emulator loopback is insufficient. Include IPv4 and IPv6 where available. |
 | Fallback | Force UDP failure, hard NAT and direct timeout; prove TURN UDP and TCP/TLS paths as supported. Confirm all-direct vs relayed reporting and no content before approval. |
 | Restricted bootstrap | Block the legacy Railway TCP port; HTTPS signaling can still establish a supported direct/TURN session. Enterprise proxy limitations are documented. |
-| Authentication | Wrong code, expired attempt, forged fingerprint/candidate, duplicate/reordered signaling and downgrade attempts fail closed; credentials cannot be used as an open relay. |
-| Lifecycle | Decline/Stop at each setup/cutover phase, source lock/revoked permission, rotation/backgrounding, network changes and lost signaling. No capture/input after revocation or resurrection of an ended session. |
-| Direction switch | One local approval, new source capture consent, epoch separation, no old media/input, no duplicate native encoder/service. |
+| Authentication | Wrong code, expired/tampered device signature, wrong key with same name, forged TLS/DTLS fingerprint/candidate, copied deep link, duplicate/reordered signaling and downgrade fail closed. A valid remembered key cannot bypass the signed ephemeral pin, fresh code pairing or OS capture prompt; credentials cannot be used as an open relay. |
+| Lifecycle | Decline/Stop at each setup/cutover phase, source lock/revoked permission, rotation/backgrounding, network changes and lost signaling. No capture/input after revocation or resurrection of an ended session. A removed local grant requires new app approval; fresh requests after Stop never reuse session-only control consent. Saved grants do not cause autostart or automatic reconnect. |
+| Direction switch | One local switch approval, fresh OS capture consent, epoch separation, no old media/input or duplicate native encoder/service. Retain explicit Android control approval within the same connection when switching back; clear it on disconnect. A grant to the original requester is not a reverse-direction grant. |
 | Keyboard/clipboard | Fast Unicode typing, shortcuts, Ctrl+V followed by typing, pending paste at cutover, custom/protected Android fields. No reordering, duplicate execution or stuck modifiers. |
 | Files | Hash matches, consent/cancel/retry, disk failure, no silent overwrite; large transfers do not starve input/media. Interrupted cutover never silently duplicates writes. |
 | Media/performance | Compare old relay, direct and TURN using identical device/codec/resolution/workload. Record input RTT, frame age, distinct drawn FPS/gaps, loss, bitrate, CPU/memory/battery and cold setup time; no universal 60 FPS claim. |
@@ -180,6 +190,29 @@ Update [architecture](../ARCHITECTURE.md), [protocol](../PROTOCOL.md),
 [verification](../VERIFICATION.md), [third-party notices](../../THIRD_PARTY.md)
 and release instructions as their behavior changes. Keep this plan labeled planned
 until implementation and acceptance evidence justify changing its status.
+
+## Production authorization update, 16 October 2026
+
+The 0.9.0 remembered-device feature changes the production authorization baseline,
+not the status of direct-transport milestones. Initial signed requests still need
+local Allow connection. The recipient alone then chooses Always allow or Just this
+time before any capture or media socket; saved names are local and editable at
+that choice. Later matching signed **code-paired** requests can use the grant.
+Unsigned/changed-key requests remain manual; local deep links never use/save a
+grant. Windows DPAPI/AndroidKeyStore protect persistent signing keys; grants are
+bounded and removable on HOME. Android still obtains MediaProjection and requires
+real accessibility plus full-display capture for control. The current connection's
+explicit Allow tapping and typing approval is separate from persistent grants,
+survives direction changes, and is cleared at session end.
+
+The signature binds the canonical invitation's route, ephemeral certificate pin,
+secret, name and expiry. Future direct signaling/cutover must bind that verified
+identity and authorization to its DTLS fingerprint/session/generation/expiry over
+the authenticated context. The opt-in proof does **not** implement this production
+consent boundary. M4/M5/M6 cannot be completed merely by copying a public key or
+accepting fixture signaling. Preserve [protocol](../PROTOCOL.md),
+[security](../../SECURITY.md) and [current verification](../VERIFICATION.md).
+No direct Internet route, TURN deployment or new production transport is enabled.
 
 ## Implementation evidence, 10 October 2026
 

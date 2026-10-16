@@ -25,8 +25,9 @@ import java.util.concurrent.TimeUnit
 
 class UiTest {
     @get:Rule val compose = createComposeRule()
-    private class Platform(override val isAndroid: Boolean = false) : RemotePlatform {
+    private class Platform(override val isAndroid: Boolean = false, override val deviceIdentity: DeviceIdentity? = null) : RemotePlatform {
         override var languageTag: String? = null
+        override var rememberedDevices: String? = null
         override val mayRestrictSettings get() = isAndroid
         override val defaultName = "Luís"
         override fun controlAvailable() = false
@@ -35,6 +36,51 @@ class UiTest {
         override fun stopSharing() = Unit
         override fun applyInput(input: Message) = Unit
         override fun decode(frame: Packet.Frame): ImageBitmap? = null
+    }
+
+    @Test fun `phone remember choice is local and translated`() = rememberChoice(390, 740, true)
+    @Test fun `desktop remember choice is local`() = rememberChoice(760, 740, false)
+    private fun rememberChoice(width: Int, height: Int, portuguese: Boolean) {
+        val target = HelpSession(Platform(isAndroid = portuguese).apply { languageTag = if (portuguese) "pt" else "en" }, bindAddress = java.net.InetAddress.getLoopbackAddress(), relayFactory = { null })
+        val controller = HelpSession(Platform(deviceIdentity = testDeviceIdentity()).apply { languageTag = "en" }, { listOf("127.0.0.1") }, java.net.InetAddress.getLoopbackAddress(), relayFactory = { null })
+        var displayed by mutableStateOf(target)
+        try {
+            compose.setContent {
+                Box(Modifier.requiredSize(width.dp, height.dp).testTag("screen")) {
+                    key(displayed) { BetterDeskTheme { BetterDeskApp(displayed) } }
+                }
+            }
+            compose.waitUntil(10_000) { target.state.value.deviceCode.isNotEmpty() }
+            compose.runOnIdle { controller.connectCode(target.state.value.deviceCode) }
+            compose.waitUntil(10_000) { target.state.value.stage == Stage.INVITATION }
+            compose.onNodeWithText(if (portuguese) "Permitir ligação" else "Allow connection").performClick()
+            compose.onNodeWithText(if (portuguese) "Permitir sempre este dispositivo?" else "Always allow this device?").assertIsDisplayed()
+            compose.onNodeWithText(if (portuguese) "Nome do dispositivo" else "Device name").assertIsDisplayed()
+            compose.onNodeWithText(if (portuguese) "Permitir sempre" else "Always allow").performScrollTo().assertIsDisplayed()
+            snapshot(if (portuguese) "remember-phone-pt" else "remember-desktop")
+            compose.runOnIdle { displayed = controller }
+            compose.onNodeWithText("Waiting for the other device…").assertIsDisplayed()
+            compose.onNodeWithText("Always allow this device?").assertDoesNotExist()
+            compose.runOnIdle { displayed = target }
+            compose.onNodeWithText(if (portuguese) "Cancelar" else "Cancel").performScrollTo().performClick()
+            compose.waitUntil { target.state.value.stage == Stage.HOME }
+            kotlin.test.assertTrue(target.remembered.value.isEmpty())
+        } finally { target.dispose(); controller.dispose() }
+    }
+
+    @Test fun `saved local names identify the exact grant to remove for screen readers`() {
+        val first = RememberedDevice(testDeviceIdentity().publicKey, "Office phone")
+        val second = RememberedDevice(testDeviceIdentity().publicKey, "Personal phone")
+        val platform = Platform().apply { languageTag = "en"; rememberedDevices = RememberedDevices.encode(listOf(first, second)) }
+        val session = HelpSession(platform, bindAddress = java.net.InetAddress.getLoopbackAddress(), relayFactory = { null })
+        try {
+            compose.setContent { BetterDeskTheme { BetterDeskApp(session) } }
+            compose.onNodeWithContentDescription("Remove Office phone").performScrollTo().assertIsDisplayed()
+            compose.onNodeWithContentDescription("Remove Personal phone").performScrollTo().performClick()
+            compose.runOnIdle { kotlin.test.assertEquals(listOf(first), session.remembered.value) }
+            compose.onNodeWithContentDescription("Remove Office phone").assertExists()
+            compose.onNodeWithContentDescription("Remove Personal phone").assertDoesNotExist()
+        } finally { session.dispose() }
     }
 
     @Test fun `mobile layout has same primary action and helper flow`() {

@@ -5,10 +5,12 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $buildRoot = [IO.Path]::GetFullPath((Join-Path $repoRoot 'desktop\build'))
 $stagePath = (Resolve-Path -LiteralPath $Staging).Path
 $dist = [IO.Path]::GetFullPath((Join-Path $repoRoot 'dist'))
-if (-not $stagePath.StartsWith($buildRoot + '\distribution-stage-', [StringComparison]::OrdinalIgnoreCase)) { throw 'Staging must be a distribution-stage directory inside desktop/build.' }
+$separator = [IO.Path]::DirectorySeparatorChar
+$comparison = if ($separator -eq '\') { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+if (-not $stagePath.StartsWith($buildRoot + $separator + 'distribution-stage-', $comparison)) { throw 'Staging must be a distribution-stage directory inside desktop/build.' }
 function Assert-LocalTree([string]$Path) {
     $resolved = (Resolve-Path -LiteralPath $Path).Path
-    if (-not $resolved.StartsWith($repoRoot + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Distribution path escapes the checkout.' }
+    if (-not $resolved.StartsWith($repoRoot + $separator, $comparison)) { throw 'Distribution path escapes the checkout.' }
     $ancestor = Get-Item -LiteralPath $resolved -Force
     while ($ancestor.FullName -ne $repoRoot) {
         if ($ancestor.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Distribution ancestors cannot be links or junctions.' }
@@ -18,7 +20,7 @@ function Assert-LocalTree([string]$Path) {
     $items = @(Get-Item -LiteralPath $Path -Force) + @(Get-ChildItem -LiteralPath $Path -Force -Recurse)
     foreach ($item in $items) {
         if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Distribution paths cannot contain links or junctions.' }
-        if (-not $item.FullName.StartsWith($repoRoot + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Distribution child escapes the checkout.' }
+        if (-not $item.FullName.StartsWith($repoRoot + $separator, $comparison)) { throw 'Distribution child escapes the checkout.' }
     }
 }
 Assert-LocalTree $stagePath

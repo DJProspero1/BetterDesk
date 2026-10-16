@@ -24,7 +24,7 @@ The implementation is independent of RustDesk; no RustDesk code was copied.
 
 ## Connection direction
 
-The connecting device creates an ephemeral TLS listener internally. LAN discovery finds candidate code endpoints; a J-PAKE exchange authenticates the entered code and transfers a pinned TLS invitation in an authenticated encrypted envelope. The requested device approves locally, then connects to the pinned listener. Screen frames flow toward the connecting device and input returns. Both platforms use the same user flow; transport roles are not UI roles.
+The connecting device creates an ephemeral TLS listener internally. LAN discovery finds candidate code endpoints; a J-PAKE exchange authenticates the entered code and transfers a pinned TLS invitation in an authenticated encrypted envelope. The requested device approves locally (or matches a saved signed-device grant), then connects to the pinned listener. Screen frames flow toward the connecting device and input returns. Both platforms use the same user flow; transport roles are not UI roles.
 
 Opening BetterDesk starts a five-minute code endpoint and UDP discovery responder on port 39471. Only one copy per machine can bind that discovery port. No service runs at boot. Stop/expiry closes listeners. Build/test fixtures use temporary loopback listeners and close them.
 
@@ -66,7 +66,7 @@ each time it becomes the source. See [AUDIO_AND_SWITCHING.md](AUDIO_AND_SWITCHIN
 ## Platform differences
 
 - Windows: D3D11/DXGI primary-display capture through JNA, GDI fallback, Skia resize/JPEG encoding, AWT robot mouse input and JNA Unicode keyboard input. Native capture resources are created and released on the capture worker. The D3D library proxy is retained while COM objects reference it. A single .NET Framework EXE embeds the application and JVM, expands them once per build into a content-hashed LocalAppData cache, then opens it. No admin rights or installer. Subsequent runs reuse that cache.
-- Android: a connected-device foreground service owns availability while switching apps, with a partial wake lock released on Stop/expiry. Once sharing starts, MediaProjection's foreground service replaces it, avoiding duplicate notifications. Android 13+ requests notification permission before the separate genuine screen-capture prompt. The sharing notification includes Disconnect; service teardown explicitly removes it on local or remote stop. Users can deny notification permission or disable the channel in Android settings. Activity recreation does not stop a connection. Removal from Recents does. Accessibility handles gestures/text; app-only capture cannot authorize full-screen coordinate input. Sharing starts without Accessibility; the sharer's own Allow tapping and typing request, followed by a granted service, upgrades the live session to control.
+- Android: a connected-device foreground service owns availability while switching apps, with a partial wake lock released on Stop/expiry. Once sharing starts, MediaProjection's foreground service replaces it, avoiding duplicate notifications. Android 13+ requests notification permission before the separate genuine screen-capture prompt. The sharing notification includes Disconnect; service teardown explicitly removes it on local or remote stop. Users can deny notification permission or disable the channel in Android settings. Activity recreation does not stop a connection. Removal from Recents does. Accessibility handles gestures/text; app-only capture cannot authorize full-screen coordinate input. Sharing starts without Accessibility. Unless a saved Always allow grant authorizes control, the sharer's own Allow tapping and typing request, followed by a granted service, upgrades the live session to control.
 
 Platform references: [Android foreground service types](https://developer.android.com/develop/background-work/services/fgs/service-types), [Android restricted settings](https://support.google.com/android/answer/12623953). OS-specific labels can vary by manufacturer.
 
@@ -141,3 +141,33 @@ uses direct LAN or the Railway TCP relay.
 5. Add signed local release packaging and a signed update manifest; the current in-app updater relies on HTTPS to GitHub plus SHA-256 (see RELEASING.md).
 
 The Internet relay is an early implementation with bounded sessions and a single region. Neither OS consent nor firewall policy is bypassed. Native app builds remain local.
+
+## Remembered device authorization
+
+`DeviceIdentity` signs each fresh invitation with P-256/SHA256withECDSA. The
+invitation keeps the usual ephemeral TLS certificate and secret; signing does not
+replace J-PAKE or pinning. Only `DeviceAvailability` code-paired delivery can use
+a saved grant. Local/deep-link compatibility entry points remain manual.
+`Invitation.observedHost` records the authenticated LAN socket's observed IP
+without changing the signed advertised hosts.
+
+After Allow connection, a first signed request enters REMEMBER before opening the
+media connection. Always allow saves a bounded local key/name record; the editable local name must be
+nonempty and distinct, with a numbered suggestion for repeated model names; Just this
+time leaves it unsaved. The controller waits and receives no trust state. On later
+code-paired requests a matching verified key advances directly to CONNECTING.
+Grants survive sessions/restarts/updates and are removable only from HOME, where
+remote input is inactive. Corrupt records fail closed; storage failures are visible.
+The Android identity uses AndroidKeyStore and grants use private non-backed-up
+preferences. Windows uses current-user DPAPI for both identity and grants.
+
+A remembered Android request still invokes fresh MediaProjection consent. It can
+authorize control only with the real accessibility service and full-display
+capture. Ordinary sessions require a new explicit control action even if that OS
+service is already granted. Switch approval, lock/protected-screen checks,
+disconnect cleanup and per-session file/clipboard rules remain in force.
+
+Explicit Android control approval is tracked separately from the persistent device
+grant. It survives direction changes within one connection, so switching back
+restores control when real OS permission/capture scope allow it. Disconnect resets
+this session-only approval; it never becomes a saved grant.

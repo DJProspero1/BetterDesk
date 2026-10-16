@@ -4,6 +4,11 @@ import androidx.compose.ui.graphics.ImageBitmap
 
 interface RemotePlatform {
     val exchange: ExchangePlatform? get() = null
+    /** Null disables remembering if secure platform storage is unavailable. */
+    val deviceIdentity: DeviceIdentity? get() = null
+    var rememberedDevices: String?
+        get() = null
+        set(value) = Unit
     val isAndroid: Boolean
     val defaultName: String
     var languageTag: String?

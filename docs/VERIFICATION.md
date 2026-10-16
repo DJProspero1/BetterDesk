@@ -7,6 +7,62 @@ a prerequisite for this PR. Do not request Windows access or evaluation-media
 registration. Earlier dated results retain their original scope; this decision
 does not turn Linux/emulator checks into Windows evidence.
 
+## Remembered devices review follow-up, 16 October 2026
+
+After the first PR #3 review, the ordinary Linux suite passed **77 tests: 70
+passed, zero failed, seven skipped** (the same six opt-in cases and Windows
+platform decoder). Added a round-trip screen-switch regression: explicit Android
+control approval returns with the original screen, while a fresh session with
+only a stored accessibility service stays view-only. Added distinct local-name
+suggestion/validation checks, a duplicate-name relay save/persistence check and an
+accessible Remove action check that removes only the named grant. English/Portuguese
+phone/desktop prompt renders, including the local name field, were inspected.
+
+Android app and instrumentation APK builds passed. The app remains 0.9.0/code 12
+and its signing certificate still matches 0.8.1. Review-follow-up APK SHA-256:
+`84fd78fe896447da78a588e2137f5b9bbe23603259de365dbd3b2c0c36897ad6`.
+Instruction parity, documentation links and diff checks passed. The direct
+connections handoff/design now record persistent and ephemeral identity binding,
+saved-grant versus session-only approval and the M4/M5/M6 requirements. This does
+not implement direct transport or change the native/physical coverage gaps below.
+
+## Remembered devices, 16 October 2026 (0.9.0 source)
+
+Local Linux checks: **74 tests: 67 passed, zero failed, seven skipped**. The
+fixture-backed broker checks ran with Node 24 and local dependencies. Skips are
+six opt-in device/benchmark checks and the Windows-specific decoder. New checks
+cover signature binding/tampering/expiry, wrong keys with matching names, corrupt
+stores, LAN/relay saved reconnects, local removal, Just this time, cancellation,
+storage failure, copied-link rejection and Android view-only without a grant.
+Phone/desktop Compose renders cover the translated recipient-only choice, including
+Android's explanation, and its absence from the waiting controller. These are
+synthetic Linux renders, not screenshots of physical Windows/Android devices.
+
+`:android:assembleDebug` and `:android:assembleDebugAndroidTest` passed. The app
+reports versionName 0.9.0, versionCode 12. Its signing certificate matches the
+published 0.8.1 APK (SHA-256
+`93d2fc3b8c39902ae0ca60c69c6b3532cc1efb2e7a2034e5ccf7c12a3032ae51`).
+APK SHA-256 for this source check: `ffbf399bd9420696f118bf080442a02fcb26a43143495f406268706fa445aae6`.
+PowerShell release-script fixtures passed checksum/manifest rejection, safe
+replacement, linked-path rejection, failed readback retention and publication
+before superseded-release deletion. Agent-file parity, documentation file links
+and `git diff --check` passed.
+
+No device was attached. Actual AndroidKeyStore/update persistence, remembered
+MediaProjection prompts, accessibility/app-only/lock behavior, Windows DPAPI and
+native Windows capture/input/updating, physical/OEM devices and constrained
+networks are **untested**. No emulator, audio workload or real screen capture ran.
+Compilation and synthetic authorization fixtures do not establish those results.
+The release uses local cross-packaging with the verified 0.8.1 Windows baseline;
+the pre-PR package from `5eefb7c` passed byte-for-byte comparison of every retained
+runtime/dependency entry and final EXE embedded-payload readback. Its SHA-256 was
+`5a4f6b0476cf0b0e5efcd15764b38a2f887ff86ef0c4e30992569de6e30fd71c`.
+The baseline EXE matched its published manifest SHA-256
+`155948c6e41e708fbccf33edbc20ed67512ad2d0d72b80198b230c84bf134bde`;
+a deliberately wrong baseline hash failed before compilation. These are packaging
+checks, not Windows execution. Final post-merge artifact hashes/source revision
+are recorded separately in the release's BUILD-INFO.txt and SHA256SUMS.txt.
+
 ## Optional Android control, 12 October 2026 (0.8.1 source, unreleased)
 
 On Linux: the full desktop JVM suite ran **66 checks: 50 passed, zero failed,

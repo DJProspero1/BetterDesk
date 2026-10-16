@@ -123,6 +123,29 @@ class SwitchAudioTest {
         assertEquals(Stage.SHARING, source.state.value.stage)
     }
 
+    @Test fun `Android session control approval survives a round trip switch but not disconnect`() = runBlocking(dispatcher) {
+        val sp = Platform(true); val vp = Platform()
+        val source = session(sp); val viewer = session(vp)
+        connect(source, viewer, sp)
+        assertFalse(source.state.value.remoteControl, "A pre-existing accessibility grant alone is not consent")
+        source.enableControl(); source.refreshPermissions()
+        until { viewer.state.value.remoteControl }
+        source.requestSwitch(); until { viewer.state.value.switchState == "incoming" }
+        viewer.acceptSwitch(); until { viewer.state.value.stage == Stage.SHARING }
+        vp.frame(); until { source.state.value.stage == Stage.VIEWING }
+        source.requestSwitch(); until { viewer.state.value.switchState == "incoming" }
+        viewer.acceptSwitch(); until { source.state.value.stage == Stage.SHARING }
+        sp.frame(); until { viewer.state.value.stage == Stage.VIEWING }
+        assertEquals(2, sp.starts, "Switching back still obtains a new native capture grant")
+        assertTrue(source.state.value.remoteControl)
+        assertTrue(viewer.state.value.remoteControl)
+        viewer.input("tap", .5f, .5f); until { sp.inputs == 1 }
+        source.home(); viewer.home()
+        connect(source, viewer, sp)
+        assertFalse(source.state.value.remoteControl, "Ending the session must clear session-only approval")
+        assertFalse(viewer.state.value.remoteControl)
+    }
+
     @Test fun `concurrent requests and disconnect cannot silently approve capture`() = runBlocking(dispatcher) {
         val sp = Platform(); val vp = Platform(); val source = session(sp); val viewer = session(vp)
         connect(source, viewer, sp)

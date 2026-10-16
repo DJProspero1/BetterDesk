@@ -12,7 +12,7 @@ and the completed assets. No cloud build workflow is used.
 `gradle.properties` holds the only version: `betterdesk.version` (X.Y.Z) and the
 monotonically increasing Android `betterdesk.versionCode`. Both Gradle apps and
 `build-local.ps1` read them. Also update `README.md`, this guide and
-[CHANGELOG.md](../CHANGELOG.md). Version 0.8.0 uses Android versionCode 10.
+[CHANGELOG.md](../CHANGELOG.md). Version 0.9.0 uses Android versionCode 12.
 Every release must raise both: the updater offers only a higher X.Y.Z, and Android
 additionally needs a higher versionCode. Keep the Android application ID
 and the signing key stable for updates. Update [VERIFICATION.md](VERIFICATION.md)
@@ -38,15 +38,15 @@ Local outputs for this milestone:
 
 | File under `dist/` | Meaning |
 | --- | --- |
-| `BetterDesk-Windows-0.8.1.exe` | Unsigned x64 portable EXE, including app and Java runtime |
-| `BetterDesk-Android-0.8.0-debug.apk` | Local debug-signed Android APK |
+| `BetterDesk-Windows-0.9.0.exe` | Unsigned x64 portable EXE, including app and Java runtime |
+| `BetterDesk-Android-0.9.0-debug.apk` | Local debug-signed Android APK |
 | `SHA256SUMS.txt` | SHA-256 of those final artifacts |
 | `BUILD-INFO.txt` | UTC build time, source Git revision, dirty state and packaging notes |
 | `update.json` | Version, Android versionCode, and each artifact's name, size and SHA-256 for in-app updates |
 
 ```powershell
-Get-FileHash .\dist\BetterDesk-Windows-0.8.0.exe -Algorithm SHA256
-Get-FileHash .\dist\BetterDesk-Android-0.8.0-debug.apk -Algorithm SHA256
+Get-FileHash .\dist\BetterDesk-Windows-0.9.0.exe -Algorithm SHA256
+Get-FileHash .\dist\BetterDesk-Android-0.9.0-debug.apk -Algorithm SHA256
 Get-Content .\dist\SHA256SUMS.txt
 git rev-parse HEAD
 git status --short
@@ -68,14 +68,14 @@ are preserved under `desktop/build/distribution-previous-*`. Links/junctions in
 the distribution tree are rejected. Do not point cleanup at arbitrary paths.
 
 For each delivery, finish tests/docs, commit the source, build locally from that
-clean commit, verify the final binaries, then push that commit to `origin/main`
-under the owner's authorization. Prepare release notes describing changes and
+clean commit, verify the final binaries, then merge its reviewed PR under the owner's authorization. VMs push only task
+branches; refresh the primary checkout and build from the clean merged revision. Prepare release notes describing changes and
 actual test limits (never codes, private screenshots or credentials). With the
 authorized local GitHub CLI login:
 
 ```powershell
 .\scripts\test-release-scripts.ps1
-.\scripts\publish-release.ps1 -Version 0.8.0 -NotesFile .\desktop\build\release-notes.md
+.\scripts\publish-release.ps1 -Version 0.9.0 -NotesFile .\desktop\build\release-notes.md
 ```
 
 The publisher checks that the repository is public (installed apps fetch
@@ -131,7 +131,9 @@ public distribution, add Windows code signing (and verify it before replacing th
 EXE) or a detached manifest signature with a key held offline. Versions before
 0.8.0 contain no updater.
 
-The offline script tests use an isolated checkout and Git/GitHub doubles. They
+Distribution path guards use native path separators and case rules; the same
+PowerShell script suite runs on Windows and Linux (a junction or symlink is rejected
+respectively). The offline script tests use an isolated checkout and Git/GitHub doubles. They
 exercise failed checksums, safe cleanup, junction rejection, upload failure and
 publication-before-deletion without modifying GitHub.
 
@@ -194,3 +196,35 @@ These remain release work, not checks already completed:
 The public-readiness list does not authorize a deployment. Website and infrastructure
 deployment/rollback procedures belong to their separate repositories. Validate
 those services only as part of an authorized change to them.
+
+## Local Linux packaging with a verified Windows baseline
+
+The 0.8.1 development release was packaged on Linux with its existing Windows
+jpackage launcher/JRE. The same bounded path is available when **desktop build
+configuration, dependencies and runtime requirements have not changed**. This
+compiles the current JVM application and portable .NET wrapper locally; it reuses
+the prior release's Windows native dependencies and JRE, preserving legal notices.
+It does not execute the Windows app or validate DPAPI, capture, input or updates.
+Runtime/module/dependency changes require a fresh Windows-native package instead.
+
+With Python 3, Mono (`mcs` and `mono`), JDK 17 and SDK 36, after tests and a clean
+source commit, download the previous official release to an ignored build path:
+
+```sh
+mkdir -p desktop/build/windows-baseline
+gh release download v0.8.1 --repo DJProspero1/BetterDesk \
+  --pattern '*exe' --pattern update.json --dir desktop/build/windows-baseline
+ANDROID_HOME=/path/to/android-sdk \
+  python3 scripts/package-windows-from-release.py desktop/build/windows-baseline
+```
+
+The helper checks the baseline EXE against its published size/SHA-256, compares
+build configuration to the baseline source tag, compiles `:desktop:jar`, replaces
+only the application JAR and version options, compiles Portable.cs with Mono, and
+reads back the final EXE's payload. Every retained dependency/runtime entry is
+compared byte for byte. The generated EXE is under `desktop/build/`; it does not
+publish, replace `dist/` or remove earlier outputs. Inspect it alongside the fresh
+same-key Android APK, stage both with SHA256SUMS.txt, BUILD-INFO.txt and update.json
+in `desktop/build/distribution-stage-*`, then use `publish-distribution.ps1` and
+the existing release publisher. Record the exact runtime baseline, source revision,
+clean-tree state and absent Windows runtime testing in build metadata/release notes.

@@ -32,6 +32,7 @@ import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -64,6 +65,7 @@ fun BetterDeskTheme(content: @Composable () -> Unit) {
 @Composable
 fun BetterDeskApp(session: HelpSession, updater: AppUpdater? = null, onFullScreenChange: (Boolean) -> Unit = {}) {
     val state by session.state.collectAsState()
+    val remembered by session.remembered.collectAsState()
     var portuguese by rememberSaveable { mutableStateOf((session.platform.languageTag ?: Locale.getDefault().language) == "pt") }
     val viewing = state.stage == Stage.VIEWING
     var fullScreen by rememberSaveable(viewing) { mutableStateOf(viewing) }
@@ -123,11 +125,35 @@ fun BetterDeskApp(session: HelpSession, updater: AppUpdater? = null, onFullScree
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
                                 Spacer(Modifier.height(16.dp))
                                 Primary(t("Connect", "Ligar"), Pairing.validDeviceCode(deviceCode) && deviceCode != state.deviceCode) { session.connectCode(deviceCode) }
+                                if (remembered.isNotEmpty()) {
+                                    Spacer(Modifier.height(32.dp))
+                                    Text(t("Always allowed devices", "Dispositivos sempre autorizados"), fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+                                    Text(t("These devices can connect without asking you. Remove a device to require approval again.", "Estes dispositivos podem ligar-se sem pedir autorização. Remova um dispositivo para voltar a exigir autorização."), fontSize = 14.sp)
+                                    if (state.rememberError) Text(t("Couldn't remove the device. Try again before allowing another connection.", "Não foi possível remover o dispositivo. Tente novamente antes de permitir outra ligação."), color = MaterialTheme.colorScheme.error)
+                                    remembered.forEach { device ->
+                                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                            Text(device.name, Modifier.weight(1f))
+                                            TextButton(onClick = { session.forgetDevice(device.key) }, modifier = Modifier.semantics { contentDescription = t("Remove ${device.name}", "Remover ${device.name}") }) { Text(t("Remove", "Remover")) }
+                                        }
+                                    }
+                                }
                             }
                             Stage.INVITATION -> {
                                 Heading(t("Allow ${state.peer} to connect?", "Permitir a ligação de ${state.peer}?"), t("Share your screen, device sound and control. You can also copy text and send files. Your microphone stays off.", "Partilhe o ecrã, o som do dispositivo e o controlo. Também pode copiar texto e enviar ficheiros. O microfone fica desligado."))
                                 Primary(t("Allow connection", "Permitir ligação")) { session.allowHelp() }
                                 TextButton(onClick = { session.home() }) { Text(t("Decline", "Recusar")) }
+                            }
+                            Stage.REMEMBER -> {
+                                Heading(t("Always allow this device?", "Permitir sempre este dispositivo?"),
+                                    t("${state.peer} can connect without asking while BetterDesk is open. Includes screen, sound, control, files and copied text. Remove access on the home screen.", "${state.peer} pode ligar-se sem pedir autorização enquanto o BetterDesk estiver aberto. Inclui ecrã, som, controlo, ficheiros e texto copiado. Remova o acesso no ecrã inicial."))
+                                if (session.platform.isAndroid) Text(t("Android still asks to share your screen. Control needs accessibility permission.", "O Android continua a pedir autorização para partilhar o ecrã. O controlo requer permissão de acessibilidade."), Modifier.padding(bottom = 16.dp), fontSize = 15.sp)
+                                OutlinedTextField(state.rememberName, session::nameRememberedDevice, Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                                    label = { Text(t("Device name", "Nome do dispositivo")) }, singleLine = true, isError = state.rememberNameError,
+                                    supportingText = { Text(if (state.rememberNameError) t("Enter a name that isn't already saved.", "Introduza um nome que ainda não esteja guardado.") else t("Only saved on this device.", "Guardado apenas neste dispositivo.")) })
+                                if (state.rememberError) Text(t("Couldn't save this device. Remove an allowed device or connect just this time.", "Não foi possível guardar este dispositivo. Remova um dispositivo autorizado ou ligue apenas desta vez."), color = MaterialTheme.colorScheme.error)
+                                Primary(t("Always allow", "Permitir sempre")) { session.finishRemember(true) }
+                                TextButton(onClick = { session.finishRemember(false) }) { Text(t("Just this time", "Só desta vez")) }
+                                TextButton(onClick = { session.home() }) { Text(t("Cancel", "Cancelar")) }
                             }
                             Stage.PREPARING -> {
                                 Heading(t("Connecting…", "A ligar…"), t("Finding the other device.", "A procurar o outro dispositivo."))
@@ -201,7 +227,7 @@ fun BetterDeskApp(session: HelpSession, updater: AppUpdater? = null, onFullScree
                         }
                     }
                 }
-                Text(t("Your permission. Every connection.", "A sua autorização. Em cada ligação."), Modifier.fillMaxWidth().padding(24.dp), textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                Text(t("You decide who connects.", "Decide quem se liga."), Modifier.fillMaxWidth().padding(24.dp), textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
         }
         }
     }

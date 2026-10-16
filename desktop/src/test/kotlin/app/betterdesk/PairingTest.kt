@@ -34,7 +34,8 @@ class PairingTest {
             host.start()
             Pairing.send(Pairing.Endpoint("127.0.0.1",host.port),"12345678",invitation().copy(hosts=listOf("10.200.200.200")))
             assertTrue(received.await(2,TimeUnit.SECONDS))
-            assertEquals(listOf("127.0.0.1"),actual!!.hosts)
+            assertEquals("127.0.0.1",actual!!.observedHost)
+            assertEquals(listOf("10.200.200.200"),actual!!.hosts)
         } finally { host.close() }
     }
 
@@ -48,7 +49,7 @@ class PairingTest {
             val endpoint = Pairing.Endpoint("127.0.0.1", host.port)
             Pairing.send(endpoint, "12345678", invite)
             assertTrue(received.await(2, TimeUnit.SECONDS))
-            assertEquals(invite, actual)
+            assertEquals(invite.copy(observedHost = "127.0.0.1"), actual)
             assertFails { Pairing.send(endpoint, "12345678", invite) }
         } finally { host.close() }
     }
