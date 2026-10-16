@@ -207,16 +207,25 @@ the prior release's Windows native dependencies and JRE, preserving legal notice
 It does not execute the Windows app or validate DPAPI, capture, input or updates.
 Runtime/module/dependency changes require a fresh Windows-native package instead.
 
-With Python 3, Mono (`mcs` and `mono`), JDK 17 and SDK 36, after tests and a clean
-source commit, download the previous official release to an ignored build path:
+For the next release, raise the source version above the latest published
+version, run the relevant checks, and commit the source. With Python 3, Mono
+(`mcs` and `mono`), JDK 17 and SDK 36, download that latest published release as
+the older runtime baseline into an ignored build path. Only the latest release's
+assets are retained, so do not request a superseded release tag's downloads:
 
 ```sh
 mkdir -p desktop/build/windows-baseline
-gh release download v0.8.1 --repo DJProspero1/BetterDesk \
+gh release download --repo DJProspero1/BetterDesk \
   --pattern '*exe' --pattern update.json --dir desktop/build/windows-baseline
 ANDROID_HOME=/path/to/android-sdk \
   python3 scripts/package-windows-from-release.py desktop/build/windows-baseline
 ```
+
+The helper requires the baseline version to be lower than the new source version.
+Keep a locally cached baseline if reproducing an earlier package: for example,
+0.9.0 used the 0.8.1 EXE recorded in BUILD-INFO.txt, whose superseded release assets
+were removed after verified replacement. Exact package reproducibility is not
+established; source tags remain available.
 
 The helper checks the baseline EXE against its published size/SHA-256, compares
 build configuration to the baseline source tag, compiles `:desktop:jar`, replaces
