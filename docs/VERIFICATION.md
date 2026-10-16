@@ -7,6 +7,36 @@ a prerequisite for this PR. Do not request Windows access or evaluation-media
 registration. Earlier dated results retain their original scope; this decision
 does not turn Linux/emulator checks into Windows evidence.
 
+## Remembered devices, 16 October 2026 (0.9.0 source)
+
+Local Linux checks: **74 tests: 67 passed, zero failed, seven skipped**. The
+fixture-backed broker checks ran with Node 24 and local dependencies. Skips are
+six opt-in device/benchmark checks and the Windows-specific decoder. New checks
+cover signature binding/tampering/expiry, wrong keys with matching names, corrupt
+stores, LAN/relay saved reconnects, local removal, Just this time, cancellation,
+storage failure, copied-link rejection and Android view-only without a grant.
+Phone/desktop Compose renders cover the translated recipient-only choice, including
+Android's explanation, and its absence from the waiting controller. These are
+synthetic Linux renders, not screenshots of physical Windows/Android devices.
+
+`:android:assembleDebug` and `:android:assembleDebugAndroidTest` passed. The app
+reports versionName 0.9.0, versionCode 12. Its signing certificate matches the
+published 0.8.1 APK (SHA-256
+`93d2fc3b8c39902ae0ca60c69c6b3532cc1efb2e7a2034e5ccf7c12a3032ae51`).
+APK SHA-256 for this source check: `ffbf399bd9420696f118bf080442a02fcb26a43143495f406268706fa445aae6`.
+PowerShell release-script fixtures passed checksum/manifest rejection, safe
+replacement, linked-path rejection, failed readback retention and publication
+before superseded-release deletion. Agent-file parity, documentation file links
+and `git diff --check` passed.
+
+No device was attached. Actual AndroidKeyStore/update persistence, remembered
+MediaProjection prompts, accessibility/app-only/lock behavior, Windows DPAPI and
+native Windows capture/input/updating, physical/OEM devices and constrained
+networks are **untested**. No emulator, audio workload or real screen capture ran.
+Compilation and synthetic authorization fixtures do not establish those results.
+The release uses local cross-packaging with the verified 0.8.1 Windows baseline;
+final payload/artifact verification is recorded with the release build metadata.
+
 ## Optional Android control, 12 October 2026 (0.8.1 source, unreleased)
 
 On Linux: the full desktop JVM suite ran **66 checks: 50 passed, zero failed,

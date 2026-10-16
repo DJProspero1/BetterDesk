@@ -4,7 +4,7 @@
 
 An accountant in a lit office needs help with a computer or phone and is worried about pressing the wrong button. Connecting occupies the same narrow, quiet column on both devices; a wide desktop does not introduce a dashboard. Both platforms use a black interface, independent of the system theme.
 
-This device's code + Enter device code -> Connect -> other device allows connection -> required platform permission -> connected -> Disconnect.
+This device's code + Enter device code -> Connect -> other device allows connection -> local Always allow / Just this time choice -> required platform permission -> connected -> Disconnect.
 
 Technical setup is automatic. This implementation uses native Compose controls and shared Kotlin UI source for Windows and Android.
 
@@ -81,3 +81,18 @@ Reduced motion removes transitions and the indeterminate animation. Do not anima
 the remote image, move it to make room, add sound, or rely on color alone. Android
 reuses its current silent foreground notification for coarse transfer progress;
 filenames are not placed in notifications and the notification is removed on Stop.
+
+## Remembered devices
+
+After approving a new signed code-paired request, the sharing device shows “Always
+allow this device?” with Always allow, Just this time and Cancel. This is a separate
+local step before any TLS media connection or capture, so the other device stays
+on its waiting screen and cannot see or operate this prompt. Explain that screen,
+sound and control can be authorized on future requests while BetterDesk is open;
+Android still requires its genuine capture prompt and accessibility permission.
+
+Saved grants appear under Always allowed devices on the home screen, each with
+Remove. The list exists only on the granting device; no remembered flag, grant list
+or choice message is sent to the viewer. Up to sixteen devices can be saved. A
+failed/full store offers Just this time and explains how to remove a device. Names
+are labels, not proof of a person's identity; cryptographic keys distinguish devices.

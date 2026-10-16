@@ -6,7 +6,7 @@ The source and app releases are hosted in a public GitHub repository; the websit
 
 ## Current milestone
 
-Version 0.8.1 is an **early Internet-connected development build**, not a production remote-support release. Connections prefer a reachable local network and otherwise use the BetterDesk Railway relay. It has not been externally security-audited. Local binaries are distributed through this repository's GitHub Releases, and installed apps offer newer releases in place; the website remains a waitlist. Update both devices together: this version uses session protocol 4. Keyboard fixes and transfer paths have compilation checks, not interactive or throughput verification; those runtime gaps remain unverified. The owner resumed tests for direct-connection work on 10 October; see [dated verification](docs/VERIFICATION.md).
+Version 0.9.0 is an **early Internet-connected development build**, not a production remote-support release. Connections prefer a reachable local network and otherwise use the BetterDesk Railway relay. It has not been externally security-audited. Local binaries are distributed through this repository's GitHub Releases, and installed apps offer newer releases in place; the website remains a waitlist. Update both devices together: this version uses session protocol 4 and signed invitation versions 3/4. Older receiving apps reject these signed requests; update both devices together. Keyboard fixes and transfer paths have compilation checks, not interactive or throughput verification; those runtime gaps remain unverified. The owner resumed tests for direct-connection work on 10 October; see [dated verification](docs/VERIFICATION.md).
 
 - Windows and Android have the same home screen: this device's code, another device's code, and Connect.
 - Enter the other device's twelve-digit code. Its owner explicitly approves sharing. If the connection service is unavailable, an eight-digit code is available for the local network.
@@ -18,7 +18,7 @@ Version 0.8.1 is an **early Internet-connected development build**, not a produc
 - Device playback audio travels through the same encrypted connection. Windows uses native WASAPI loopback; Android 10+ uses playback capture from apps that allow it. The microphone is never captured. **Mute** affects the viewer's sound; denied/unsupported capture keeps the screen connection working. See [sound and switching](docs/AUDIO_AND_SWITCHING.md).
 - **Send files** works in either direction with inline Save/Decline, progress, Cancel and receiver Retry. Windows integrates Explorer copy/paste and file drops; Android integrates its file picker, Downloads and Share menu. Clipboard on/off is session-scoped; Android needs explicit Send clipboard. File bytes use separate pinned TLS connections with integrity checks, bounded memory and pacing. See [files and clipboard](docs/FILES_AND_CLIPBOARD.md) for the 1 GiB/128-entry limits and platform differences.
 - One connection/monitor icon appears in the app, Android launcher and notification, and Windows EXE/taskbar. Regenerate assets locally with `scripts/generate-icons.ps1`.
-- Direct TLS connection with certificate pinning, a random 256-bit invitation secret, five-minute invitation expiry, one recipient, and no persistent identity or permanent access.
+- Direct TLS connection with certificate pinning, a random 256-bit invitation secret, five-minute invitation expiry, one recipient, and an optional persistent cryptographic device identity for locally saved Always allow grants.
 - Native Windows Desktop Duplication capture, with a compatible GDI fallback. Streaming keeps bounded queues and uses an acknowledgement window of four frames locally or twelve through the relay. See [performance measurements](docs/PERFORMANCE.md) for measured results and limits; 60 FPS is not guaranteed.
 - Android uses genuine MediaProjection approval and an optional accessibility service.
 - Screen sharing stays view-only when control is unavailable.
@@ -38,8 +38,8 @@ Create ignored `local.properties` with `sdk.dir=C:/path/to/Android/Sdk`.
 
 Outputs:
 
-- **Windows: `dist/BetterDesk-Windows-0.8.1.exe`**. Double-click. No installer, ZIP extraction or separate Java installation.
-- **Android: `dist/BetterDesk-Android-0.8.1-debug.apk`**. Install as an update over the previous APK; the same local debug signing key is used.
+- **Windows: `dist/BetterDesk-Windows-0.9.0.exe`**. Double-click. No installer, ZIP extraction or separate Java installation.
+- **Android: `dist/BetterDesk-Android-0.9.0-debug.apk`**. Install as an update over the previous APK; the same local debug signing key is used.
 - Local checks: `desktop/build/reports/tests/test/index.html`.
 - Rendered UI checks: `desktop/build/screenshots/`.
 
@@ -64,15 +64,15 @@ No account, token or telemetry is involved: it is an anonymous HTTPS download fr
 
 1. Install/open the updated app on both devices. Internet connections need HTTPS and the Railway relay's outgoing TCP port; no router forwarding is required. Windows firewall may require allowing direct LAN connections on a private network; do not disable the firewall.
 2. Each device shows its own code. On either device, enter the other device's code and select **Connect**.
-3. The requested device selects **Allow connection**. No role selection or clickable link is involved.
-4. On Android, confirm the genuine notification and screen-sharing prompts; sharing starts without visiting Settings. Tapping and typing is optional: while sharing, select **Allow tapping and typing** and follow the numbered on-screen taps (BetterDesk, the **Use BetterDesk** switch, **Allow**, Back); control starts as soon as you return. If Android blocks the setting, select **Android blocked this?** for the App info steps.
+3. The requested device selects **Allow connection**, then **Always allow** or **Just this time**. This choice appears only there, before screen capture starts. A remembered device can make future code-paired requests without app approval while BetterDesk is open; remove it under **Always allowed devices** on the home screen.
+4. On Android, even for remembered devices, confirm the genuine notification and screen-sharing prompts; sharing starts without visiting Settings. Tapping and typing is optional: while sharing, select **Allow tapping and typing** and follow the numbered on-screen taps (BetterDesk, the **Use BetterDesk** switch, **Allow**, Back); control starts as soon as you return. Always allow also authorizes control when Android's accessibility grant is already available and full-display capture was selected. If Android blocks the setting, select **Android blocked this?** for the App info steps.
 5. While viewing, open **Controls**, then **Disconnect**; the sharing device also has Disconnect and Android's Stop notification. Switching apps and returning keeps the connection; swiping BetterDesk out of Recents ends it. Pending codes expire after five minutes and can be renewed with **Get a code**.
 
 Treat codes as temporary secrets. A displayed device name is a label, not a verified real-world identity. Approve only an expected connection.
 
 ## Known limits
 
-- No unattended access, saved screen/audio recordings or microphone capture. Clipboard/file exchange ends with the approved session. Android cannot automatically read another app's clipboard in the background. Android still requires its `RECORD_AUDIO` permission for playback capture; its permission prompt may mention the microphone.
+- No boot service, automatic reconnection, saved screen/audio recordings or microphone capture. Always allow skips app approval for that device; Android still needs per-session capture consent. Clipboard/file exchange ends with the approved session. Android cannot automatically read another app's clipboard in the background. Android still requires its `RECORD_AUDIO` permission for playback capture; its permission prompt may mention the microphone.
 - Broadcast discovery needs a shared reachable IPv4 LAN. Guest Wi-Fi, client isolation, VPNs and firewalls can block it; a twelve-digit code then falls back to the Internet relay. An eight-digit fallback code only works locally.
 - Internet sessions use a TCP relay in EU West. Restrictive networks may block its external TCP port. There is no UDP/TURN, HTTPS-tunnel fallback, direct Internet peer-to-peer negotiation or automatic network handover. Relay restart stops active sessions. Sessions are capped at two hours or 2 GiB, whichever comes first.
 - Automatic reconnect is not implemented. On network interruption, sharing stops and a new code is required. Switching apps alone should not close the session; force stop and manufacturer-specific battery restrictions may still terminate it.

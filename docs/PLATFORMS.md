@@ -1,6 +1,6 @@
 # Platform behavior, permissions and troubleshooting
 
-This describes version 0.7.1. The shared interface is the product contract; native
+This describes version 0.9.0. The shared interface is the product contract; native
 differences exist where the OS requires them. The verified environments are
 Windows 11 x64 and an Android API 36 emulator. Declared minimum Android API 26 is
 not a claim of complete vendor/version coverage.
@@ -59,7 +59,7 @@ Short panel transitions honor the platform's reduced-motion setting.
 | --- | --- |
 | MediaProjection | Genuine per-session screen-capture consent; denial leaves no authorized capture |
 | AudioPlaybackCapture / AudioTrack (capture API 29+) | Supported app playback accompanies the screen; native low-latency playback on the viewer |
-| AccessibilityService | Optional input gestures/text, offered during sharing; grant through real Settings; enabled live without reconnecting; view-only is the default |
+| AccessibilityService | Optional input gestures/text, offered during sharing; grant through real Settings; enabled live without reconnecting; view-only is the default unless Always allow authorizes that signed device |
 | Notification permission (API 33+) | Requested before the separate sharing prompt; denial does not grant capture |
 | Media-projection foreground service | Sharing lifetime, visible sharing notice and Disconnect action |
 | Connected-device foreground service | Availability/session continuity while changing apps; replaced when capture starts |
@@ -125,7 +125,9 @@ system localization and remain native.
 | Windows language | Java per-user Preferences node `app/betterdesk`, key `language`; independent of the versioned portable cache |
 | Windows extracted runtime/app | `%LOCALAPPDATA%/BetterDesk/portable/<content-hash>/`; the launcher removes completed caches older than ten minutes that no running copy holds open |
 | Update downloads | Windows: `<exe>.new`/`.part` beside the EXE, the replaced `<exe>.old` until the next launch. Android: private `cache/updates/update.apk`, deleted after installation or failure. Only after the user chooses Update |
-| Codes, keys, invitations, tickets | Ephemeral process/connection state; not stored as future access credentials |
+| Codes, ephemeral TLS keys, invitations, tickets | Ephemeral process/connection state; never reused for a new connection |
+| Device signing identity | AndroidKeyStore non-exportable private key; Windows `deviceIdentity` in user Preferences, encrypted with current-user DPAPI; persistent across updates |
+| Always allow grants | At most sixteen public key/name pairs; Android private `remembered_devices` preferences, Windows DPAPI-encrypted `rememberedDevices`; removable on the home screen |
 | Screen/audio/input content | Live endpoint memory and encrypted transport; no app recording/history/telemetry |
 | File transfer cache | Windows LocalAppData/BetterDesk/transfers or private Android cache; partial/verified files kept for same-session retry and cleaned on teardown when handles permit |
 | Saved received files | Unique Downloads/BetterDesk batch folders, or the Android 8/9 document-provider destination selected by the user; never removed as cache |
@@ -135,7 +137,7 @@ system localization and remain native.
 Android backup is disabled in the manifest. OS-managed accessibility/notification
 permissions are distinct from the language preference and remain controlled by
 Settings. Windows Java Preferences uses the runtime's native per-user store; the
-portable app therefore has an extraction cache **and** a saved preference even
+portable app therefore has an extraction cache **and** saved preferences and optional device grants even
 though it has no installer. Removing an EXE alone does not erase them.
 
 The relay sees network/routing metadata and encrypted bytes, not a screen archive.
@@ -167,3 +169,15 @@ public distribution; this implementation guide is not a provider-retention promi
 
 Report reproducible failures using [CONTRIBUTING.md](../CONTRIBUTING.md), with
 redacted metadata rather than session codes or private screenshots.
+
+## Saved devices
+
+Both apps offer Always allow only on the sharing device before capture. The
+controller never receives the choice. A fresh code is still needed, and BetterDesk
+must be open. Remove an allowed device on the home screen to require approval
+again. Windows stores device keys/grants with current-user DPAPI; Android keeps
+its signing key in AndroidKeyStore and local grants in private preferences, with
+backup disabled. App data loss/reinstall/key loss requires renewed approval.
+Android always asks for MediaProjection, even for saved devices. A saved grant can
+authorize input only with actual accessibility permission and full-display capture.
+No boot/autostart service or automatic session recovery has been introduced.

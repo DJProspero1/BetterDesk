@@ -30,6 +30,13 @@ class DesktopPlatform : RemotePlatform {
     override fun startAudioPlayback() = audioPlayer.start()
     override fun stopAudioPlayback() = audioPlayer.stop()
     private val preferences by lazy { java.util.prefs.Preferences.userRoot().node("app/betterdesk") }
+    override val deviceIdentity: DeviceIdentity? by lazy { runCatching { DesktopDeviceIdentity(preferences) }.getOrNull() }
+    override var rememberedDevices: String?
+        get() = runCatching { preferences.get("rememberedDevices", null)?.let(DesktopDeviceIdentity::unprotect) }.getOrNull()
+        set(value) {
+            if (value == null) preferences.remove("rememberedDevices") else preferences.put("rememberedDevices", DesktopDeviceIdentity.protect(value))
+            preferences.flush()
+        }
     override var languageTag: String?
         get() = runCatching { preferences.get("language", null) }.getOrNull()?.takeIf { it == "en" || it == "pt" }
         set(value) { if (value == null) preferences.remove("language") else preferences.put("language", value) }

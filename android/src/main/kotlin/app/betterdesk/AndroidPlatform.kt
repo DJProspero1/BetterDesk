@@ -30,6 +30,11 @@ class AndroidPlatform(private val context: Context) : RemotePlatform {
     override fun stopAudioPlayback() = audioPlayer.stop()
     internal fun audioFramesPlayed() = audioPlayer.framesPlayed()
     private val preferences = context.getSharedPreferences("appearance", Context.MODE_PRIVATE)
+    override val deviceIdentity: DeviceIdentity? by lazy { runCatching { AndroidDeviceIdentity() }.getOrNull() }
+    private val devicePreferences = context.getSharedPreferences("remembered_devices", Context.MODE_PRIVATE)
+    override var rememberedDevices: String?
+        get() = devicePreferences.getString("devices", null)
+        set(value) { check(devicePreferences.edit().putString("devices", value).commit()) }
     override var languageTag: String?
         get() = preferences.getString("language", null)?.takeIf { it == "en" || it == "pt" }
         set(value) { preferences.edit().putString("language", value).apply() }

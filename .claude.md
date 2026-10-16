@@ -19,17 +19,17 @@ These rules apply to work in this repository. Read [PRODUCT.md](PRODUCT.md) and
 
 ## Product and scope
 
-- Build BetterDesk: simple, attended remote access between Windows and Android in
+- Build BetterDesk: simple remote access between Windows and Android in
   both directions. Ordinary people, including nontechnical accountants, must be
   able to open it and connect without outside instructions.
 - Keep the product small. Favor fewer steps, plain words and automatic setup over
   dashboards, extra settings, onboarding lectures or accounts.
 - Do not make the user select a helper/recipient role. Both apps show this device's
   code, a field for another device's code, and Connect. The requested device
-  approves. Do not reintroduce invitation links, messaging-app round trips or role
+  approves initially and may locally remember that device. Do not reintroduce invitation links, messaging-app round trips or role
   wording as the normal connection flow.
 - Automate technical work in the background when possible. Real OS permissions
-  and local session approval remain visible and intentional; automation never
+  and local authorization remain visible and intentional; automation never
   means bypassing consent or pretending that a step succeeded.
 
 ## Windows and Android are one experience
@@ -105,8 +105,10 @@ These rules apply to work in this repository. Read [PRODUCT.md](PRODUCT.md) and
 
 ## Security and privacy
 
-- Require explicit local approval before capture or input. No unattended access,
-  hidden control, OS prompt bypass, fabricated permissions or self-approval.
+- Require explicit local approval before capture or input unless the recipient has
+  deliberately saved an Always allow grant for that cryptographically authenticated
+  device. Offer this only on the recipient, before capture; keep grants revocable
+  locally. No hidden control, OS prompt bypass, fabricated permissions or self-approval.
 - Preserve code-authenticated pairing, pinned end-to-end TLS, short-lived
   capabilities, strict protocol bounds and fail-closed input validation. Do not
   weaken host validation or cryptography to make a test pass.
@@ -114,17 +116,20 @@ These rules apply to work in this repository. Read [PRODUCT.md](PRODUCT.md) and
   contents, audio samples or typed text. Keep secrets outside source/build outputs and use
   synthetic content for test screenshots. Aggregate local performance counters
   are allowed; telemetry and screen recording are not.
-- Clipboard and file exchange are approved only inside an attended connection.
+- Clipboard and file exchange are approved only inside a connection authorized
+  locally or by an explicit saved device grant.
   Observe the Windows clipboard only while both devices enable it; never export
   the pre-session clipboard automatically. Android uses explicit clipboard/share
   actions and native document access. Copy files on request, keep bytes encrypted,
   bound metadata/storage/queues, verify integrity, and never overwrite silently.
   Keep transfers separate from screen/audio/input and revoke them on disconnect.
-  Microphone or persistent access still requires a new product decision. Remote
+  Microphone access still requires a new product decision. Persistent device
+  grants are limited to the owner-approved Always allow flow; never add autostart. Remote
   input must not operate BetterDesk's own approval controls or bypass OS security
   screens. Native clipboard integration is not blanket file-system access.
 - Stop revokes input and capture promptly; do not quietly reconnect or authorize
-  another session. A stored accessibility grant is not future-session consent.
+  another session. A stored accessibility grant alone is not future-session consent;
+  a saved Always allow device grant may authorize a fresh code-paired request.
 - This is an early implementation, not externally audited software. Document
   security limitations and the scope of evidence rather than inventing assurances.
 

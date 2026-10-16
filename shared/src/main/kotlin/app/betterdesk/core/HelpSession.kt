@@ -12,7 +12,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import javax.net.ssl.SSLServerSocket
 import javax.net.ssl.SSLSocket
 
-enum class Stage { HOME, INVITATION, PREPARING, WAITING, CONNECTING, SHARING, VIEWING, ENDED, ERROR }
+enum class Stage { HOME, INVITATION, REMEMBER, PREPARING, WAITING, CONNECTING, SHARING, VIEWING, ENDED, ERROR }
 data class HelpState(
     val stage: Stage = Stage.HOME, val invitation: Invitation? = null,
     val image: ImageBitmap? = null, val frame: Long = 0, val remoteControl: Boolean = false,
@@ -20,10 +20,10 @@ data class HelpState(
     val deviceCode: String = "", val codeExpires: Long = 0, val permissionReturned: Boolean = false,
     val codeLoading: Boolean = false, val viaRelay: Boolean = false,
     val switchState: String = "", val audioAvailable: Boolean = false, val muted: Boolean = false,
-    val inputNotice: String = ""
+    val inputNotice: String = "", val rememberError: Boolean = false
 )
 
-/** One attended session. A transport handshake never authorizes capture or input. */
+/** One session, authorized locally or by a locally saved device grant. */
 class HelpSession(
     val platform: RemotePlatform,
     private val localAddresses: () -> List<String> = Invitation::localAddresses,
@@ -64,6 +64,10 @@ class HelpSession(
     @Volatile private var sentAt = 0L
     @Volatile private var capturedFrame = 0L
     private var permissionPending = false
+    private var rememberedControl = false
+    private var pairedRequest = false
+    private val mutableRemembered = MutableStateFlow(RememberedDevices.read(platform.rememberedDevices))
+    val remembered = mutableRemembered.asStateFlow()
     private val frameWindow = FrameWindow(4)
     private var pairingHost: DeviceAvailability? = null
     private var pairingJob: Job? = null
@@ -152,7 +156,7 @@ class HelpSession(
                 platform.keepConnectionAlive(true)
                 val host = DeviceAvailability(relayFactory(), bindAddress, localDiscovery,
                     onInvitation = { invitation ->
-                        scope.launch { if (generation == current && mutable.value.stage == Stage.HOME) receiveInvitation(invitation) }
+                        scope.launch { if (generation == current && mutable.value.stage == Stage.HOME) receiveInvitation(invitation, paired = true) }
                     }, onClosed = {
                         scope.launch {
                             if (generation == current && mutable.value.stage == Stage.HOME) {
@@ -187,20 +191,21 @@ class HelpSession(
         receiveInvitation(parsed)
     }
 
-    private fun receiveInvitation(parsed: Invitation) {
+    private fun receiveInvitation(parsed: Invitation, paired: Boolean = false) {
         stopTransport(preserveConnection = true)
         platform.keepConnectionAlive(true)
         relayCancellation = parsed.relayTicket
+        pairedRequest = paired
         mutable.value = HelpState(Stage.INVITATION, invitation = parsed, peer = parsed.name, viaRelay = parsed.relayTicket != null)
         val current = generation
         approvalExpiry = scope.launch {
             val client = if (parsed.relayTicket != null) relayFactory() else null
             try {
-                while (current == generation && mutable.value.stage == Stage.INVITATION) {
+                while (current == generation && mutable.value.stage in setOf(Stage.INVITATION, Stage.REMEMBER)) {
                     val remaining = parsed.expires - System.currentTimeMillis()
                     if (remaining <= 0) { finishError("expired"); break }
                     delay(minOf(1500L, remaining))
-                    if (current != generation || mutable.value.stage != Stage.INVITATION) break
+                    if (current != generation || mutable.value.stage !in setOf(Stage.INVITATION, Stage.REMEMBER)) break
                     if (client != null && parsed.relayTicket != null) {
                         val active = withContext(Dispatchers.IO) { client.active(parsed.relayTicket) }
                         if (!active && current == generation) { stop(); break }
@@ -210,6 +215,17 @@ class HelpSession(
             catch (_: Exception) { if (current == generation) finishError("network") }
             finally { client?.close() }
         }
+        if (paired && saved(parsed)) { rememberedControl = true; connectRecipient() }
+    }
+
+    private fun saved(invitation: Invitation) = invitation.verifiedDevice() && remembered.value.any { it.key == invitation.deviceKey }
+
+    fun forgetDevice(key: String) {
+        if (mutable.value.stage != Stage.HOME) return
+        val remaining = remembered.value.filterNot { it.key == key }
+        runCatching { platform.rememberedDevices = RememberedDevices.encode(remaining) }
+            .onSuccess { mutableRemembered.value = remaining; mutable.value = mutable.value.copy(rememberError = false) }
+            .onFailure { mutable.value = mutable.value.copy(rememberError = true) }
     }
 
     fun createInvitation(name: String, deviceCode: String? = null) {
@@ -221,6 +237,7 @@ class HelpSession(
             try {
                 platform.keepConnectionAlive(true)
                 val identity = withContext(Dispatchers.IO) { TlsIdentity.create() }
+                val deviceIdentity = withContext(Dispatchers.IO) { platform.deviceIdentity }
                 val hosts = withContext(Dispatchers.IO) { runCatching { localAddresses() }.getOrDefault(emptyList()) }
                 var connection: SessionTransport? = null
                 var invitation: Invitation? = null
@@ -237,7 +254,7 @@ class HelpSession(
                         }
                         if (current != generation) { localListener.close(); return@launch }
                         server = localListener
-                        val direct = Invitation(hosts, localListener.localPort, identity.fingerprint, Invitation.secret(), safeName, System.currentTimeMillis() + Pairing.LIFETIME_MS)
+                        val direct = Invitation(hosts, localListener.localPort, identity.fingerprint, Invitation.secret(), safeName, System.currentTimeMillis() + Pairing.LIFETIME_MS).let { if (deviceIdentity != null) it.signed(deviceIdentity) else it }
                         if (deviceCode == null) mutable.value = HelpState(Stage.WAITING, invitation = direct)
                         paired = deviceCode == null || withContext(Dispatchers.IO) {
                             val deadline = System.nanoTime() + 3_500_000_000L
@@ -280,7 +297,7 @@ class HelpSession(
                         if (current != generation) client.cleanupRequest(it.viewerTicket)
                         else relayCancellation = it.viewerTicket
                     } }
-                    val remote = Invitation(emptyList(), 0, identity.fingerprint, Invitation.secret(), safeName, allocation.expires, allocation.deviceTicket)
+                    val remote = Invitation(emptyList(), 0, identity.fingerprint, Invitation.secret(), safeName, allocation.expires, allocation.deviceTicket).let { if (deviceIdentity != null) it.signed(deviceIdentity) else it }
                     invitation = remote
                     withContext(Dispatchers.IO) {
                         client.connect(config, allocation.pairTicket, minOf(allocation.expires, System.currentTimeMillis() + 15000)) {
@@ -351,9 +368,30 @@ class HelpSession(
         error("Invitation expired")
     }
 
-    /** Approval needs only the native capture prompt; control is an optional later step. */
+    /** The local-only choice is completed before any capture or input can start. */
     fun allowHelp() {
         if (mutable.value.stage != Stage.INVITATION) return
+        val invitation = mutable.value.invitation ?: return
+        if (pairedRequest && invitation.verifiedDevice() && !saved(invitation)) {
+            mutable.value = mutable.value.copy(stage = Stage.REMEMBER)
+        } else connectRecipient()
+    }
+
+    fun finishRemember(always: Boolean) {
+        if (mutable.value.stage != Stage.REMEMBER) return
+        val invitation = mutable.value.invitation ?: return
+        if (invitation.expires <= System.currentTimeMillis()) { finishError("expired"); return }
+        if (always) {
+            if (!pairedRequest || !invitation.verifiedDevice() || remembered.value.size >= RememberedDevices.LIMIT) {
+                mutable.value = mutable.value.copy(rememberError = true); return
+            }
+            val updated = remembered.value + RememberedDevice(invitation.deviceKey, invitation.name)
+            if (runCatching { platform.rememberedDevices = RememberedDevices.encode(updated) }.isFailure) {
+                mutable.value = mutable.value.copy(rememberError = true); return
+            }
+            mutableRemembered.value = updated
+            rememberedControl = true
+        }
         connectRecipient()
     }
 
@@ -424,7 +462,7 @@ class HelpSession(
                             platform.selectOutgoingCodec(accepted!!.videoCodec)
                             peerAudio = accepted.audio
                             candidate.soTimeout = 15000
-                        } else for (host in invitation.hosts) {
+                        } else for (host in invitation.observedHost?.let(::listOf) ?: invitation.hosts) {
                             ensureActive()
                             val candidate = context.socketFactory.createSocket() as SSLSocket
                             socket = candidate
@@ -475,7 +513,7 @@ class HelpSession(
                     )
                     if (!allowed || current != generation || media != mediaGeneration) { if (current == generation) stop(); return@coroutineScope }
                     authorized.set(true)
-                    val control = platform.controlAvailable()
+                    val control = platform.controlAvailable() && (!platform.isAndroid || rememberedControl)
                     val sound = peerAudio && withContext(Dispatchers.IO) {
                         runCatching { platform.startAudio { if (current == generation && media == mediaGeneration && authorized.get()) audio.trySend(it.copy(epoch = streamEpoch)) } }.getOrDefault(false)
                     }
@@ -740,6 +778,7 @@ class HelpSession(
     private fun finishError(key: String) { stopTransport(); mutable.value = HelpState(Stage.ERROR, error = key) }
     private fun stopTransport(preserveConnection: Boolean = false) {
         authorized.set(false); generation++; mediaGeneration++; permissionPending = false
+        rememberedControl = false; pairedRequest = false
         cancelPendingInput(); inputNoticeJob?.cancel(); inputNoticeJob = null
         exchange.stop()
         switchTimeout?.cancel(); switchTimeout = null; switchToken = null

@@ -67,6 +67,8 @@ class RelayDeviceTest {
                     until(60000) { Runtime.session?.state?.value?.stage == Stage.INVITATION }
                     assertTrue(Runtime.session!!.state.value.viaRelay)
                     click("Allow connection|Permitir ligação")
+                    until { Runtime.session!!.state.value.stage in setOf(Stage.REMEMBER,Stage.CONNECTING,Stage.SHARING) }
+                    if (Runtime.session!!.state.value.stage == Stage.REMEMBER) click("Just this time|Só desta vez")
                     until { Runtime.session!!.state.value.stage in setOf(Stage.CONNECTING,Stage.SHARING) }
                     // Use the genuine OS prompts for playback audio and notifications.
                     repeat(3) {

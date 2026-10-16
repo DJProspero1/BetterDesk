@@ -9,14 +9,20 @@ import java.security.SecureRandom
 import java.util.Base64
 import java.util.Collections
 
-data class Invitation(val hosts: List<String>, val port: Int, val fingerprint: String, val secret: String, val name: String, val expires: Long, val relayTicket: String? = null) {
+data class Invitation(val hosts: List<String>, val port: Int, val fingerprint: String, val secret: String, val name: String, val expires: Long, val relayTicket: String? = null, val deviceKey: String = "", val deviceProof: String = "", val observedHost: String? = null) {
     fun link(): String {
-        val fields = linkedMapOf("v" to if (relayTicket == null) "1" else "2", "key" to fingerprint,
+        val fields = linkedMapOf("v" to if (deviceKey.isEmpty()) { if (relayTicket == null) "1" else "2" } else { if (relayTicket == null) "3" else "4" }, "key" to fingerprint,
             "secret" to secret, "name" to name, "expires" to expires.toString())
         if (relayTicket == null) { fields["hosts"] = hosts.joinToString(","); fields["port"] = port.toString() }
         else fields["ticket"] = relayTicket
+        if (deviceKey.isNotEmpty()) { fields["device"] = deviceKey; fields["proof"] = deviceProof }
         return "betterdesk://help?" + fields.entries.joinToString("&") { "${it.key}=${URLEncoder.encode(it.value, "UTF-8")}" }
     }
+
+    private fun proofBytes() = ("BetterDesk remembered device v1\n" + copy(deviceKey = "", deviceProof = "").link()).toByteArray(Charsets.UTF_8)
+    fun signed(identity: DeviceIdentity): Invitation = copy(deviceKey = identity.publicKey,
+        deviceProof = Base64.getUrlEncoder().withoutPadding().encodeToString(identity.sign(proofBytes())))
+    fun verifiedDevice(): Boolean = deviceKey.isNotEmpty() && RememberedDevices.verify(deviceKey, proofBytes(), deviceProof)
 
     companion object {
         fun parse(value: String, now: Long = System.currentTimeMillis()): Invitation {
@@ -30,9 +36,11 @@ data class Invitation(val hosts: List<String>, val port: Int, val fingerprint: S
             }
             require(fields.size == fields.map { it.first }.distinct().size)
             val map = fields.toMap()
-            val relay = map["v"] == "2"
-            require(map.keys == if (relay) setOf("v", "ticket", "key", "secret", "name", "expires") else setOf("v", "hosts", "port", "key", "secret", "name", "expires"))
-            require(map["v"] == "1" || relay)
+            val relay = map["v"] in setOf("2", "4")
+            val signed = map["v"] in setOf("3", "4")
+            val required = if (relay) setOf("v", "ticket", "key", "secret", "name", "expires") else setOf("v", "hosts", "port", "key", "secret", "name", "expires")
+            require(map.keys == required + if (signed) setOf("device", "proof") else emptySet())
+            require(map["v"] in setOf("1", "2", "3", "4"))
             val hosts = if (relay) emptyList() else map.getValue("hosts").split(",")
             val port = if (relay) 0 else map.getValue("port").toInt()
             if (!relay) {
@@ -48,7 +56,9 @@ data class Invitation(val hosts: List<String>, val port: Int, val fingerprint: S
             require(name.isNotBlank() && name.length <= 40 && name.none { Character.isISOControl(it) || Character.getType(it) == Character.FORMAT.toInt() })
             val expires = map.getValue("expires").toLong()
             require(expires > now && expires - now <= 10 * 60_000) { "Invitation expired" }
-            return Invitation(hosts, port, fingerprint, secret, name, expires, ticket)
+            return Invitation(hosts, port, fingerprint, secret, name, expires, ticket, map["device"].orEmpty(), map["proof"].orEmpty()).also {
+                require(!signed || it.verifiedDevice()) { "Invalid device proof" }
+            }
         }
 
         fun isLocalAddress(host: String): Boolean {

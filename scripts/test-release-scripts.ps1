@@ -39,7 +39,8 @@ $archives = @(Get-ChildItem -LiteralPath "$testRoot\desktop\build" -Directory -F
 Assert ($archives.Count -eq 1 -and (Get-Content -LiteralPath (Join-Path $archives[0].FullName 'notes.txt')) -eq 'keep this note') 'Unrelated notes were not preserved.'
 Assert (-not (Test-Path -LiteralPath (Join-Path $archives[0].FullName 'BetterDesk-Windows-0.5.0.exe'))) 'Old binary remains.'
 $link = Join-Path $testRoot 'desktop\build\distribution-stage-link'
-New-Item -ItemType Junction -Path $link -Target (Join-Path $testRoot 'dist') | Out-Null
+$linkType = if ([IO.Path]::DirectorySeparatorChar -eq '\') { 'Junction' } else { 'SymbolicLink' }
+New-Item -ItemType $linkType -Path $link -Target (Join-Path $testRoot 'dist') | Out-Null
 Expect-Failure { & "$testRoot\scripts\publish-distribution.ps1" -Staging $link -Version 0.6.0 }
 Assert (@(Get-ChildItem -LiteralPath "$testRoot\dist").Count -eq 5) 'Rejected junction changed the distribution.'
 
