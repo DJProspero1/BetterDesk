@@ -35,7 +35,14 @@ native Windows capture/input/updating, physical/OEM devices and constrained
 networks are **untested**. No emulator, audio workload or real screen capture ran.
 Compilation and synthetic authorization fixtures do not establish those results.
 The release uses local cross-packaging with the verified 0.8.1 Windows baseline;
-final payload/artifact verification is recorded with the release build metadata.
+the pre-PR package from `5eefb7c` passed byte-for-byte comparison of every retained
+runtime/dependency entry and final EXE embedded-payload readback. Its SHA-256 was
+`5a4f6b0476cf0b0e5efcd15764b38a2f887ff86ef0c4e30992569de6e30fd71c`.
+The baseline EXE matched its published manifest SHA-256
+`155948c6e41e708fbccf33edbc20ed67512ad2d0d72b80198b230c84bf134bde`;
+a deliberately wrong baseline hash failed before compilation. These are packaging
+checks, not Windows execution. Final post-merge artifact hashes/source revision
+are recorded separately in the release's BUILD-INFO.txt and SHA256SUMS.txt.
 
 ## Optional Android control, 12 October 2026 (0.8.1 source, unreleased)
 
