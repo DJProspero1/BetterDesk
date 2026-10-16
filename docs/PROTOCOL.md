@@ -66,7 +66,8 @@ Accessibility. Without a saved Always allow grant, sharing starts view-only and
 the sharer can later select Allow tapping and typing. That in-session request or
 a saved signed-device grant authorizes control with a real OS service; enabling
 it mid-session sends
-`capability(control=true)`; revoking it sends `capability(control=false)`. A successful pairing
+`capability(control=true)`; explicit current-session approval survives direction
+changes and is reset by disconnect. Actual OS permission is always checked; revoking it sends `capability(control=false)`. A successful pairing
 acknowledgement means the invitation was delivered; it does not mean the person
 approved capture. VIEWING begins after a valid frame is decoded. Stop clears
 authorization first, advances the session generation, then closes resources so
@@ -131,7 +132,8 @@ reject v3/v4; both apps must update together.
 Only authenticated code-delivery callbacks can skip approval or offer REMEMBER.
 After local initial Allow connection, REMEMBER offers Always allow / Just this
 time / Cancel before capture or the media socket opens. No grant flag, grant list
-or choice is sent. Matching an existing saved public key requires a valid fresh
+or choice is sent. Editable saved names stay local and must be distinct; they are
+not the signed peer name and never affect signature verification. Matching an existing saved public key requires a valid fresh
 invitation signature, then the same pinned TLS and invitation-secret handshake.
 Deep links never use or create saved grants. Switch requests still need explicit
 approval; grants authorize only the original requesting device, not the reverse

@@ -174,10 +174,15 @@ redacted metadata rather than session codes or private screenshots.
 
 Both apps offer Always allow only on the sharing device before capture. The
 controller never receives the choice. A fresh code is still needed, and BetterDesk
-must be open. Remove an allowed device on the home screen to require approval
+must be open. Choose a distinct local name before saving (numbered suggestions distinguish
+repeated model names). Remove that named device on the home screen to require approval
 again. Windows stores device keys/grants with current-user DPAPI; Android keeps
 its signing key in AndroidKeyStore and local grants in private preferences, with
 backup disabled. App data loss/reinstall/key loss requires renewed approval.
 Android always asks for MediaProjection, even for saved devices. A saved grant can
 authorize input only with actual accessibility permission and full-display capture.
 No boot/autostart service or automatic session recovery has been introduced.
+
+After Allow tapping and typing succeeds, that explicit control approval survives
+screen switches in the same connection, with fresh MediaProjection and actual
+accessibility/full-display checks on return. Disconnect clears it.

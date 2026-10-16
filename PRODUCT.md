@@ -36,7 +36,7 @@ No busy remote administration dashboard, account gate, setup wizard with five pe
 12. Share supported device sound alongside the screen, with a viewer mute control. Never capture the microphone. Use short, purposeful motion that respects reduced-motion settings.
 13. Exchange files and clipboard content within the approved connection. Use familiar Windows copy/paste and Android Share/file-picker integrations, with the same Send files action and compact status. Transfer progress must not resize the screen or interrupt control. Cancellation, retry, completion and errors remain clear; no silent replacement of existing files.
 14. A physical keyboard types into the focused remote field from either viewer. Use native layouts/composition, preserve input order and provide a visible way to release keyboard focus. Local app fields remain local. Native OS limits are explicit; never silently claim a rejected key worked.
-15. After the first approval, offer Always allow / Just this time only on the sharing device before capture. The other device never receives this choice. Keep revocation on the home screen, preserve real Android capture permissions, and require BetterDesk to be open with a fresh code.
+15. After the first approval, offer Always allow / Just this time only on the sharing device before capture. The other device never receives this choice. Let the owner give each saved device a distinct local name for removal on the home screen, preserve real Android capture permissions, and require BetterDesk to be open with a fresh code.
 
 ## Accessibility & Inclusion
 

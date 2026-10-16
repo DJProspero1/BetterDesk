@@ -91,6 +91,15 @@ class RelayIntegrationTest {
         impostor.connectCode(target.state.value.deviceCode)
         until { target.state.value.stage == Stage.INVITATION }
         assertEquals(2, platform.starts, "Matching names without the saved signing key must still need approval")
+        target.allowHelp()
+        assertEquals("Transport test (2)", target.state.value.rememberName)
+        target.nameRememberedDevice("transport TEST"); target.finishRemember(true)
+        assertEquals(Stage.REMEMBER, target.state.value.stage)
+        assertTrue(target.state.value.rememberNameError)
+        assertEquals(2, platform.starts)
+        target.nameRememberedDevice("Office tablet"); target.finishRemember(true)
+        until { target.state.value.stage == Stage.SHARING }
+        assertEquals(listOf("Transport test", "Office tablet"), RememberedDevices.read(platform.rememberedDevices).map { it.name })
     }
 
     @Test fun `relay pairs with code and pins TLS before consented capture and control`() = runBlocking(dispatcher) {

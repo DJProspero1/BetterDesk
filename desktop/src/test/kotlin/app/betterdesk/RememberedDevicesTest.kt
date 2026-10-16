@@ -34,6 +34,18 @@ class RememberedDevicesTest {
         assertEquals(relay, Invitation.parse(relay.link()))
         assertFails { Invitation.parse(original.copy(expires = System.currentTimeMillis() - 1).signed(identity).link()) }
     }
+    @Test fun `local device names stay distinct and fit the stored name limit`() {
+        val first = RememberedDevice(testDeviceIdentity().publicKey, "Office phone")
+        val second = RememberedDevice(testDeviceIdentity().publicKey, "Office phone (2)")
+        assertEquals("Office phone (3)", RememberedDevices.suggestName(listOf(first, second), "Office phone"))
+        assertFalse(RememberedDevices.nameAvailable(listOf(first), "office PHONE"))
+        assertFalse(RememberedDevices.nameAvailable(listOf(first), ""))
+        assertFalse(RememberedDevices.nameAvailable(listOf(first), "bad\nname"))
+        val long = "a".repeat(40)
+        val suggested = RememberedDevices.suggestName(listOf(first.copy(name = long)), long)
+        assertEquals(40, suggested.length)
+        assertTrue(suggested.endsWith(" (2)"))
+    }
     @Test fun `legacy invitations grant no identity and invalid stores fail closed`() {
         val legacy = Invitation.parse(invitation().link())
         assertFalse(legacy.verifiedDevice())

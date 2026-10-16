@@ -91,6 +91,11 @@ on its waiting screen and cannot see or operate this prompt. Explain that screen
 sound and control can be authorized on future requests while BetterDesk is open;
 Android still requires its genuine capture prompt and accessibility permission.
 
+Before saving, offer an editable Device name prefilled from the peer. Suggest a
+distinct numbered name if already saved; reject empty/duplicate local names. The
+owner can use recognizable names such as Office phone and Personal phone. Save
+this name only on the granting device and use it in each accessible Remove action.
+
 Saved grants appear under Always allowed devices on the home screen, each with
 Remove. The list exists only on the granting device; no remembered flag, grant list
 or choice message is sent to the viewer. Up to sixteen devices can be saved. A

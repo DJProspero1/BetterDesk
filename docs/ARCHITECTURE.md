@@ -152,7 +152,8 @@ a saved grant. Local/deep-link compatibility entry points remain manual.
 without changing the signed advertised hosts.
 
 After Allow connection, a first signed request enters REMEMBER before opening the
-media connection. Always allow saves a bounded local key/name record; Just this
+media connection. Always allow saves a bounded local key/name record; the editable local name must be
+nonempty and distinct, with a numbered suggestion for repeated model names; Just this
 time leaves it unsaved. The controller waits and receives no trust state. On later
 code-paired requests a matching verified key advances directly to CONNECTING.
 Grants survive sessions/restarts/updates and are removable only from HOME, where
@@ -165,3 +166,8 @@ authorize control only with the real accessibility service and full-display
 capture. Ordinary sessions require a new explicit control action even if that OS
 service is already granted. Switch approval, lock/protected-screen checks,
 disconnect cleanup and per-session file/clipboard rules remain in force.
+
+Explicit Android control approval is tracked separately from the persistent device
+grant. It survives direction changes within one connection, so switching back
+restores control when real OS permission/capture scope allow it. Disconnect resets
+this session-only approval; it never becomes a saved grant.

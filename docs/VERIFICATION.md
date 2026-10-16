@@ -7,6 +7,25 @@ a prerequisite for this PR. Do not request Windows access or evaluation-media
 registration. Earlier dated results retain their original scope; this decision
 does not turn Linux/emulator checks into Windows evidence.
 
+## Remembered devices review follow-up, 16 October 2026
+
+After the first PR #3 review, the ordinary Linux suite passed **77 tests: 70
+passed, zero failed, seven skipped** (the same six opt-in cases and Windows
+platform decoder). Added a round-trip screen-switch regression: explicit Android
+control approval returns with the original screen, while a fresh session with
+only a stored accessibility service stays view-only. Added distinct local-name
+suggestion/validation checks, a duplicate-name relay save/persistence check and an
+accessible Remove action check that removes only the named grant. English/Portuguese
+phone/desktop prompt renders, including the local name field, were inspected.
+
+Android app and instrumentation APK builds passed. The app remains 0.9.0/code 12
+and its signing certificate still matches 0.8.1. Review-follow-up APK SHA-256:
+`84fd78fe896447da78a588e2137f5b9bbe23603259de365dbd3b2c0c36897ad6`.
+Instruction parity, documentation links and diff checks passed. The direct
+connections handoff/design now record persistent and ephemeral identity binding,
+saved-grant versus session-only approval and the M4/M5/M6 requirements. This does
+not implement direct transport or change the native/physical coverage gaps below.
+
 ## Remembered devices, 16 October 2026 (0.9.0 source)
 
 Local Linux checks: **74 tests: 67 passed, zero failed, seven skipped**. The

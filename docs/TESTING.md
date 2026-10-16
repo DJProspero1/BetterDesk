@@ -45,7 +45,7 @@ $env:BETTERDESK_BROKER_FIXTURE = (Resolve-Path '..\BetterDesk-Infrastructure\scr
 & "$workspace\gradlew.bat" -p $workspace :desktop:test --no-daemon '-Pkotlin.incremental=false'
 ```
 
-The current ordinary suite contains 74 tests: 68 enabled on Windows with the
+The current ordinary suite contains 77 tests: 71 enabled on Windows with the
 fixture, and six opt-in device/benchmark tests. On Linux the Windows platform
 decoder integration also skips; the portable native decoder check still runs.
 Without the fixture another nine checks skip. The WebRTC opt-in adds thirteen
@@ -189,7 +189,10 @@ removal, Just this time, cancellation, failed storage, copied-link rejection and
 Android view-only behavior without an explicit device grant. `RelayIntegrationTest`
 adds first/save/reconnect and a different key with the same name through the real
 bounded loopback broker. `UiTest` renders the prompt at phone/desktop sizes in
-Portuguese/English and confirms it is absent on the waiting controller.
+Portuguese/English and confirms it is absent on the waiting controller. Saved local names are
+distinct, bounded, persisted and used in accessible Remove actions.
+`SwitchAudioTest` checks control approval across a round-trip switch and that
+disconnect clears session-only approval.
 
 The opt-in Railway device fixtures explicitly choose Just this time when a real
 platform signs a request, keeping fixture runs from saving persistent grants.

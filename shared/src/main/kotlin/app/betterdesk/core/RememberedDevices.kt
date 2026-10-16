@@ -30,6 +30,18 @@ object RememberedDevices {
             devices.forEach { require(it.name.isNotBlank() && it.name.length <= 40); publicKey(it.key) }
         }
     }.getOrDefault(emptyList())
+    fun nameAvailable(devices: List<RememberedDevice>, name: String) =
+        name.isNotBlank() && name.length <= 40 && name.none { Character.isISOControl(it) || Character.getType(it) == Character.FORMAT.toInt() } &&
+            devices.none { it.name.equals(name, ignoreCase = true) }
+    fun suggestName(devices: List<RememberedDevice>, name: String): String {
+        if (nameAvailable(devices, name)) return name
+        for (number in 2..LIMIT + 1) {
+            val suffix = " ($number)"
+            val candidate = name.take(40 - suffix.length) + suffix
+            if (nameAvailable(devices, candidate)) return candidate
+        }
+        error("No device name available")
+    }
     fun encode(devices: List<RememberedDevice>): String = json.encodeToString(devices)
     fun publicKey(value: String): ECPublicKey {
         require(value.length in 100..160 && value.matches(Regex("[A-Za-z0-9_-]+")))

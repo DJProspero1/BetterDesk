@@ -9,12 +9,15 @@ builds; dates do not imply a public release. Validation is in
 - After approving a new device, choose **Always allow** or **Just this time** on
   the sharing device. The choice happens before capture; the connecting device
   stays on its waiting screen and receives no prompt or trust flag.
+- Give each saved device a distinct local name, with numbered suggestions for
+  repeated model names, so removal targets the intended device.
 - Remembered devices skip future app approval using a persistent signed identity,
   fresh code pairing and pinned TLS. Remove local grants on the home screen.
   BetterDesk must be open; there is no autostart or automatic reconnection.
 - Android still requires its genuine screen-capture prompt. Always allow includes
   control when accessibility is granted and the whole display is shared. Other
   Android sessions remain view-only until Allow tapping and typing is selected.
+  That session-only approval survives switching away and back; disconnect clears it.
 - Signed invitations use versions 3/4; session protocol remains 4. Update both
   devices. VersionCode 12; Windows DPAPI and AndroidKeyStore protect signing keys.
 

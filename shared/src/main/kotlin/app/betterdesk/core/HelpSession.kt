@@ -20,7 +20,8 @@ data class HelpState(
     val deviceCode: String = "", val codeExpires: Long = 0, val permissionReturned: Boolean = false,
     val codeLoading: Boolean = false, val viaRelay: Boolean = false,
     val switchState: String = "", val audioAvailable: Boolean = false, val muted: Boolean = false,
-    val inputNotice: String = "", val rememberError: Boolean = false
+    val inputNotice: String = "", val rememberError: Boolean = false,
+    val rememberName: String = "", val rememberNameError: Boolean = false
 )
 
 /** One session, authorized locally or by a locally saved device grant. */
@@ -65,6 +66,7 @@ class HelpSession(
     @Volatile private var capturedFrame = 0L
     private var permissionPending = false
     private var rememberedControl = false
+    private var sessionControlApproved = false
     private var pairedRequest = false
     private val mutableRemembered = MutableStateFlow(RememberedDevices.read(platform.rememberedDevices))
     val remembered = mutableRemembered.asStateFlow()
@@ -373,8 +375,15 @@ class HelpSession(
         if (mutable.value.stage != Stage.INVITATION) return
         val invitation = mutable.value.invitation ?: return
         if (pairedRequest && invitation.verifiedDevice() && !saved(invitation)) {
-            mutable.value = mutable.value.copy(stage = Stage.REMEMBER)
+            mutable.value = mutable.value.copy(stage = Stage.REMEMBER,
+                rememberName = RememberedDevices.suggestName(remembered.value, invitation.name))
         } else connectRecipient()
+    }
+
+    fun nameRememberedDevice(value: String) {
+        if (mutable.value.stage != Stage.REMEMBER) return
+        val name = value.filterNot { Character.isISOControl(it) || Character.getType(it) == Character.FORMAT.toInt() }.take(40)
+        mutable.value = mutable.value.copy(rememberName = name, rememberNameError = false)
     }
 
     fun finishRemember(always: Boolean) {
@@ -385,7 +394,11 @@ class HelpSession(
             if (!pairedRequest || !invitation.verifiedDevice() || remembered.value.size >= RememberedDevices.LIMIT) {
                 mutable.value = mutable.value.copy(rememberError = true); return
             }
-            val updated = remembered.value + RememberedDevice(invitation.deviceKey, invitation.name)
+            val name = mutable.value.rememberName.trim()
+            if (!RememberedDevices.nameAvailable(remembered.value, name)) {
+                mutable.value = mutable.value.copy(rememberNameError = true); return
+            }
+            val updated = remembered.value + RememberedDevice(invitation.deviceKey, name)
             if (runCatching { platform.rememberedDevices = RememberedDevices.encode(updated) }.isFailure) {
                 mutable.value = mutable.value.copy(rememberError = true); return
             }
@@ -415,6 +428,7 @@ class HelpSession(
         if (permissionPending && canOfferControl()) {
             if (platform.controlAvailable()) {
                 permissionPending = false
+                sessionControlApproved = true
                 mutable.value = mutable.value.copy(remoteControl = true, permissionReturned = false)
                 sendControl(Message("capability", control = true, epoch = epoch))
             } else mutable.value = mutable.value.copy(permissionReturned = true)
@@ -513,7 +527,7 @@ class HelpSession(
                     )
                     if (!allowed || current != generation || media != mediaGeneration) { if (current == generation) stop(); return@coroutineScope }
                     authorized.set(true)
-                    val control = platform.controlAvailable() && (!platform.isAndroid || rememberedControl)
+                    val control = platform.controlAvailable() && (!platform.isAndroid || rememberedControl || sessionControlApproved)
                     val sound = peerAudio && withContext(Dispatchers.IO) {
                         runCatching { platform.startAudio { if (current == generation && media == mediaGeneration && authorized.get()) audio.trySend(it.copy(epoch = streamEpoch)) } }.getOrDefault(false)
                     }
@@ -778,7 +792,7 @@ class HelpSession(
     private fun finishError(key: String) { stopTransport(); mutable.value = HelpState(Stage.ERROR, error = key) }
     private fun stopTransport(preserveConnection: Boolean = false) {
         authorized.set(false); generation++; mediaGeneration++; permissionPending = false
-        rememberedControl = false; pairedRequest = false
+        rememberedControl = false; sessionControlApproved = false; pairedRequest = false
         cancelPendingInput(); inputNoticeJob?.cancel(); inputNoticeJob = null
         exchange.stop()
         switchTimeout?.cancel(); switchTimeout = null; switchToken = null
